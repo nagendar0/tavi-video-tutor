@@ -130,8 +130,14 @@ export default function App() {
 
 Follow this step-by-step workflow to generate multilingual subtitles for your videos from zero:
 
-### Step 1: Create Configuration (`aitutor.config.js`)
-Create `aitutor.config.js` in your project root:
+### Step 1: Create Starter Configuration (`npx aitutor init`)
+Run `npx aitutor init` to generate `aitutor.config.mjs` starter configuration automatically:
+
+```bash
+npx aitutor init
+```
+
+Or create `aitutor.config.mjs` manually in your project root:
 
 ```javascript
 export default {

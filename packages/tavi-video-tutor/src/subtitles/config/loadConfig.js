@@ -33,7 +33,7 @@ export class VideoEntry {
 }
 
 export const loadConfig = async (cwd = process.cwd()) => {
-  const configNames = ['aitutor.config.js', 'aitutor.config.mjs', 'aitutor.config.cjs', 'aitutor.config.json'];
+  const configNames = ['aitutor.config.mjs', 'aitutor.config.js', 'aitutor.config.cjs', 'aitutor.config.json'];
   let configPath = null;
 
   for (const name of configNames) {
@@ -45,20 +45,48 @@ export const loadConfig = async (cwd = process.cwd()) => {
   }
 
   if (!configPath) {
-    throw new Error(`AITutor configuration file not found in ${cwd}. Please create aitutor.config.js.`);
+    const err = new Error(`AITutor configuration file not found in ${cwd}. Run "npx aitutor init" to create aitutor.config.mjs.`);
+    err.code = 'CONFIG_NOT_FOUND';
+    throw err;
   }
 
   let rawConfig = null;
+
   if (configPath.endsWith('.json')) {
-    rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    try {
+      rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (parseErr) {
+      const err = new Error(`Failed to parse configuration file at "${configPath}":\n  ${parseErr.message}\n\nPlease check JSON syntax.`);
+      err.code = 'CONFIG_PARSE_ERROR';
+      throw err;
+    }
   } else {
-    const fileUrl = pathToFileURL(configPath).href;
-    const mod = await import(fileUrl);
-    rawConfig = mod.default || mod.config || mod;
+    try {
+      const fileUrl = pathToFileURL(configPath).href;
+      const mod = await import(fileUrl);
+      rawConfig = mod.default || mod.config || mod;
+    } catch (importErr) {
+      let advice = '';
+      if (importErr.message.includes('module.exports') || importErr.message.includes('CommonJS') || importErr.code === 'ERR_REQUIRE_ESM') {
+        advice = '\n\nSuggestions:\n  - For ESM (export default), name your file aitutor.config.mjs\n  - For CommonJS (module.exports), name your file aitutor.config.cjs';
+      }
+
+      const err = new Error(`Failed to load configuration module at "${configPath}":\n  ${importErr.message}${advice}`);
+      err.code = 'CONFIG_IMPORT_ERROR';
+      throw err;
+    }
   }
 
-  if (!rawConfig || !Array.isArray(rawConfig.videos)) {
-    throw new Error(`Invalid configuration in ${configPath}. Expected { videos: [...] }.`);
+  if (!rawConfig || typeof rawConfig !== 'object') {
+    const err = new Error(`Invalid configuration export in "${configPath}". Expected an object or default export.`);
+    err.code = 'CONFIG_INVALID_EXPORT';
+    throw err;
+  }
+
+  if (!Array.isArray(rawConfig.videos)) {
+    const err = new Error(`Invalid configuration in "${configPath}". Expected { videos: [...] } array.`);
+    err.code = 'CONFIG_INVALID_VIDEOS';
+    throw err;
   }
 
   let globalLanguages = rawConfig.subtitles?.languages || ['en'];
@@ -72,7 +100,9 @@ export const loadConfig = async (cwd = process.cwd()) => {
   rawConfig.videos.forEach((entry, idx) => {
     const video = new VideoEntry(entry, globalLanguages, idx + 1);
     if (seenIds.has(video.id)) {
-      throw new Error(`Duplicate video ID "${video.id}" found in configuration.`);
+      const err = new Error(`Duplicate video ID "${video.id}" found in configuration "${configPath}".`);
+      err.code = 'CONFIG_DUPLICATE_ID';
+      throw err;
     }
     seenIds.add(video.id);
     videos.push(video);

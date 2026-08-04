@@ -1,24 +1,32 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 export const getFFmpegBinaryPath = () => {
   if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
     return process.env.FFMPEG_PATH;
   }
   
-  // Local project bin fallback
-  const localBin = path.resolve(process.cwd(), 'bin', 'ffmpeg.exe');
+  const isWin = process.platform === 'win32';
+  const exeName = isWin ? 'ffmpeg.exe' : 'ffmpeg';
+
+  // 1. Local project bin fallback
+  const localBin = path.resolve(process.cwd(), 'bin', exeName);
   if (fs.existsSync(localBin)) {
     return localBin;
   }
 
-  // Package bin fallback
-  const pkgBin = path.resolve(path.dirname(import.meta.url.replace(/^file:\/\/\//, '').replace(/^file:\/\//, '')), '../../../bin/ffmpeg.exe');
-  if (fs.existsSync(pkgBin)) {
-    return pkgBin;
-  }
+  // 2. Package bin fallback using cross-platform fileURLToPath
+  try {
+    const currentFilePath = fileURLToPath(import.meta.url);
+    const pkgBin = path.resolve(path.dirname(currentFilePath), '../../../bin', exeName);
+    if (fs.existsSync(pkgBin)) {
+      return pkgBin;
+    }
+  } catch (_) {}
 
+  // 3. Fallback to system FFmpeg binary on PATH
   return 'ffmpeg';
 };
 

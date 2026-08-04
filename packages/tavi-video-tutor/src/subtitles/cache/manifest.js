@@ -98,6 +98,33 @@ export const computeFingerprint = (src, extra = null, cwd = process.cwd()) => {
   return computeMediaFingerprint(src, cwd, extra);
 };
 
+export const normalizeSubtitlePath = (srcUrl, basePublicDir) => {
+  if (!srcUrl || typeof srcUrl !== 'string') return null;
+
+  // 1. Normalize slashes to POSIX format
+  let clean = srcUrl.trim().replace(/\\/g, '/');
+
+  // 2. Strip leading / or ./
+  clean = clean.replace(/^(\.\/|\/)+/, '');
+
+  // 3. Prevent duplicate 'aitutor/' prefix if basePublicDir already ends with 'aitutor'
+  const isBaseAitutor = path.basename(basePublicDir) === 'aitutor';
+  if (isBaseAitutor && clean.startsWith('aitutor/')) {
+    clean = clean.slice('aitutor/'.length);
+  }
+
+  // 4. Resolve target path
+  const resolvedPath = path.resolve(basePublicDir, clean);
+
+  // 5. Security boundary check — prevent directory traversal outside basePublicDir
+  const canonicalBase = path.resolve(basePublicDir);
+  if (!resolvedPath.startsWith(canonicalBase + path.sep) && resolvedPath !== canonicalBase) {
+    throw new Error(`Security Violation: Subtitle path "${srcUrl}" escapes public directory boundary.`);
+  }
+
+  return resolvedPath;
+};
+
 export class ManifestStore {
   constructor(cwd = process.cwd()) {
     this.cwd = cwd;
@@ -148,8 +175,12 @@ export class ManifestStore {
     const subInfo = entry.subtitles?.[langCode] || (entry.language === langCode ? { src: entry.subtitle } : null);
     if (!subInfo || !subInfo.src) return false;
 
-    const publicPath = path.join(this.publicDir, subInfo.src.replace('/aitutor/', ''));
-    return fs.existsSync(publicPath);
+    try {
+      const publicPath = normalizeSubtitlePath(subInfo.src, this.publicDir);
+      return fs.existsSync(publicPath);
+    } catch (_) {
+      return false;
+    }
   }
 
   saveSubtitle(videoEntry, vttContent, language = 'en', extraFingerprint = null) {
