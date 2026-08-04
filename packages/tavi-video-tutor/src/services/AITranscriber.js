@@ -4,7 +4,11 @@ export const transcribeVideoAudio = async (videoUrl, onProgress) => {
   onProgress?.({ status: 'loading-model', message: 'Loading Whisper AI model...' });
 
   const { pipeline, env } = await import('@huggingface/transformers');
-  env.wasm.numThreads = 1;
+  if (env.backends?.onnx?.wasm) {
+    env.backends.onnx.wasm.numThreads = 1;
+  } else if (env.wasm) {
+    env.wasm.numThreads = 1;
+  }
 
   const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
     progress_callback: (p) => {
