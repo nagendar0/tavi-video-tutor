@@ -21,7 +21,9 @@
       "import": "./dist/tavi-video-tutor.js",
       "require": "./dist/tavi-video-tutor.umd.cjs"
     },
-    "./package.json": "./package.json"
+    "./dist/style.css": "./dist/style.css",
+    "./package.json": "./package.json",
+    "./*": "./*"
   },
   "scripts": {
     "dev": "vite",

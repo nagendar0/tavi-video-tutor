@@ -1,39 +1,4 @@
 import fs from 'fs';
-import { createRequire } from 'module';
-
-// Safely intercept sharp require errors if sharp binary fails to load on host architecture
-try {
-  const req = createRequire(import.meta.url);
-  const Module = req('module');
-  if (Module && Module.prototype && Module.prototype.require) {
-    const orig = Module.prototype.require;
-    Module.prototype.require = function (id) {
-      if (id === 'sharp') {
-        try {
-          const loaded = orig.apply(this, arguments);
-          if (loaded) return loaded;
-        } catch (_) {}
-        return function dummySharp() { return {}; };
-      }
-      return orig.apply(this, arguments);
-    };
-  }
-
-  // Pre-seed req.cache if sharp points to a broken module
-  try {
-    const sharpPath = req.resolve('sharp');
-    try {
-      req(sharpPath);
-    } catch (_) {
-      req.cache[sharpPath] = {
-        id: sharpPath,
-        filename: sharpPath,
-        loaded: true,
-        exports: function dummySharp() { return {}; }
-      };
-    }
-  } catch (_) {}
-} catch (_) {}
 
 // Global in-memory cache for downloaded/loaded transformers pipelines
 const PIPELINE_MODEL_CACHE = new Map();
