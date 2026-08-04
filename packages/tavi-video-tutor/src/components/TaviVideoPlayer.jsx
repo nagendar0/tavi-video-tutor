@@ -811,6 +811,7 @@ export const TaviVideoPlayer = forwardRef(({
   const [primaryCues, setPrimaryCues] = useState([]);
   const [secondaryCues, setSecondaryCues] = useState([]);
   const subtitleCacheRef = useRef({});
+  const isTranscribingRef = useRef(false);
 
   // Asynchronous subtitle loader (handles both URL fetching and raw content)
   const loadSubtitles = async (contentOrUrl) => {
@@ -929,6 +930,19 @@ export const TaviVideoPlayer = forwardRef(({
           if (active) setIsTranslating(false);
         }
       } else {
+        // Only run browser AI transcription if NO subtitles exist across any source
+        const hasAnySubtitles = Object.keys(combinedSubtitles).length > 0 || subtitles === false;
+        if (hasAnySubtitles) {
+          if (active) {
+            setPrimaryCues([]);
+            setIsLoadingSubtitles(false);
+          }
+          return;
+        }
+
+        if (isTranscribingRef.current) return;
+        isTranscribingRef.current = true;
+
         setIsLoadingSubtitles(true);
         setSubtitleStatusText('Loading subtitles...');
         try {
@@ -958,6 +972,7 @@ export const TaviVideoPlayer = forwardRef(({
           console.error('Auto master transcription failed:', err);
           if (active) setPrimaryCues([]);
         } finally {
+          isTranscribingRef.current = false;
           if (active) setIsLoadingSubtitles(false);
         }
       }
@@ -1659,8 +1674,12 @@ export const TaviVideoPlayer = forwardRef(({
 
     let active = true;
     const autoTranscribe = async () => {
-      // If pre-generated subtitles database is provided by parent, bypass heavy ONNX model download
-      if (Object.keys(subtitles).length > 0) return;
+      // Bypass heavy in-browser AI transcription if ANY subtitle tracks exist across any source
+      // (manifestSubtitles, developerSubtitles, localSubtitles, demoSubtitles) or if subtitles === false
+      const hasAnySubtitles = Object.keys(combinedSubtitles).length > 0 || 
+                               subtitles === false || 
+                               (subtitles && typeof subtitles === 'object' && Object.keys(subtitles).length > 0);
+      if (hasAnySubtitles) return;
 
       // Small delay to allow the video metadata/decoders to settle
       await new Promise(resolve => setTimeout(resolve, 800));
