@@ -15,7 +15,8 @@
   "files": [
     "dist",
     "bin",
-    "src"
+    "src",
+    "README.md"
   ],
   "bin": {
     "aitutor": "./bin/aitutor.js"
