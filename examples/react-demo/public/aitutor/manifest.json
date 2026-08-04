@@ -25,10 +25,535 @@
         "src": "/aitutor/subtitles/recorded-demo/es.vtt",
         "label": "Español",
         "name": "Spanish"
+      },
+      "am": {
+        "src": "/aitutor/subtitles/recorded-demo/am.vtt",
+        "label": "አማርኛ",
+        "name": "Amharic"
+      },
+      "hy": {
+        "src": "/aitutor/subtitles/recorded-demo/hy.vtt",
+        "label": "Հայերեն",
+        "name": "Armenian"
+      },
+      "af": {
+        "src": "/aitutor/subtitles/recorded-demo/af.vtt",
+        "label": "Afrikaans",
+        "name": "Afrikaans"
+      },
+      "sq": {
+        "src": "/aitutor/subtitles/recorded-demo/sq.vtt",
+        "label": "Shqip",
+        "name": "Albanian"
+      },
+      "ar": {
+        "src": "/aitutor/subtitles/recorded-demo/ar.vtt",
+        "label": "العربية",
+        "name": "Arabic"
+      },
+      "eu": {
+        "src": "/aitutor/subtitles/recorded-demo/eu.vtt",
+        "label": "Euskara",
+        "name": "Basque"
+      },
+      "as": {
+        "src": "/aitutor/subtitles/recorded-demo/as.vtt",
+        "label": "অসমীয়া",
+        "name": "Assamese"
+      },
+      "be": {
+        "src": "/aitutor/subtitles/recorded-demo/be.vtt",
+        "label": "Беларуская",
+        "name": "Belarusian"
+      },
+      "az": {
+        "src": "/aitutor/subtitles/recorded-demo/az.vtt",
+        "label": "Azərbaycan",
+        "name": "Azerbaijani"
+      },
+      "bn": {
+        "src": "/aitutor/subtitles/recorded-demo/bn.vtt",
+        "label": "বাংলা",
+        "name": "Bengali"
+      },
+      "bi": {
+        "src": "/aitutor/subtitles/recorded-demo/bi.vtt",
+        "label": "Bislama",
+        "name": "Bislama"
+      },
+      "bho": {
+        "src": "/aitutor/subtitles/recorded-demo/bho.vtt",
+        "label": "भोजपुरी",
+        "name": "Bhojpuri"
+      },
+      "my": {
+        "src": "/aitutor/subtitles/recorded-demo/my.vtt",
+        "label": "မြန်မာဘာသာ",
+        "name": "Burmese"
+      },
+      "yue": {
+        "src": "/aitutor/subtitles/recorded-demo/yue.vtt",
+        "label": "廣東話",
+        "name": "Cantonese"
+      },
+      "bg": {
+        "src": "/aitutor/subtitles/recorded-demo/bg.vtt",
+        "label": "Български",
+        "name": "Bulgarian"
+      },
+      "ch": {
+        "src": "/aitutor/subtitles/recorded-demo/ch.vtt",
+        "label": "Chamorro",
+        "name": "Chamorro"
+      },
+      "zh": {
+        "src": "/aitutor/subtitles/recorded-demo/zh.vtt",
+        "label": "中文",
+        "name": "Chinese (Mandarin)"
+      },
+      "ceb": {
+        "src": "/aitutor/subtitles/recorded-demo/ceb.vtt",
+        "label": "Cebuano",
+        "name": "Cebuano"
+      },
+      "ca": {
+        "src": "/aitutor/subtitles/recorded-demo/ca.vtt",
+        "label": "Català",
+        "name": "Catalan"
+      },
+      "hr": {
+        "src": "/aitutor/subtitles/recorded-demo/hr.vtt",
+        "label": "Hrvatski",
+        "name": "Croatian"
+      },
+      "doi": {
+        "src": "/aitutor/subtitles/recorded-demo/doi.vtt",
+        "label": "डोगरी",
+        "name": "Dogri"
+      },
+      "cs": {
+        "src": "/aitutor/subtitles/recorded-demo/cs.vtt",
+        "label": "Čeština",
+        "name": "Czech"
+      },
+      "nl": {
+        "src": "/aitutor/subtitles/recorded-demo/nl.vtt",
+        "label": "Nederlands",
+        "name": "Dutch"
+      },
+      "da": {
+        "src": "/aitutor/subtitles/recorded-demo/da.vtt",
+        "label": "Dansk",
+        "name": "Danish"
+      },
+      "tl": {
+        "src": "/aitutor/subtitles/recorded-demo/tl.vtt",
+        "label": "Tagalog",
+        "name": "Filipino (Tagalog)"
+      },
+      "fj": {
+        "src": "/aitutor/subtitles/recorded-demo/fj.vtt",
+        "label": "Na Vosa Vakaviti",
+        "name": "Fijian"
+      },
+      "fr": {
+        "src": "/aitutor/subtitles/recorded-demo/fr.vtt",
+        "label": "Français",
+        "name": "French"
+      },
+      "et": {
+        "src": "/aitutor/subtitles/recorded-demo/et.vtt",
+        "label": "Eesti",
+        "name": "Estonian"
+      },
+      "fi": {
+        "src": "/aitutor/subtitles/recorded-demo/fi.vtt",
+        "label": "Suomi",
+        "name": "Finnish"
+      },
+      "kl": {
+        "src": "/aitutor/subtitles/recorded-demo/kl.vtt",
+        "label": "Kalaallisut",
+        "name": "Greenlandic"
+      },
+      "gl": {
+        "src": "/aitutor/subtitles/recorded-demo/gl.vtt",
+        "label": "Galego",
+        "name": "Galician"
+      },
+      "de": {
+        "src": "/aitutor/subtitles/recorded-demo/de.vtt",
+        "label": "Deutsch",
+        "name": "German"
+      },
+      "ka": {
+        "src": "/aitutor/subtitles/recorded-demo/ka.vtt",
+        "label": "ქართული",
+        "name": "Georgian"
+      },
+      "el": {
+        "src": "/aitutor/subtitles/recorded-demo/el.vtt",
+        "label": "Ελληνικά",
+        "name": "Greek"
+      },
+      "haw": {
+        "src": "/aitutor/subtitles/recorded-demo/haw.vtt",
+        "label": "Ōlelo Hawaiʻi",
+        "name": "Hawaiian"
+      },
+      "gu": {
+        "src": "/aitutor/subtitles/recorded-demo/gu.vtt",
+        "label": "ગુજરાતી",
+        "name": "Gujarati"
+      },
+      "ha": {
+        "src": "/aitutor/subtitles/recorded-demo/ha.vtt",
+        "label": "Hausa",
+        "name": "Hausa"
+      },
+      "he": {
+        "src": "/aitutor/subtitles/recorded-demo/he.vtt",
+        "label": "עברית",
+        "name": "Hebrew"
+      },
+      "ig": {
+        "src": "/aitutor/subtitles/recorded-demo/ig.vtt",
+        "label": "Igbo",
+        "name": "Igbo"
+      },
+      "is": {
+        "src": "/aitutor/subtitles/recorded-demo/is.vtt",
+        "label": "Íslenska",
+        "name": "Icelandic"
+      },
+      "id": {
+        "src": "/aitutor/subtitles/recorded-demo/id.vtt",
+        "label": "Bahasa Indonesia",
+        "name": "Indonesian"
+      },
+      "ga": {
+        "src": "/aitutor/subtitles/recorded-demo/ga.vtt",
+        "label": "Gaeilge",
+        "name": "Irish"
+      },
+      "hu": {
+        "src": "/aitutor/subtitles/recorded-demo/hu.vtt",
+        "label": "Magyar",
+        "name": "Hungarian"
+      },
+      "jv": {
+        "src": "/aitutor/subtitles/recorded-demo/jv.vtt",
+        "label": "Basa Jawa",
+        "name": "Javanese"
+      },
+      "ks": {
+        "src": "/aitutor/subtitles/recorded-demo/ks.vtt",
+        "label": "کٲشُر",
+        "name": "Kashmiri"
+      },
+      "kn": {
+        "src": "/aitutor/subtitles/recorded-demo/kn.vtt",
+        "label": "ಕನ್ನಡ",
+        "name": "Kannada"
+      },
+      "it": {
+        "src": "/aitutor/subtitles/recorded-demo/it.vtt",
+        "label": "Italiano",
+        "name": "Italian"
+      },
+      "ja": {
+        "src": "/aitutor/subtitles/recorded-demo/ja.vtt",
+        "label": "日本語",
+        "name": "Japanese"
+      },
+      "kok": {
+        "src": "/aitutor/subtitles/recorded-demo/kok.vtt",
+        "label": "कोंकणी",
+        "name": "Konkani"
+      },
+      "rw": {
+        "src": "/aitutor/subtitles/recorded-demo/rw.vtt",
+        "label": "Kinyarwanda",
+        "name": "Kinyarwanda"
+      },
+      "kk": {
+        "src": "/aitutor/subtitles/recorded-demo/kk.vtt",
+        "label": "Қазақ тілі",
+        "name": "Kazakh"
+      },
+      "ko": {
+        "src": "/aitutor/subtitles/recorded-demo/ko.vtt",
+        "label": "한국어",
+        "name": "Korean"
+      },
+      "km": {
+        "src": "/aitutor/subtitles/recorded-demo/km.vtt",
+        "label": "ភាសាខ្មែរ",
+        "name": "Khmer"
+      },
+      "ky": {
+        "src": "/aitutor/subtitles/recorded-demo/ky.vtt",
+        "label": "Кыргызча",
+        "name": "Kyrgyz"
+      },
+      "lo": {
+        "src": "/aitutor/subtitles/recorded-demo/lo.vtt",
+        "label": "ພາສາລາວ",
+        "name": "Lao"
+      },
+      "ku": {
+        "src": "/aitutor/subtitles/recorded-demo/ku.vtt",
+        "label": "Kurdî",
+        "name": "Kurdish"
+      },
+      "lv": {
+        "src": "/aitutor/subtitles/recorded-demo/lv.vtt",
+        "label": "Latviešu",
+        "name": "Latvian"
+      },
+      "lt": {
+        "src": "/aitutor/subtitles/recorded-demo/lt.vtt",
+        "label": "Lietuvių",
+        "name": "Lithuanian"
+      },
+      "mk": {
+        "src": "/aitutor/subtitles/recorded-demo/mk.vtt",
+        "label": "Македонски",
+        "name": "Macedonian"
+      },
+      "mai": {
+        "src": "/aitutor/subtitles/recorded-demo/mai.vtt",
+        "label": "मैथिली",
+        "name": "Maithili"
+      },
+      "ms": {
+        "src": "/aitutor/subtitles/recorded-demo/ms.vtt",
+        "label": "Bahasa Melayu",
+        "name": "Malay"
+      },
+      "lb": {
+        "src": "/aitutor/subtitles/recorded-demo/lb.vtt",
+        "label": "Lëtzebuergesch",
+        "name": "Luxembourgish"
+      },
+      "mg": {
+        "src": "/aitutor/subtitles/recorded-demo/mg.vtt",
+        "label": "Malagasy",
+        "name": "Malagasy"
+      },
+      "mr": {
+        "src": "/aitutor/subtitles/recorded-demo/mr.vtt",
+        "label": "मराठी",
+        "name": "Marathi"
+      },
+      "mi": {
+        "src": "/aitutor/subtitles/recorded-demo/mi.vtt",
+        "label": "Māori",
+        "name": "Māori"
+      },
+      "mni": {
+        "src": "/aitutor/subtitles/recorded-demo/mni.vtt",
+        "label": "মণিপুরী",
+        "name": "Manipuri"
+      },
+      "ml": {
+        "src": "/aitutor/subtitles/recorded-demo/ml.vtt",
+        "label": "മലയാളം",
+        "name": "Malayalam"
+      },
+      "mt": {
+        "src": "/aitutor/subtitles/recorded-demo/mt.vtt",
+        "label": "Malti",
+        "name": "Maltese"
+      },
+      "or": {
+        "src": "/aitutor/subtitles/recorded-demo/or.vtt",
+        "label": "ଓଡ଼ିଆ",
+        "name": "Odia"
+      },
+      "om": {
+        "src": "/aitutor/subtitles/recorded-demo/om.vtt",
+        "label": "Oromoo",
+        "name": "Oromo"
+      },
+      "ne": {
+        "src": "/aitutor/subtitles/recorded-demo/ne.vtt",
+        "label": "नेपाली",
+        "name": "Nepali"
+      },
+      "mn": {
+        "src": "/aitutor/subtitles/recorded-demo/mn.vtt",
+        "label": "Монгол",
+        "name": "Mongolian"
+      },
+      "no": {
+        "src": "/aitutor/subtitles/recorded-demo/no.vtt",
+        "label": "Norsk",
+        "name": "Norwegian"
+      },
+      "pa": {
+        "src": "/aitutor/subtitles/recorded-demo/pa.vtt",
+        "label": "ਪੰਜਾਬੀ",
+        "name": "Punjabi"
+      },
+      "pt": {
+        "src": "/aitutor/subtitles/recorded-demo/pt.vtt",
+        "label": "Português",
+        "name": "Portuguese"
+      },
+      "pl": {
+        "src": "/aitutor/subtitles/recorded-demo/pl.vtt",
+        "label": "Polski",
+        "name": "Polish"
+      },
+      "ps": {
+        "src": "/aitutor/subtitles/recorded-demo/ps.vtt",
+        "label": "پښتو",
+        "name": "Pashto"
+      },
+      "fa": {
+        "src": "/aitutor/subtitles/recorded-demo/fa.vtt",
+        "label": "فارسی",
+        "name": "Persian"
+      },
+      "sm": {
+        "src": "/aitutor/subtitles/recorded-demo/sm.vtt",
+        "label": "Gagana Sāmoa",
+        "name": "Samoan"
+      },
+      "sa": {
+        "src": "/aitutor/subtitles/recorded-demo/sa.vtt",
+        "label": "संस्कृतम्",
+        "name": "Sanskrit"
+      },
+      "sat": {
+        "src": "/aitutor/subtitles/recorded-demo/sat.vtt",
+        "label": "ᱥᱟᱱᱛᱟᱲᱤ",
+        "name": "Santali"
+      },
+      "ru": {
+        "src": "/aitutor/subtitles/recorded-demo/ru.vtt",
+        "label": "Русский",
+        "name": "Russian"
+      },
+      "ro": {
+        "src": "/aitutor/subtitles/recorded-demo/ro.vtt",
+        "label": "Română",
+        "name": "Romanian"
+      },
+      "sd": {
+        "src": "/aitutor/subtitles/recorded-demo/sd.vtt",
+        "label": "سنڌي",
+        "name": "Sindhi"
+      },
+      "si": {
+        "src": "/aitutor/subtitles/recorded-demo/si.vtt",
+        "label": "සිංහල",
+        "name": "Sinhala"
+      },
+      "sr": {
+        "src": "/aitutor/subtitles/recorded-demo/sr.vtt",
+        "label": "Српски",
+        "name": "Serbian"
+      },
+      "sk": {
+        "src": "/aitutor/subtitles/recorded-demo/sk.vtt",
+        "label": "Slovenčina",
+        "name": "Slovak"
+      },
+      "sl": {
+        "src": "/aitutor/subtitles/recorded-demo/sl.vtt",
+        "label": "Slovenščina",
+        "name": "Slovenian"
+      },
+      "su": {
+        "src": "/aitutor/subtitles/recorded-demo/su.vtt",
+        "label": "Basa Sunda",
+        "name": "Sundanese"
+      },
+      "sw": {
+        "src": "/aitutor/subtitles/recorded-demo/sw.vtt",
+        "label": "Kiswahili",
+        "name": "Swahili"
+      },
+      "so": {
+        "src": "/aitutor/subtitles/recorded-demo/so.vtt",
+        "label": "Soomaali",
+        "name": "Somali"
+      },
+      "sv": {
+        "src": "/aitutor/subtitles/recorded-demo/sv.vtt",
+        "label": "Svenska",
+        "name": "Swedish"
+      },
+      "to": {
+        "src": "/aitutor/subtitles/recorded-demo/to.vtt",
+        "label": "Faka Tonga",
+        "name": "Tongan"
+      },
+      "tg": {
+        "src": "/aitutor/subtitles/recorded-demo/tg.vtt",
+        "label": "Тоҷикӣ",
+        "name": "Tajik"
+      },
+      "th": {
+        "src": "/aitutor/subtitles/recorded-demo/th.vtt",
+        "label": "ไทย",
+        "name": "Thai"
+      },
+      "ta": {
+        "src": "/aitutor/subtitles/recorded-demo/ta.vtt",
+        "label": "தமிழ்",
+        "name": "Tamil"
+      },
+      "tr": {
+        "src": "/aitutor/subtitles/recorded-demo/tr.vtt",
+        "label": "Türkçe",
+        "name": "Turkish"
+      },
+      "uz": {
+        "src": "/aitutor/subtitles/recorded-demo/uz.vtt",
+        "label": "Oʻzbekcha",
+        "name": "Uzbek"
+      },
+      "tk": {
+        "src": "/aitutor/subtitles/recorded-demo/tk.vtt",
+        "label": "Türkmençe",
+        "name": "Turkmen"
+      },
+      "ur": {
+        "src": "/aitutor/subtitles/recorded-demo/ur.vtt",
+        "label": "اردو",
+        "name": "Urdu"
+      },
+      "uk": {
+        "src": "/aitutor/subtitles/recorded-demo/uk.vtt",
+        "label": "Українська",
+        "name": "Ukrainian"
+      },
+      "vi": {
+        "src": "/aitutor/subtitles/recorded-demo/vi.vtt",
+        "label": "Tiếng Việt",
+        "name": "Vietnamese"
+      },
+      "zu": {
+        "src": "/aitutor/subtitles/recorded-demo/zu.vtt",
+        "label": "isiZulu",
+        "name": "Zulu"
+      },
+      "xh": {
+        "src": "/aitutor/subtitles/recorded-demo/xh.vtt",
+        "label": "isiXhosa",
+        "name": "Xhosa"
+      },
+      "cy": {
+        "src": "/aitutor/subtitles/recorded-demo/cy.vtt",
+        "label": "Cymraeg",
+        "name": "Welsh"
       }
     },
-    "fingerprint": "d8dad3bb2a50d2e2",
-    "updatedAt": "2026-08-03T08:29:24.453Z"
+    "fingerprint": "ef0c886f184fbfed",
+    "updatedAt": "2026-08-04T14:47:11.214Z"
   },
   "sample-local": {
     "id": "sample-local",
@@ -56,10 +581,535 @@
         "src": "/aitutor/subtitles/sample-local/es.vtt",
         "label": "Español",
         "name": "Spanish"
+      },
+      "af": {
+        "src": "/aitutor/subtitles/sample-local/af.vtt",
+        "label": "Afrikaans",
+        "name": "Afrikaans"
+      },
+      "hy": {
+        "src": "/aitutor/subtitles/sample-local/hy.vtt",
+        "label": "Հայերեն",
+        "name": "Armenian"
+      },
+      "am": {
+        "src": "/aitutor/subtitles/sample-local/am.vtt",
+        "label": "አማርኛ",
+        "name": "Amharic"
+      },
+      "sq": {
+        "src": "/aitutor/subtitles/sample-local/sq.vtt",
+        "label": "Shqip",
+        "name": "Albanian"
+      },
+      "ar": {
+        "src": "/aitutor/subtitles/sample-local/ar.vtt",
+        "label": "العربية",
+        "name": "Arabic"
+      },
+      "as": {
+        "src": "/aitutor/subtitles/sample-local/as.vtt",
+        "label": "অসমীয়া",
+        "name": "Assamese"
+      },
+      "be": {
+        "src": "/aitutor/subtitles/sample-local/be.vtt",
+        "label": "Беларуская",
+        "name": "Belarusian"
+      },
+      "eu": {
+        "src": "/aitutor/subtitles/sample-local/eu.vtt",
+        "label": "Euskara",
+        "name": "Basque"
+      },
+      "az": {
+        "src": "/aitutor/subtitles/sample-local/az.vtt",
+        "label": "Azərbaycan",
+        "name": "Azerbaijani"
+      },
+      "bn": {
+        "src": "/aitutor/subtitles/sample-local/bn.vtt",
+        "label": "বাংলা",
+        "name": "Bengali"
+      },
+      "bho": {
+        "src": "/aitutor/subtitles/sample-local/bho.vtt",
+        "label": "भोजपुरी",
+        "name": "Bhojpuri"
+      },
+      "bg": {
+        "src": "/aitutor/subtitles/sample-local/bg.vtt",
+        "label": "Български",
+        "name": "Bulgarian"
+      },
+      "bi": {
+        "src": "/aitutor/subtitles/sample-local/bi.vtt",
+        "label": "Bislama",
+        "name": "Bislama"
+      },
+      "yue": {
+        "src": "/aitutor/subtitles/sample-local/yue.vtt",
+        "label": "廣東話",
+        "name": "Cantonese"
+      },
+      "my": {
+        "src": "/aitutor/subtitles/sample-local/my.vtt",
+        "label": "မြန်မာဘာသာ",
+        "name": "Burmese"
+      },
+      "ca": {
+        "src": "/aitutor/subtitles/sample-local/ca.vtt",
+        "label": "Català",
+        "name": "Catalan"
+      },
+      "ch": {
+        "src": "/aitutor/subtitles/sample-local/ch.vtt",
+        "label": "Chamorro",
+        "name": "Chamorro"
+      },
+      "zh": {
+        "src": "/aitutor/subtitles/sample-local/zh.vtt",
+        "label": "中文",
+        "name": "Chinese (Mandarin)"
+      },
+      "ceb": {
+        "src": "/aitutor/subtitles/sample-local/ceb.vtt",
+        "label": "Cebuano",
+        "name": "Cebuano"
+      },
+      "hr": {
+        "src": "/aitutor/subtitles/sample-local/hr.vtt",
+        "label": "Hrvatski",
+        "name": "Croatian"
+      },
+      "cs": {
+        "src": "/aitutor/subtitles/sample-local/cs.vtt",
+        "label": "Čeština",
+        "name": "Czech"
+      },
+      "da": {
+        "src": "/aitutor/subtitles/sample-local/da.vtt",
+        "label": "Dansk",
+        "name": "Danish"
+      },
+      "doi": {
+        "src": "/aitutor/subtitles/sample-local/doi.vtt",
+        "label": "डोगरी",
+        "name": "Dogri"
+      },
+      "nl": {
+        "src": "/aitutor/subtitles/sample-local/nl.vtt",
+        "label": "Nederlands",
+        "name": "Dutch"
+      },
+      "fi": {
+        "src": "/aitutor/subtitles/sample-local/fi.vtt",
+        "label": "Suomi",
+        "name": "Finnish"
+      },
+      "fj": {
+        "src": "/aitutor/subtitles/sample-local/fj.vtt",
+        "label": "Na Vosa Vakaviti",
+        "name": "Fijian"
+      },
+      "et": {
+        "src": "/aitutor/subtitles/sample-local/et.vtt",
+        "label": "Eesti",
+        "name": "Estonian"
+      },
+      "fr": {
+        "src": "/aitutor/subtitles/sample-local/fr.vtt",
+        "label": "Français",
+        "name": "French"
+      },
+      "tl": {
+        "src": "/aitutor/subtitles/sample-local/tl.vtt",
+        "label": "Tagalog",
+        "name": "Filipino (Tagalog)"
+      },
+      "el": {
+        "src": "/aitutor/subtitles/sample-local/el.vtt",
+        "label": "Ελληνικά",
+        "name": "Greek"
+      },
+      "ka": {
+        "src": "/aitutor/subtitles/sample-local/ka.vtt",
+        "label": "ქართული",
+        "name": "Georgian"
+      },
+      "de": {
+        "src": "/aitutor/subtitles/sample-local/de.vtt",
+        "label": "Deutsch",
+        "name": "German"
+      },
+      "gl": {
+        "src": "/aitutor/subtitles/sample-local/gl.vtt",
+        "label": "Galego",
+        "name": "Galician"
+      },
+      "kl": {
+        "src": "/aitutor/subtitles/sample-local/kl.vtt",
+        "label": "Kalaallisut",
+        "name": "Greenlandic"
+      },
+      "haw": {
+        "src": "/aitutor/subtitles/sample-local/haw.vtt",
+        "label": "Ōlelo Hawaiʻi",
+        "name": "Hawaiian"
+      },
+      "gu": {
+        "src": "/aitutor/subtitles/sample-local/gu.vtt",
+        "label": "ગુજરાતી",
+        "name": "Gujarati"
+      },
+      "ha": {
+        "src": "/aitutor/subtitles/sample-local/ha.vtt",
+        "label": "Hausa",
+        "name": "Hausa"
+      },
+      "he": {
+        "src": "/aitutor/subtitles/sample-local/he.vtt",
+        "label": "עברית",
+        "name": "Hebrew"
+      },
+      "hu": {
+        "src": "/aitutor/subtitles/sample-local/hu.vtt",
+        "label": "Magyar",
+        "name": "Hungarian"
+      },
+      "is": {
+        "src": "/aitutor/subtitles/sample-local/is.vtt",
+        "label": "Íslenska",
+        "name": "Icelandic"
+      },
+      "ig": {
+        "src": "/aitutor/subtitles/sample-local/ig.vtt",
+        "label": "Igbo",
+        "name": "Igbo"
+      },
+      "ga": {
+        "src": "/aitutor/subtitles/sample-local/ga.vtt",
+        "label": "Gaeilge",
+        "name": "Irish"
+      },
+      "id": {
+        "src": "/aitutor/subtitles/sample-local/id.vtt",
+        "label": "Bahasa Indonesia",
+        "name": "Indonesian"
+      },
+      "jv": {
+        "src": "/aitutor/subtitles/sample-local/jv.vtt",
+        "label": "Basa Jawa",
+        "name": "Javanese"
+      },
+      "kn": {
+        "src": "/aitutor/subtitles/sample-local/kn.vtt",
+        "label": "ಕನ್ನಡ",
+        "name": "Kannada"
+      },
+      "ks": {
+        "src": "/aitutor/subtitles/sample-local/ks.vtt",
+        "label": "کٲشُر",
+        "name": "Kashmiri"
+      },
+      "ja": {
+        "src": "/aitutor/subtitles/sample-local/ja.vtt",
+        "label": "日本語",
+        "name": "Japanese"
+      },
+      "it": {
+        "src": "/aitutor/subtitles/sample-local/it.vtt",
+        "label": "Italiano",
+        "name": "Italian"
+      },
+      "kok": {
+        "src": "/aitutor/subtitles/sample-local/kok.vtt",
+        "label": "कोंकणी",
+        "name": "Konkani"
+      },
+      "kk": {
+        "src": "/aitutor/subtitles/sample-local/kk.vtt",
+        "label": "Қазақ тілі",
+        "name": "Kazakh"
+      },
+      "rw": {
+        "src": "/aitutor/subtitles/sample-local/rw.vtt",
+        "label": "Kinyarwanda",
+        "name": "Kinyarwanda"
+      },
+      "ko": {
+        "src": "/aitutor/subtitles/sample-local/ko.vtt",
+        "label": "한국어",
+        "name": "Korean"
+      },
+      "km": {
+        "src": "/aitutor/subtitles/sample-local/km.vtt",
+        "label": "ភាសាខ្មែរ",
+        "name": "Khmer"
+      },
+      "ky": {
+        "src": "/aitutor/subtitles/sample-local/ky.vtt",
+        "label": "Кыргызча",
+        "name": "Kyrgyz"
+      },
+      "lv": {
+        "src": "/aitutor/subtitles/sample-local/lv.vtt",
+        "label": "Latviešu",
+        "name": "Latvian"
+      },
+      "lo": {
+        "src": "/aitutor/subtitles/sample-local/lo.vtt",
+        "label": "ພາສາລາວ",
+        "name": "Lao"
+      },
+      "ku": {
+        "src": "/aitutor/subtitles/sample-local/ku.vtt",
+        "label": "Kurdî",
+        "name": "Kurdish"
+      },
+      "lt": {
+        "src": "/aitutor/subtitles/sample-local/lt.vtt",
+        "label": "Lietuvių",
+        "name": "Lithuanian"
+      },
+      "mg": {
+        "src": "/aitutor/subtitles/sample-local/mg.vtt",
+        "label": "Malagasy",
+        "name": "Malagasy"
+      },
+      "mai": {
+        "src": "/aitutor/subtitles/sample-local/mai.vtt",
+        "label": "मैथिली",
+        "name": "Maithili"
+      },
+      "mk": {
+        "src": "/aitutor/subtitles/sample-local/mk.vtt",
+        "label": "Македонски",
+        "name": "Macedonian"
+      },
+      "lb": {
+        "src": "/aitutor/subtitles/sample-local/lb.vtt",
+        "label": "Lëtzebuergesch",
+        "name": "Luxembourgish"
+      },
+      "ms": {
+        "src": "/aitutor/subtitles/sample-local/ms.vtt",
+        "label": "Bahasa Melayu",
+        "name": "Malay"
+      },
+      "mni": {
+        "src": "/aitutor/subtitles/sample-local/mni.vtt",
+        "label": "মণিপুরী",
+        "name": "Manipuri"
+      },
+      "mi": {
+        "src": "/aitutor/subtitles/sample-local/mi.vtt",
+        "label": "Māori",
+        "name": "Māori"
+      },
+      "ml": {
+        "src": "/aitutor/subtitles/sample-local/ml.vtt",
+        "label": "മലയാളം",
+        "name": "Malayalam"
+      },
+      "mr": {
+        "src": "/aitutor/subtitles/sample-local/mr.vtt",
+        "label": "मराठी",
+        "name": "Marathi"
+      },
+      "mt": {
+        "src": "/aitutor/subtitles/sample-local/mt.vtt",
+        "label": "Malti",
+        "name": "Maltese"
+      },
+      "no": {
+        "src": "/aitutor/subtitles/sample-local/no.vtt",
+        "label": "Norsk",
+        "name": "Norwegian"
+      },
+      "or": {
+        "src": "/aitutor/subtitles/sample-local/or.vtt",
+        "label": "ଓଡ଼ିଆ",
+        "name": "Odia"
+      },
+      "om": {
+        "src": "/aitutor/subtitles/sample-local/om.vtt",
+        "label": "Oromoo",
+        "name": "Oromo"
+      },
+      "ne": {
+        "src": "/aitutor/subtitles/sample-local/ne.vtt",
+        "label": "नेपाली",
+        "name": "Nepali"
+      },
+      "mn": {
+        "src": "/aitutor/subtitles/sample-local/mn.vtt",
+        "label": "Монгол",
+        "name": "Mongolian"
+      },
+      "pa": {
+        "src": "/aitutor/subtitles/sample-local/pa.vtt",
+        "label": "ਪੰਜਾਬੀ",
+        "name": "Punjabi"
+      },
+      "fa": {
+        "src": "/aitutor/subtitles/sample-local/fa.vtt",
+        "label": "فارسی",
+        "name": "Persian"
+      },
+      "pt": {
+        "src": "/aitutor/subtitles/sample-local/pt.vtt",
+        "label": "Português",
+        "name": "Portuguese"
+      },
+      "ps": {
+        "src": "/aitutor/subtitles/sample-local/ps.vtt",
+        "label": "پښتو",
+        "name": "Pashto"
+      },
+      "pl": {
+        "src": "/aitutor/subtitles/sample-local/pl.vtt",
+        "label": "Polski",
+        "name": "Polish"
+      },
+      "ro": {
+        "src": "/aitutor/subtitles/sample-local/ro.vtt",
+        "label": "Română",
+        "name": "Romanian"
+      },
+      "ru": {
+        "src": "/aitutor/subtitles/sample-local/ru.vtt",
+        "label": "Русский",
+        "name": "Russian"
+      },
+      "sm": {
+        "src": "/aitutor/subtitles/sample-local/sm.vtt",
+        "label": "Gagana Sāmoa",
+        "name": "Samoan"
+      },
+      "sat": {
+        "src": "/aitutor/subtitles/sample-local/sat.vtt",
+        "label": "ᱥᱟᱱᱛᱟᱲᱤ",
+        "name": "Santali"
+      },
+      "sa": {
+        "src": "/aitutor/subtitles/sample-local/sa.vtt",
+        "label": "संस्कृतम्",
+        "name": "Sanskrit"
+      },
+      "sl": {
+        "src": "/aitutor/subtitles/sample-local/sl.vtt",
+        "label": "Slovenščina",
+        "name": "Slovenian"
+      },
+      "si": {
+        "src": "/aitutor/subtitles/sample-local/si.vtt",
+        "label": "සිංහල",
+        "name": "Sinhala"
+      },
+      "sd": {
+        "src": "/aitutor/subtitles/sample-local/sd.vtt",
+        "label": "سنڌي",
+        "name": "Sindhi"
+      },
+      "sr": {
+        "src": "/aitutor/subtitles/sample-local/sr.vtt",
+        "label": "Српски",
+        "name": "Serbian"
+      },
+      "sk": {
+        "src": "/aitutor/subtitles/sample-local/sk.vtt",
+        "label": "Slovenčina",
+        "name": "Slovak"
+      },
+      "so": {
+        "src": "/aitutor/subtitles/sample-local/so.vtt",
+        "label": "Soomaali",
+        "name": "Somali"
+      },
+      "su": {
+        "src": "/aitutor/subtitles/sample-local/su.vtt",
+        "label": "Basa Sunda",
+        "name": "Sundanese"
+      },
+      "sv": {
+        "src": "/aitutor/subtitles/sample-local/sv.vtt",
+        "label": "Svenska",
+        "name": "Swedish"
+      },
+      "sw": {
+        "src": "/aitutor/subtitles/sample-local/sw.vtt",
+        "label": "Kiswahili",
+        "name": "Swahili"
+      },
+      "ta": {
+        "src": "/aitutor/subtitles/sample-local/ta.vtt",
+        "label": "தமிழ்",
+        "name": "Tamil"
+      },
+      "to": {
+        "src": "/aitutor/subtitles/sample-local/to.vtt",
+        "label": "Faka Tonga",
+        "name": "Tongan"
+      },
+      "tg": {
+        "src": "/aitutor/subtitles/sample-local/tg.vtt",
+        "label": "Тоҷикӣ",
+        "name": "Tajik"
+      },
+      "th": {
+        "src": "/aitutor/subtitles/sample-local/th.vtt",
+        "label": "ไทย",
+        "name": "Thai"
+      },
+      "uk": {
+        "src": "/aitutor/subtitles/sample-local/uk.vtt",
+        "label": "Українська",
+        "name": "Ukrainian"
+      },
+      "ur": {
+        "src": "/aitutor/subtitles/sample-local/ur.vtt",
+        "label": "اردو",
+        "name": "Urdu"
+      },
+      "tk": {
+        "src": "/aitutor/subtitles/sample-local/tk.vtt",
+        "label": "Türkmençe",
+        "name": "Turkmen"
+      },
+      "uz": {
+        "src": "/aitutor/subtitles/sample-local/uz.vtt",
+        "label": "Oʻzbekcha",
+        "name": "Uzbek"
+      },
+      "tr": {
+        "src": "/aitutor/subtitles/sample-local/tr.vtt",
+        "label": "Türkçe",
+        "name": "Turkish"
+      },
+      "cy": {
+        "src": "/aitutor/subtitles/sample-local/cy.vtt",
+        "label": "Cymraeg",
+        "name": "Welsh"
+      },
+      "zu": {
+        "src": "/aitutor/subtitles/sample-local/zu.vtt",
+        "label": "isiZulu",
+        "name": "Zulu"
+      },
+      "xh": {
+        "src": "/aitutor/subtitles/sample-local/xh.vtt",
+        "label": "isiXhosa",
+        "name": "Xhosa"
+      },
+      "vi": {
+        "src": "/aitutor/subtitles/sample-local/vi.vtt",
+        "label": "Tiếng Việt",
+        "name": "Vietnamese"
       }
     },
-    "fingerprint": "571dcf8d8220d9c3",
-    "updatedAt": "2026-08-03T08:29:50.485Z"
+    "fingerprint": "bd36a90eaa9d592d",
+    "updatedAt": "2026-08-04T15:09:54.669Z"
   },
   "math-edu": {
     "id": "math-edu",
@@ -87,10 +1137,535 @@
         "src": "/aitutor/subtitles/math-edu/es.vtt",
         "label": "Español",
         "name": "Spanish"
+      },
+      "af": {
+        "src": "/aitutor/subtitles/math-edu/af.vtt",
+        "label": "Afrikaans",
+        "name": "Afrikaans"
+      },
+      "sq": {
+        "src": "/aitutor/subtitles/math-edu/sq.vtt",
+        "label": "Shqip",
+        "name": "Albanian"
+      },
+      "am": {
+        "src": "/aitutor/subtitles/math-edu/am.vtt",
+        "label": "አማርኛ",
+        "name": "Amharic"
+      },
+      "ar": {
+        "src": "/aitutor/subtitles/math-edu/ar.vtt",
+        "label": "العربية",
+        "name": "Arabic"
+      },
+      "hy": {
+        "src": "/aitutor/subtitles/math-edu/hy.vtt",
+        "label": "Հայերեն",
+        "name": "Armenian"
+      },
+      "as": {
+        "src": "/aitutor/subtitles/math-edu/as.vtt",
+        "label": "অসমীয়া",
+        "name": "Assamese"
+      },
+      "az": {
+        "src": "/aitutor/subtitles/math-edu/az.vtt",
+        "label": "Azərbaycan",
+        "name": "Azerbaijani"
+      },
+      "eu": {
+        "src": "/aitutor/subtitles/math-edu/eu.vtt",
+        "label": "Euskara",
+        "name": "Basque"
+      },
+      "be": {
+        "src": "/aitutor/subtitles/math-edu/be.vtt",
+        "label": "Беларуская",
+        "name": "Belarusian"
+      },
+      "bn": {
+        "src": "/aitutor/subtitles/math-edu/bn.vtt",
+        "label": "বাংলা",
+        "name": "Bengali"
+      },
+      "bho": {
+        "src": "/aitutor/subtitles/math-edu/bho.vtt",
+        "label": "भोजपुरी",
+        "name": "Bhojpuri"
+      },
+      "bi": {
+        "src": "/aitutor/subtitles/math-edu/bi.vtt",
+        "label": "Bislama",
+        "name": "Bislama"
+      },
+      "bg": {
+        "src": "/aitutor/subtitles/math-edu/bg.vtt",
+        "label": "Български",
+        "name": "Bulgarian"
+      },
+      "my": {
+        "src": "/aitutor/subtitles/math-edu/my.vtt",
+        "label": "မြန်မာဘာသာ",
+        "name": "Burmese"
+      },
+      "yue": {
+        "src": "/aitutor/subtitles/math-edu/yue.vtt",
+        "label": "廣東話",
+        "name": "Cantonese"
+      },
+      "ca": {
+        "src": "/aitutor/subtitles/math-edu/ca.vtt",
+        "label": "Català",
+        "name": "Catalan"
+      },
+      "ceb": {
+        "src": "/aitutor/subtitles/math-edu/ceb.vtt",
+        "label": "Cebuano",
+        "name": "Cebuano"
+      },
+      "ch": {
+        "src": "/aitutor/subtitles/math-edu/ch.vtt",
+        "label": "Chamorro",
+        "name": "Chamorro"
+      },
+      "zh": {
+        "src": "/aitutor/subtitles/math-edu/zh.vtt",
+        "label": "中文",
+        "name": "Chinese (Mandarin)"
+      },
+      "hr": {
+        "src": "/aitutor/subtitles/math-edu/hr.vtt",
+        "label": "Hrvatski",
+        "name": "Croatian"
+      },
+      "cs": {
+        "src": "/aitutor/subtitles/math-edu/cs.vtt",
+        "label": "Čeština",
+        "name": "Czech"
+      },
+      "da": {
+        "src": "/aitutor/subtitles/math-edu/da.vtt",
+        "label": "Dansk",
+        "name": "Danish"
+      },
+      "doi": {
+        "src": "/aitutor/subtitles/math-edu/doi.vtt",
+        "label": "डोगरी",
+        "name": "Dogri"
+      },
+      "nl": {
+        "src": "/aitutor/subtitles/math-edu/nl.vtt",
+        "label": "Nederlands",
+        "name": "Dutch"
+      },
+      "et": {
+        "src": "/aitutor/subtitles/math-edu/et.vtt",
+        "label": "Eesti",
+        "name": "Estonian"
+      },
+      "fj": {
+        "src": "/aitutor/subtitles/math-edu/fj.vtt",
+        "label": "Na Vosa Vakaviti",
+        "name": "Fijian"
+      },
+      "tl": {
+        "src": "/aitutor/subtitles/math-edu/tl.vtt",
+        "label": "Tagalog",
+        "name": "Filipino (Tagalog)"
+      },
+      "fi": {
+        "src": "/aitutor/subtitles/math-edu/fi.vtt",
+        "label": "Suomi",
+        "name": "Finnish"
+      },
+      "fr": {
+        "src": "/aitutor/subtitles/math-edu/fr.vtt",
+        "label": "Français",
+        "name": "French"
+      },
+      "gl": {
+        "src": "/aitutor/subtitles/math-edu/gl.vtt",
+        "label": "Galego",
+        "name": "Galician"
+      },
+      "ka": {
+        "src": "/aitutor/subtitles/math-edu/ka.vtt",
+        "label": "ქართული",
+        "name": "Georgian"
+      },
+      "de": {
+        "src": "/aitutor/subtitles/math-edu/de.vtt",
+        "label": "Deutsch",
+        "name": "German"
+      },
+      "el": {
+        "src": "/aitutor/subtitles/math-edu/el.vtt",
+        "label": "Ελληνικά",
+        "name": "Greek"
+      },
+      "kl": {
+        "src": "/aitutor/subtitles/math-edu/kl.vtt",
+        "label": "Kalaallisut",
+        "name": "Greenlandic"
+      },
+      "gu": {
+        "src": "/aitutor/subtitles/math-edu/gu.vtt",
+        "label": "ગુજરાતી",
+        "name": "Gujarati"
+      },
+      "ha": {
+        "src": "/aitutor/subtitles/math-edu/ha.vtt",
+        "label": "Hausa",
+        "name": "Hausa"
+      },
+      "haw": {
+        "src": "/aitutor/subtitles/math-edu/haw.vtt",
+        "label": "Ōlelo Hawaiʻi",
+        "name": "Hawaiian"
+      },
+      "he": {
+        "src": "/aitutor/subtitles/math-edu/he.vtt",
+        "label": "עברית",
+        "name": "Hebrew"
+      },
+      "hu": {
+        "src": "/aitutor/subtitles/math-edu/hu.vtt",
+        "label": "Magyar",
+        "name": "Hungarian"
+      },
+      "is": {
+        "src": "/aitutor/subtitles/math-edu/is.vtt",
+        "label": "Íslenska",
+        "name": "Icelandic"
+      },
+      "ig": {
+        "src": "/aitutor/subtitles/math-edu/ig.vtt",
+        "label": "Igbo",
+        "name": "Igbo"
+      },
+      "id": {
+        "src": "/aitutor/subtitles/math-edu/id.vtt",
+        "label": "Bahasa Indonesia",
+        "name": "Indonesian"
+      },
+      "ga": {
+        "src": "/aitutor/subtitles/math-edu/ga.vtt",
+        "label": "Gaeilge",
+        "name": "Irish"
+      },
+      "it": {
+        "src": "/aitutor/subtitles/math-edu/it.vtt",
+        "label": "Italiano",
+        "name": "Italian"
+      },
+      "ja": {
+        "src": "/aitutor/subtitles/math-edu/ja.vtt",
+        "label": "日本語",
+        "name": "Japanese"
+      },
+      "jv": {
+        "src": "/aitutor/subtitles/math-edu/jv.vtt",
+        "label": "Basa Jawa",
+        "name": "Javanese"
+      },
+      "kn": {
+        "src": "/aitutor/subtitles/math-edu/kn.vtt",
+        "label": "ಕನ್ನಡ",
+        "name": "Kannada"
+      },
+      "ks": {
+        "src": "/aitutor/subtitles/math-edu/ks.vtt",
+        "label": "کٲشُر",
+        "name": "Kashmiri"
+      },
+      "kk": {
+        "src": "/aitutor/subtitles/math-edu/kk.vtt",
+        "label": "Қазақ тілі",
+        "name": "Kazakh"
+      },
+      "km": {
+        "src": "/aitutor/subtitles/math-edu/km.vtt",
+        "label": "ភាសាខ្មែរ",
+        "name": "Khmer"
+      },
+      "rw": {
+        "src": "/aitutor/subtitles/math-edu/rw.vtt",
+        "label": "Kinyarwanda",
+        "name": "Kinyarwanda"
+      },
+      "kok": {
+        "src": "/aitutor/subtitles/math-edu/kok.vtt",
+        "label": "कोंकणी",
+        "name": "Konkani"
+      },
+      "ko": {
+        "src": "/aitutor/subtitles/math-edu/ko.vtt",
+        "label": "한국어",
+        "name": "Korean"
+      },
+      "ku": {
+        "src": "/aitutor/subtitles/math-edu/ku.vtt",
+        "label": "Kurdî",
+        "name": "Kurdish"
+      },
+      "ky": {
+        "src": "/aitutor/subtitles/math-edu/ky.vtt",
+        "label": "Кыргызча",
+        "name": "Kyrgyz"
+      },
+      "lo": {
+        "src": "/aitutor/subtitles/math-edu/lo.vtt",
+        "label": "ພາສາລາວ",
+        "name": "Lao"
+      },
+      "lv": {
+        "src": "/aitutor/subtitles/math-edu/lv.vtt",
+        "label": "Latviešu",
+        "name": "Latvian"
+      },
+      "lt": {
+        "src": "/aitutor/subtitles/math-edu/lt.vtt",
+        "label": "Lietuvių",
+        "name": "Lithuanian"
+      },
+      "lb": {
+        "src": "/aitutor/subtitles/math-edu/lb.vtt",
+        "label": "Lëtzebuergesch",
+        "name": "Luxembourgish"
+      },
+      "mk": {
+        "src": "/aitutor/subtitles/math-edu/mk.vtt",
+        "label": "Македонски",
+        "name": "Macedonian"
+      },
+      "mai": {
+        "src": "/aitutor/subtitles/math-edu/mai.vtt",
+        "label": "मैथिली",
+        "name": "Maithili"
+      },
+      "mg": {
+        "src": "/aitutor/subtitles/math-edu/mg.vtt",
+        "label": "Malagasy",
+        "name": "Malagasy"
+      },
+      "ms": {
+        "src": "/aitutor/subtitles/math-edu/ms.vtt",
+        "label": "Bahasa Melayu",
+        "name": "Malay"
+      },
+      "ml": {
+        "src": "/aitutor/subtitles/math-edu/ml.vtt",
+        "label": "മലയാളം",
+        "name": "Malayalam"
+      },
+      "mt": {
+        "src": "/aitutor/subtitles/math-edu/mt.vtt",
+        "label": "Malti",
+        "name": "Maltese"
+      },
+      "mni": {
+        "src": "/aitutor/subtitles/math-edu/mni.vtt",
+        "label": "মণিপুরী",
+        "name": "Manipuri"
+      },
+      "mi": {
+        "src": "/aitutor/subtitles/math-edu/mi.vtt",
+        "label": "Māori",
+        "name": "Māori"
+      },
+      "mr": {
+        "src": "/aitutor/subtitles/math-edu/mr.vtt",
+        "label": "मराठी",
+        "name": "Marathi"
+      },
+      "mn": {
+        "src": "/aitutor/subtitles/math-edu/mn.vtt",
+        "label": "Монгол",
+        "name": "Mongolian"
+      },
+      "ne": {
+        "src": "/aitutor/subtitles/math-edu/ne.vtt",
+        "label": "नेपाली",
+        "name": "Nepali"
+      },
+      "no": {
+        "src": "/aitutor/subtitles/math-edu/no.vtt",
+        "label": "Norsk",
+        "name": "Norwegian"
+      },
+      "or": {
+        "src": "/aitutor/subtitles/math-edu/or.vtt",
+        "label": "ଓଡ଼ିଆ",
+        "name": "Odia"
+      },
+      "om": {
+        "src": "/aitutor/subtitles/math-edu/om.vtt",
+        "label": "Oromoo",
+        "name": "Oromo"
+      },
+      "ps": {
+        "src": "/aitutor/subtitles/math-edu/ps.vtt",
+        "label": "پښتو",
+        "name": "Pashto"
+      },
+      "fa": {
+        "src": "/aitutor/subtitles/math-edu/fa.vtt",
+        "label": "فارسی",
+        "name": "Persian"
+      },
+      "pl": {
+        "src": "/aitutor/subtitles/math-edu/pl.vtt",
+        "label": "Polski",
+        "name": "Polish"
+      },
+      "pt": {
+        "src": "/aitutor/subtitles/math-edu/pt.vtt",
+        "label": "Português",
+        "name": "Portuguese"
+      },
+      "pa": {
+        "src": "/aitutor/subtitles/math-edu/pa.vtt",
+        "label": "ਪੰਜਾਬੀ",
+        "name": "Punjabi"
+      },
+      "ro": {
+        "src": "/aitutor/subtitles/math-edu/ro.vtt",
+        "label": "Română",
+        "name": "Romanian"
+      },
+      "ru": {
+        "src": "/aitutor/subtitles/math-edu/ru.vtt",
+        "label": "Русский",
+        "name": "Russian"
+      },
+      "sm": {
+        "src": "/aitutor/subtitles/math-edu/sm.vtt",
+        "label": "Gagana Sāmoa",
+        "name": "Samoan"
+      },
+      "sa": {
+        "src": "/aitutor/subtitles/math-edu/sa.vtt",
+        "label": "संस्कृतम्",
+        "name": "Sanskrit"
+      },
+      "sat": {
+        "src": "/aitutor/subtitles/math-edu/sat.vtt",
+        "label": "ᱥᱟᱱᱛᱟᱲᱤ",
+        "name": "Santali"
+      },
+      "sr": {
+        "src": "/aitutor/subtitles/math-edu/sr.vtt",
+        "label": "Српски",
+        "name": "Serbian"
+      },
+      "sd": {
+        "src": "/aitutor/subtitles/math-edu/sd.vtt",
+        "label": "سنڌي",
+        "name": "Sindhi"
+      },
+      "si": {
+        "src": "/aitutor/subtitles/math-edu/si.vtt",
+        "label": "සිංහල",
+        "name": "Sinhala"
+      },
+      "sk": {
+        "src": "/aitutor/subtitles/math-edu/sk.vtt",
+        "label": "Slovenčina",
+        "name": "Slovak"
+      },
+      "sl": {
+        "src": "/aitutor/subtitles/math-edu/sl.vtt",
+        "label": "Slovenščina",
+        "name": "Slovenian"
+      },
+      "so": {
+        "src": "/aitutor/subtitles/math-edu/so.vtt",
+        "label": "Soomaali",
+        "name": "Somali"
+      },
+      "su": {
+        "src": "/aitutor/subtitles/math-edu/su.vtt",
+        "label": "Basa Sunda",
+        "name": "Sundanese"
+      },
+      "sw": {
+        "src": "/aitutor/subtitles/math-edu/sw.vtt",
+        "label": "Kiswahili",
+        "name": "Swahili"
+      },
+      "sv": {
+        "src": "/aitutor/subtitles/math-edu/sv.vtt",
+        "label": "Svenska",
+        "name": "Swedish"
+      },
+      "tg": {
+        "src": "/aitutor/subtitles/math-edu/tg.vtt",
+        "label": "Тоҷикӣ",
+        "name": "Tajik"
+      },
+      "ta": {
+        "src": "/aitutor/subtitles/math-edu/ta.vtt",
+        "label": "தமிழ்",
+        "name": "Tamil"
+      },
+      "th": {
+        "src": "/aitutor/subtitles/math-edu/th.vtt",
+        "label": "ไทย",
+        "name": "Thai"
+      },
+      "to": {
+        "src": "/aitutor/subtitles/math-edu/to.vtt",
+        "label": "Faka Tonga",
+        "name": "Tongan"
+      },
+      "tr": {
+        "src": "/aitutor/subtitles/math-edu/tr.vtt",
+        "label": "Türkçe",
+        "name": "Turkish"
+      },
+      "tk": {
+        "src": "/aitutor/subtitles/math-edu/tk.vtt",
+        "label": "Türkmençe",
+        "name": "Turkmen"
+      },
+      "uk": {
+        "src": "/aitutor/subtitles/math-edu/uk.vtt",
+        "label": "Українська",
+        "name": "Ukrainian"
+      },
+      "ur": {
+        "src": "/aitutor/subtitles/math-edu/ur.vtt",
+        "label": "اردو",
+        "name": "Urdu"
+      },
+      "uz": {
+        "src": "/aitutor/subtitles/math-edu/uz.vtt",
+        "label": "Oʻzbekcha",
+        "name": "Uzbek"
+      },
+      "vi": {
+        "src": "/aitutor/subtitles/math-edu/vi.vtt",
+        "label": "Tiếng Việt",
+        "name": "Vietnamese"
+      },
+      "cy": {
+        "src": "/aitutor/subtitles/math-edu/cy.vtt",
+        "label": "Cymraeg",
+        "name": "Welsh"
+      },
+      "xh": {
+        "src": "/aitutor/subtitles/math-edu/xh.vtt",
+        "label": "isiXhosa",
+        "name": "Xhosa"
+      },
+      "zu": {
+        "src": "/aitutor/subtitles/math-edu/zu.vtt",
+        "label": "isiZulu",
+        "name": "Zulu"
       }
     },
-    "fingerprint": "2c5b2583ee934232",
-    "updatedAt": "2026-08-03T08:30:17.076Z"
+    "fingerprint": "2a5789a3f2b2321c",
+    "updatedAt": "2026-08-04T15:09:54.910Z"
   },
   "science-edu": {
     "id": "science-edu",
@@ -118,10 +1693,535 @@
         "src": "/aitutor/subtitles/science-edu/es.vtt",
         "label": "Español",
         "name": "Spanish"
+      },
+      "af": {
+        "src": "/aitutor/subtitles/science-edu/af.vtt",
+        "label": "Afrikaans",
+        "name": "Afrikaans"
+      },
+      "sq": {
+        "src": "/aitutor/subtitles/science-edu/sq.vtt",
+        "label": "Shqip",
+        "name": "Albanian"
+      },
+      "am": {
+        "src": "/aitutor/subtitles/science-edu/am.vtt",
+        "label": "አማርኛ",
+        "name": "Amharic"
+      },
+      "ar": {
+        "src": "/aitutor/subtitles/science-edu/ar.vtt",
+        "label": "العربية",
+        "name": "Arabic"
+      },
+      "hy": {
+        "src": "/aitutor/subtitles/science-edu/hy.vtt",
+        "label": "Հայերեն",
+        "name": "Armenian"
+      },
+      "as": {
+        "src": "/aitutor/subtitles/science-edu/as.vtt",
+        "label": "অসমীয়া",
+        "name": "Assamese"
+      },
+      "az": {
+        "src": "/aitutor/subtitles/science-edu/az.vtt",
+        "label": "Azərbaycan",
+        "name": "Azerbaijani"
+      },
+      "eu": {
+        "src": "/aitutor/subtitles/science-edu/eu.vtt",
+        "label": "Euskara",
+        "name": "Basque"
+      },
+      "be": {
+        "src": "/aitutor/subtitles/science-edu/be.vtt",
+        "label": "Беларуская",
+        "name": "Belarusian"
+      },
+      "bn": {
+        "src": "/aitutor/subtitles/science-edu/bn.vtt",
+        "label": "বাংলা",
+        "name": "Bengali"
+      },
+      "bho": {
+        "src": "/aitutor/subtitles/science-edu/bho.vtt",
+        "label": "भोजपुरी",
+        "name": "Bhojpuri"
+      },
+      "bi": {
+        "src": "/aitutor/subtitles/science-edu/bi.vtt",
+        "label": "Bislama",
+        "name": "Bislama"
+      },
+      "bg": {
+        "src": "/aitutor/subtitles/science-edu/bg.vtt",
+        "label": "Български",
+        "name": "Bulgarian"
+      },
+      "my": {
+        "src": "/aitutor/subtitles/science-edu/my.vtt",
+        "label": "မြန်မာဘာသာ",
+        "name": "Burmese"
+      },
+      "yue": {
+        "src": "/aitutor/subtitles/science-edu/yue.vtt",
+        "label": "廣東話",
+        "name": "Cantonese"
+      },
+      "ca": {
+        "src": "/aitutor/subtitles/science-edu/ca.vtt",
+        "label": "Català",
+        "name": "Catalan"
+      },
+      "ceb": {
+        "src": "/aitutor/subtitles/science-edu/ceb.vtt",
+        "label": "Cebuano",
+        "name": "Cebuano"
+      },
+      "ch": {
+        "src": "/aitutor/subtitles/science-edu/ch.vtt",
+        "label": "Chamorro",
+        "name": "Chamorro"
+      },
+      "zh": {
+        "src": "/aitutor/subtitles/science-edu/zh.vtt",
+        "label": "中文",
+        "name": "Chinese (Mandarin)"
+      },
+      "hr": {
+        "src": "/aitutor/subtitles/science-edu/hr.vtt",
+        "label": "Hrvatski",
+        "name": "Croatian"
+      },
+      "cs": {
+        "src": "/aitutor/subtitles/science-edu/cs.vtt",
+        "label": "Čeština",
+        "name": "Czech"
+      },
+      "da": {
+        "src": "/aitutor/subtitles/science-edu/da.vtt",
+        "label": "Dansk",
+        "name": "Danish"
+      },
+      "doi": {
+        "src": "/aitutor/subtitles/science-edu/doi.vtt",
+        "label": "डोगरी",
+        "name": "Dogri"
+      },
+      "nl": {
+        "src": "/aitutor/subtitles/science-edu/nl.vtt",
+        "label": "Nederlands",
+        "name": "Dutch"
+      },
+      "et": {
+        "src": "/aitutor/subtitles/science-edu/et.vtt",
+        "label": "Eesti",
+        "name": "Estonian"
+      },
+      "fj": {
+        "src": "/aitutor/subtitles/science-edu/fj.vtt",
+        "label": "Na Vosa Vakaviti",
+        "name": "Fijian"
+      },
+      "tl": {
+        "src": "/aitutor/subtitles/science-edu/tl.vtt",
+        "label": "Tagalog",
+        "name": "Filipino (Tagalog)"
+      },
+      "fi": {
+        "src": "/aitutor/subtitles/science-edu/fi.vtt",
+        "label": "Suomi",
+        "name": "Finnish"
+      },
+      "fr": {
+        "src": "/aitutor/subtitles/science-edu/fr.vtt",
+        "label": "Français",
+        "name": "French"
+      },
+      "gl": {
+        "src": "/aitutor/subtitles/science-edu/gl.vtt",
+        "label": "Galego",
+        "name": "Galician"
+      },
+      "ka": {
+        "src": "/aitutor/subtitles/science-edu/ka.vtt",
+        "label": "ქართული",
+        "name": "Georgian"
+      },
+      "de": {
+        "src": "/aitutor/subtitles/science-edu/de.vtt",
+        "label": "Deutsch",
+        "name": "German"
+      },
+      "el": {
+        "src": "/aitutor/subtitles/science-edu/el.vtt",
+        "label": "Ελληνικά",
+        "name": "Greek"
+      },
+      "kl": {
+        "src": "/aitutor/subtitles/science-edu/kl.vtt",
+        "label": "Kalaallisut",
+        "name": "Greenlandic"
+      },
+      "gu": {
+        "src": "/aitutor/subtitles/science-edu/gu.vtt",
+        "label": "ગુજરાતી",
+        "name": "Gujarati"
+      },
+      "ha": {
+        "src": "/aitutor/subtitles/science-edu/ha.vtt",
+        "label": "Hausa",
+        "name": "Hausa"
+      },
+      "haw": {
+        "src": "/aitutor/subtitles/science-edu/haw.vtt",
+        "label": "Ōlelo Hawaiʻi",
+        "name": "Hawaiian"
+      },
+      "he": {
+        "src": "/aitutor/subtitles/science-edu/he.vtt",
+        "label": "עברית",
+        "name": "Hebrew"
+      },
+      "hu": {
+        "src": "/aitutor/subtitles/science-edu/hu.vtt",
+        "label": "Magyar",
+        "name": "Hungarian"
+      },
+      "is": {
+        "src": "/aitutor/subtitles/science-edu/is.vtt",
+        "label": "Íslenska",
+        "name": "Icelandic"
+      },
+      "ig": {
+        "src": "/aitutor/subtitles/science-edu/ig.vtt",
+        "label": "Igbo",
+        "name": "Igbo"
+      },
+      "id": {
+        "src": "/aitutor/subtitles/science-edu/id.vtt",
+        "label": "Bahasa Indonesia",
+        "name": "Indonesian"
+      },
+      "ga": {
+        "src": "/aitutor/subtitles/science-edu/ga.vtt",
+        "label": "Gaeilge",
+        "name": "Irish"
+      },
+      "it": {
+        "src": "/aitutor/subtitles/science-edu/it.vtt",
+        "label": "Italiano",
+        "name": "Italian"
+      },
+      "ja": {
+        "src": "/aitutor/subtitles/science-edu/ja.vtt",
+        "label": "日本語",
+        "name": "Japanese"
+      },
+      "jv": {
+        "src": "/aitutor/subtitles/science-edu/jv.vtt",
+        "label": "Basa Jawa",
+        "name": "Javanese"
+      },
+      "kn": {
+        "src": "/aitutor/subtitles/science-edu/kn.vtt",
+        "label": "ಕನ್ನಡ",
+        "name": "Kannada"
+      },
+      "ks": {
+        "src": "/aitutor/subtitles/science-edu/ks.vtt",
+        "label": "کٲشُر",
+        "name": "Kashmiri"
+      },
+      "kk": {
+        "src": "/aitutor/subtitles/science-edu/kk.vtt",
+        "label": "Қазақ тілі",
+        "name": "Kazakh"
+      },
+      "km": {
+        "src": "/aitutor/subtitles/science-edu/km.vtt",
+        "label": "ភាសាខ្មែរ",
+        "name": "Khmer"
+      },
+      "rw": {
+        "src": "/aitutor/subtitles/science-edu/rw.vtt",
+        "label": "Kinyarwanda",
+        "name": "Kinyarwanda"
+      },
+      "kok": {
+        "src": "/aitutor/subtitles/science-edu/kok.vtt",
+        "label": "कोंकणी",
+        "name": "Konkani"
+      },
+      "ko": {
+        "src": "/aitutor/subtitles/science-edu/ko.vtt",
+        "label": "한국어",
+        "name": "Korean"
+      },
+      "ku": {
+        "src": "/aitutor/subtitles/science-edu/ku.vtt",
+        "label": "Kurdî",
+        "name": "Kurdish"
+      },
+      "ky": {
+        "src": "/aitutor/subtitles/science-edu/ky.vtt",
+        "label": "Кыргызча",
+        "name": "Kyrgyz"
+      },
+      "lo": {
+        "src": "/aitutor/subtitles/science-edu/lo.vtt",
+        "label": "ພາສາລາວ",
+        "name": "Lao"
+      },
+      "lv": {
+        "src": "/aitutor/subtitles/science-edu/lv.vtt",
+        "label": "Latviešu",
+        "name": "Latvian"
+      },
+      "lt": {
+        "src": "/aitutor/subtitles/science-edu/lt.vtt",
+        "label": "Lietuvių",
+        "name": "Lithuanian"
+      },
+      "lb": {
+        "src": "/aitutor/subtitles/science-edu/lb.vtt",
+        "label": "Lëtzebuergesch",
+        "name": "Luxembourgish"
+      },
+      "mk": {
+        "src": "/aitutor/subtitles/science-edu/mk.vtt",
+        "label": "Македонски",
+        "name": "Macedonian"
+      },
+      "mai": {
+        "src": "/aitutor/subtitles/science-edu/mai.vtt",
+        "label": "मैथिली",
+        "name": "Maithili"
+      },
+      "mg": {
+        "src": "/aitutor/subtitles/science-edu/mg.vtt",
+        "label": "Malagasy",
+        "name": "Malagasy"
+      },
+      "ms": {
+        "src": "/aitutor/subtitles/science-edu/ms.vtt",
+        "label": "Bahasa Melayu",
+        "name": "Malay"
+      },
+      "ml": {
+        "src": "/aitutor/subtitles/science-edu/ml.vtt",
+        "label": "മലയാളം",
+        "name": "Malayalam"
+      },
+      "mt": {
+        "src": "/aitutor/subtitles/science-edu/mt.vtt",
+        "label": "Malti",
+        "name": "Maltese"
+      },
+      "mni": {
+        "src": "/aitutor/subtitles/science-edu/mni.vtt",
+        "label": "মণিপুরী",
+        "name": "Manipuri"
+      },
+      "mi": {
+        "src": "/aitutor/subtitles/science-edu/mi.vtt",
+        "label": "Māori",
+        "name": "Māori"
+      },
+      "mr": {
+        "src": "/aitutor/subtitles/science-edu/mr.vtt",
+        "label": "मराठी",
+        "name": "Marathi"
+      },
+      "mn": {
+        "src": "/aitutor/subtitles/science-edu/mn.vtt",
+        "label": "Монгол",
+        "name": "Mongolian"
+      },
+      "ne": {
+        "src": "/aitutor/subtitles/science-edu/ne.vtt",
+        "label": "नेपाली",
+        "name": "Nepali"
+      },
+      "no": {
+        "src": "/aitutor/subtitles/science-edu/no.vtt",
+        "label": "Norsk",
+        "name": "Norwegian"
+      },
+      "or": {
+        "src": "/aitutor/subtitles/science-edu/or.vtt",
+        "label": "ଓଡ଼ିଆ",
+        "name": "Odia"
+      },
+      "om": {
+        "src": "/aitutor/subtitles/science-edu/om.vtt",
+        "label": "Oromoo",
+        "name": "Oromo"
+      },
+      "ps": {
+        "src": "/aitutor/subtitles/science-edu/ps.vtt",
+        "label": "پښتو",
+        "name": "Pashto"
+      },
+      "fa": {
+        "src": "/aitutor/subtitles/science-edu/fa.vtt",
+        "label": "فارسی",
+        "name": "Persian"
+      },
+      "pl": {
+        "src": "/aitutor/subtitles/science-edu/pl.vtt",
+        "label": "Polski",
+        "name": "Polish"
+      },
+      "pt": {
+        "src": "/aitutor/subtitles/science-edu/pt.vtt",
+        "label": "Português",
+        "name": "Portuguese"
+      },
+      "pa": {
+        "src": "/aitutor/subtitles/science-edu/pa.vtt",
+        "label": "ਪੰਜਾਬੀ",
+        "name": "Punjabi"
+      },
+      "ro": {
+        "src": "/aitutor/subtitles/science-edu/ro.vtt",
+        "label": "Română",
+        "name": "Romanian"
+      },
+      "ru": {
+        "src": "/aitutor/subtitles/science-edu/ru.vtt",
+        "label": "Русский",
+        "name": "Russian"
+      },
+      "sm": {
+        "src": "/aitutor/subtitles/science-edu/sm.vtt",
+        "label": "Gagana Sāmoa",
+        "name": "Samoan"
+      },
+      "sa": {
+        "src": "/aitutor/subtitles/science-edu/sa.vtt",
+        "label": "संस्कृतम्",
+        "name": "Sanskrit"
+      },
+      "sat": {
+        "src": "/aitutor/subtitles/science-edu/sat.vtt",
+        "label": "ᱥᱟᱱᱛᱟᱲᱤ",
+        "name": "Santali"
+      },
+      "sr": {
+        "src": "/aitutor/subtitles/science-edu/sr.vtt",
+        "label": "Српски",
+        "name": "Serbian"
+      },
+      "sd": {
+        "src": "/aitutor/subtitles/science-edu/sd.vtt",
+        "label": "سنڌي",
+        "name": "Sindhi"
+      },
+      "si": {
+        "src": "/aitutor/subtitles/science-edu/si.vtt",
+        "label": "සිංහල",
+        "name": "Sinhala"
+      },
+      "sk": {
+        "src": "/aitutor/subtitles/science-edu/sk.vtt",
+        "label": "Slovenčina",
+        "name": "Slovak"
+      },
+      "sl": {
+        "src": "/aitutor/subtitles/science-edu/sl.vtt",
+        "label": "Slovenščina",
+        "name": "Slovenian"
+      },
+      "so": {
+        "src": "/aitutor/subtitles/science-edu/so.vtt",
+        "label": "Soomaali",
+        "name": "Somali"
+      },
+      "su": {
+        "src": "/aitutor/subtitles/science-edu/su.vtt",
+        "label": "Basa Sunda",
+        "name": "Sundanese"
+      },
+      "sw": {
+        "src": "/aitutor/subtitles/science-edu/sw.vtt",
+        "label": "Kiswahili",
+        "name": "Swahili"
+      },
+      "sv": {
+        "src": "/aitutor/subtitles/science-edu/sv.vtt",
+        "label": "Svenska",
+        "name": "Swedish"
+      },
+      "tg": {
+        "src": "/aitutor/subtitles/science-edu/tg.vtt",
+        "label": "Тоҷикӣ",
+        "name": "Tajik"
+      },
+      "ta": {
+        "src": "/aitutor/subtitles/science-edu/ta.vtt",
+        "label": "தமிழ்",
+        "name": "Tamil"
+      },
+      "th": {
+        "src": "/aitutor/subtitles/science-edu/th.vtt",
+        "label": "ไทย",
+        "name": "Thai"
+      },
+      "to": {
+        "src": "/aitutor/subtitles/science-edu/to.vtt",
+        "label": "Faka Tonga",
+        "name": "Tongan"
+      },
+      "tr": {
+        "src": "/aitutor/subtitles/science-edu/tr.vtt",
+        "label": "Türkçe",
+        "name": "Turkish"
+      },
+      "tk": {
+        "src": "/aitutor/subtitles/science-edu/tk.vtt",
+        "label": "Türkmençe",
+        "name": "Turkmen"
+      },
+      "uk": {
+        "src": "/aitutor/subtitles/science-edu/uk.vtt",
+        "label": "Українська",
+        "name": "Ukrainian"
+      },
+      "ur": {
+        "src": "/aitutor/subtitles/science-edu/ur.vtt",
+        "label": "اردو",
+        "name": "Urdu"
+      },
+      "uz": {
+        "src": "/aitutor/subtitles/science-edu/uz.vtt",
+        "label": "Oʻzbekcha",
+        "name": "Uzbek"
+      },
+      "vi": {
+        "src": "/aitutor/subtitles/science-edu/vi.vtt",
+        "label": "Tiếng Việt",
+        "name": "Vietnamese"
+      },
+      "cy": {
+        "src": "/aitutor/subtitles/science-edu/cy.vtt",
+        "label": "Cymraeg",
+        "name": "Welsh"
+      },
+      "xh": {
+        "src": "/aitutor/subtitles/science-edu/xh.vtt",
+        "label": "isiXhosa",
+        "name": "Xhosa"
+      },
+      "zu": {
+        "src": "/aitutor/subtitles/science-edu/zu.vtt",
+        "label": "isiZulu",
+        "name": "Zulu"
       }
     },
-    "fingerprint": "e23fc12aa8134a8a",
-    "updatedAt": "2026-08-03T08:30:22.052Z"
+    "fingerprint": "2c889b314d41adeb",
+    "updatedAt": "2026-08-04T15:09:55.100Z"
   },
   "non-english-edu": {
     "id": "non-english-edu",
@@ -149,9 +2249,534 @@
         "src": "/aitutor/subtitles/non-english-edu/es.vtt",
         "label": "Español",
         "name": "Spanish"
+      },
+      "af": {
+        "src": "/aitutor/subtitles/non-english-edu/af.vtt",
+        "label": "Afrikaans",
+        "name": "Afrikaans"
+      },
+      "sq": {
+        "src": "/aitutor/subtitles/non-english-edu/sq.vtt",
+        "label": "Shqip",
+        "name": "Albanian"
+      },
+      "am": {
+        "src": "/aitutor/subtitles/non-english-edu/am.vtt",
+        "label": "አማርኛ",
+        "name": "Amharic"
+      },
+      "ar": {
+        "src": "/aitutor/subtitles/non-english-edu/ar.vtt",
+        "label": "العربية",
+        "name": "Arabic"
+      },
+      "hy": {
+        "src": "/aitutor/subtitles/non-english-edu/hy.vtt",
+        "label": "Հայերեն",
+        "name": "Armenian"
+      },
+      "as": {
+        "src": "/aitutor/subtitles/non-english-edu/as.vtt",
+        "label": "অসমীয়া",
+        "name": "Assamese"
+      },
+      "az": {
+        "src": "/aitutor/subtitles/non-english-edu/az.vtt",
+        "label": "Azərbaycan",
+        "name": "Azerbaijani"
+      },
+      "eu": {
+        "src": "/aitutor/subtitles/non-english-edu/eu.vtt",
+        "label": "Euskara",
+        "name": "Basque"
+      },
+      "be": {
+        "src": "/aitutor/subtitles/non-english-edu/be.vtt",
+        "label": "Беларуская",
+        "name": "Belarusian"
+      },
+      "bn": {
+        "src": "/aitutor/subtitles/non-english-edu/bn.vtt",
+        "label": "বাংলা",
+        "name": "Bengali"
+      },
+      "bho": {
+        "src": "/aitutor/subtitles/non-english-edu/bho.vtt",
+        "label": "भोजपुरी",
+        "name": "Bhojpuri"
+      },
+      "bi": {
+        "src": "/aitutor/subtitles/non-english-edu/bi.vtt",
+        "label": "Bislama",
+        "name": "Bislama"
+      },
+      "bg": {
+        "src": "/aitutor/subtitles/non-english-edu/bg.vtt",
+        "label": "Български",
+        "name": "Bulgarian"
+      },
+      "my": {
+        "src": "/aitutor/subtitles/non-english-edu/my.vtt",
+        "label": "မြန်မာဘာသာ",
+        "name": "Burmese"
+      },
+      "yue": {
+        "src": "/aitutor/subtitles/non-english-edu/yue.vtt",
+        "label": "廣東話",
+        "name": "Cantonese"
+      },
+      "ca": {
+        "src": "/aitutor/subtitles/non-english-edu/ca.vtt",
+        "label": "Català",
+        "name": "Catalan"
+      },
+      "ceb": {
+        "src": "/aitutor/subtitles/non-english-edu/ceb.vtt",
+        "label": "Cebuano",
+        "name": "Cebuano"
+      },
+      "ch": {
+        "src": "/aitutor/subtitles/non-english-edu/ch.vtt",
+        "label": "Chamorro",
+        "name": "Chamorro"
+      },
+      "zh": {
+        "src": "/aitutor/subtitles/non-english-edu/zh.vtt",
+        "label": "中文",
+        "name": "Chinese (Mandarin)"
+      },
+      "hr": {
+        "src": "/aitutor/subtitles/non-english-edu/hr.vtt",
+        "label": "Hrvatski",
+        "name": "Croatian"
+      },
+      "cs": {
+        "src": "/aitutor/subtitles/non-english-edu/cs.vtt",
+        "label": "Čeština",
+        "name": "Czech"
+      },
+      "da": {
+        "src": "/aitutor/subtitles/non-english-edu/da.vtt",
+        "label": "Dansk",
+        "name": "Danish"
+      },
+      "doi": {
+        "src": "/aitutor/subtitles/non-english-edu/doi.vtt",
+        "label": "डोगरी",
+        "name": "Dogri"
+      },
+      "nl": {
+        "src": "/aitutor/subtitles/non-english-edu/nl.vtt",
+        "label": "Nederlands",
+        "name": "Dutch"
+      },
+      "et": {
+        "src": "/aitutor/subtitles/non-english-edu/et.vtt",
+        "label": "Eesti",
+        "name": "Estonian"
+      },
+      "fj": {
+        "src": "/aitutor/subtitles/non-english-edu/fj.vtt",
+        "label": "Na Vosa Vakaviti",
+        "name": "Fijian"
+      },
+      "tl": {
+        "src": "/aitutor/subtitles/non-english-edu/tl.vtt",
+        "label": "Tagalog",
+        "name": "Filipino (Tagalog)"
+      },
+      "fi": {
+        "src": "/aitutor/subtitles/non-english-edu/fi.vtt",
+        "label": "Suomi",
+        "name": "Finnish"
+      },
+      "fr": {
+        "src": "/aitutor/subtitles/non-english-edu/fr.vtt",
+        "label": "Français",
+        "name": "French"
+      },
+      "gl": {
+        "src": "/aitutor/subtitles/non-english-edu/gl.vtt",
+        "label": "Galego",
+        "name": "Galician"
+      },
+      "ka": {
+        "src": "/aitutor/subtitles/non-english-edu/ka.vtt",
+        "label": "ქართული",
+        "name": "Georgian"
+      },
+      "de": {
+        "src": "/aitutor/subtitles/non-english-edu/de.vtt",
+        "label": "Deutsch",
+        "name": "German"
+      },
+      "el": {
+        "src": "/aitutor/subtitles/non-english-edu/el.vtt",
+        "label": "Ελληνικά",
+        "name": "Greek"
+      },
+      "kl": {
+        "src": "/aitutor/subtitles/non-english-edu/kl.vtt",
+        "label": "Kalaallisut",
+        "name": "Greenlandic"
+      },
+      "gu": {
+        "src": "/aitutor/subtitles/non-english-edu/gu.vtt",
+        "label": "ગુજરાતી",
+        "name": "Gujarati"
+      },
+      "ha": {
+        "src": "/aitutor/subtitles/non-english-edu/ha.vtt",
+        "label": "Hausa",
+        "name": "Hausa"
+      },
+      "haw": {
+        "src": "/aitutor/subtitles/non-english-edu/haw.vtt",
+        "label": "Ōlelo Hawaiʻi",
+        "name": "Hawaiian"
+      },
+      "he": {
+        "src": "/aitutor/subtitles/non-english-edu/he.vtt",
+        "label": "עברית",
+        "name": "Hebrew"
+      },
+      "hu": {
+        "src": "/aitutor/subtitles/non-english-edu/hu.vtt",
+        "label": "Magyar",
+        "name": "Hungarian"
+      },
+      "is": {
+        "src": "/aitutor/subtitles/non-english-edu/is.vtt",
+        "label": "Íslenska",
+        "name": "Icelandic"
+      },
+      "ig": {
+        "src": "/aitutor/subtitles/non-english-edu/ig.vtt",
+        "label": "Igbo",
+        "name": "Igbo"
+      },
+      "id": {
+        "src": "/aitutor/subtitles/non-english-edu/id.vtt",
+        "label": "Bahasa Indonesia",
+        "name": "Indonesian"
+      },
+      "ga": {
+        "src": "/aitutor/subtitles/non-english-edu/ga.vtt",
+        "label": "Gaeilge",
+        "name": "Irish"
+      },
+      "it": {
+        "src": "/aitutor/subtitles/non-english-edu/it.vtt",
+        "label": "Italiano",
+        "name": "Italian"
+      },
+      "ja": {
+        "src": "/aitutor/subtitles/non-english-edu/ja.vtt",
+        "label": "日本語",
+        "name": "Japanese"
+      },
+      "jv": {
+        "src": "/aitutor/subtitles/non-english-edu/jv.vtt",
+        "label": "Basa Jawa",
+        "name": "Javanese"
+      },
+      "kn": {
+        "src": "/aitutor/subtitles/non-english-edu/kn.vtt",
+        "label": "ಕನ್ನಡ",
+        "name": "Kannada"
+      },
+      "ks": {
+        "src": "/aitutor/subtitles/non-english-edu/ks.vtt",
+        "label": "کٲشُر",
+        "name": "Kashmiri"
+      },
+      "kk": {
+        "src": "/aitutor/subtitles/non-english-edu/kk.vtt",
+        "label": "Қазақ тілі",
+        "name": "Kazakh"
+      },
+      "km": {
+        "src": "/aitutor/subtitles/non-english-edu/km.vtt",
+        "label": "ភាសាខ្មែរ",
+        "name": "Khmer"
+      },
+      "rw": {
+        "src": "/aitutor/subtitles/non-english-edu/rw.vtt",
+        "label": "Kinyarwanda",
+        "name": "Kinyarwanda"
+      },
+      "kok": {
+        "src": "/aitutor/subtitles/non-english-edu/kok.vtt",
+        "label": "कोंकणी",
+        "name": "Konkani"
+      },
+      "ko": {
+        "src": "/aitutor/subtitles/non-english-edu/ko.vtt",
+        "label": "한국어",
+        "name": "Korean"
+      },
+      "ku": {
+        "src": "/aitutor/subtitles/non-english-edu/ku.vtt",
+        "label": "Kurdî",
+        "name": "Kurdish"
+      },
+      "ky": {
+        "src": "/aitutor/subtitles/non-english-edu/ky.vtt",
+        "label": "Кыргызча",
+        "name": "Kyrgyz"
+      },
+      "lo": {
+        "src": "/aitutor/subtitles/non-english-edu/lo.vtt",
+        "label": "ພາສາລາວ",
+        "name": "Lao"
+      },
+      "lv": {
+        "src": "/aitutor/subtitles/non-english-edu/lv.vtt",
+        "label": "Latviešu",
+        "name": "Latvian"
+      },
+      "lt": {
+        "src": "/aitutor/subtitles/non-english-edu/lt.vtt",
+        "label": "Lietuvių",
+        "name": "Lithuanian"
+      },
+      "lb": {
+        "src": "/aitutor/subtitles/non-english-edu/lb.vtt",
+        "label": "Lëtzebuergesch",
+        "name": "Luxembourgish"
+      },
+      "mk": {
+        "src": "/aitutor/subtitles/non-english-edu/mk.vtt",
+        "label": "Македонски",
+        "name": "Macedonian"
+      },
+      "mai": {
+        "src": "/aitutor/subtitles/non-english-edu/mai.vtt",
+        "label": "मैथिली",
+        "name": "Maithili"
+      },
+      "mg": {
+        "src": "/aitutor/subtitles/non-english-edu/mg.vtt",
+        "label": "Malagasy",
+        "name": "Malagasy"
+      },
+      "ms": {
+        "src": "/aitutor/subtitles/non-english-edu/ms.vtt",
+        "label": "Bahasa Melayu",
+        "name": "Malay"
+      },
+      "ml": {
+        "src": "/aitutor/subtitles/non-english-edu/ml.vtt",
+        "label": "മലയാളം",
+        "name": "Malayalam"
+      },
+      "mt": {
+        "src": "/aitutor/subtitles/non-english-edu/mt.vtt",
+        "label": "Malti",
+        "name": "Maltese"
+      },
+      "mni": {
+        "src": "/aitutor/subtitles/non-english-edu/mni.vtt",
+        "label": "মণিপুরী",
+        "name": "Manipuri"
+      },
+      "mi": {
+        "src": "/aitutor/subtitles/non-english-edu/mi.vtt",
+        "label": "Māori",
+        "name": "Māori"
+      },
+      "mr": {
+        "src": "/aitutor/subtitles/non-english-edu/mr.vtt",
+        "label": "मराठी",
+        "name": "Marathi"
+      },
+      "mn": {
+        "src": "/aitutor/subtitles/non-english-edu/mn.vtt",
+        "label": "Монгол",
+        "name": "Mongolian"
+      },
+      "ne": {
+        "src": "/aitutor/subtitles/non-english-edu/ne.vtt",
+        "label": "नेपाली",
+        "name": "Nepali"
+      },
+      "no": {
+        "src": "/aitutor/subtitles/non-english-edu/no.vtt",
+        "label": "Norsk",
+        "name": "Norwegian"
+      },
+      "or": {
+        "src": "/aitutor/subtitles/non-english-edu/or.vtt",
+        "label": "ଓଡ଼ିଆ",
+        "name": "Odia"
+      },
+      "om": {
+        "src": "/aitutor/subtitles/non-english-edu/om.vtt",
+        "label": "Oromoo",
+        "name": "Oromo"
+      },
+      "ps": {
+        "src": "/aitutor/subtitles/non-english-edu/ps.vtt",
+        "label": "پښتو",
+        "name": "Pashto"
+      },
+      "fa": {
+        "src": "/aitutor/subtitles/non-english-edu/fa.vtt",
+        "label": "فارسی",
+        "name": "Persian"
+      },
+      "pl": {
+        "src": "/aitutor/subtitles/non-english-edu/pl.vtt",
+        "label": "Polski",
+        "name": "Polish"
+      },
+      "pt": {
+        "src": "/aitutor/subtitles/non-english-edu/pt.vtt",
+        "label": "Português",
+        "name": "Portuguese"
+      },
+      "pa": {
+        "src": "/aitutor/subtitles/non-english-edu/pa.vtt",
+        "label": "ਪੰਜਾਬੀ",
+        "name": "Punjabi"
+      },
+      "ro": {
+        "src": "/aitutor/subtitles/non-english-edu/ro.vtt",
+        "label": "Română",
+        "name": "Romanian"
+      },
+      "ru": {
+        "src": "/aitutor/subtitles/non-english-edu/ru.vtt",
+        "label": "Русский",
+        "name": "Russian"
+      },
+      "sm": {
+        "src": "/aitutor/subtitles/non-english-edu/sm.vtt",
+        "label": "Gagana Sāmoa",
+        "name": "Samoan"
+      },
+      "sa": {
+        "src": "/aitutor/subtitles/non-english-edu/sa.vtt",
+        "label": "संस्कृतम्",
+        "name": "Sanskrit"
+      },
+      "sat": {
+        "src": "/aitutor/subtitles/non-english-edu/sat.vtt",
+        "label": "ᱥᱟᱱᱛᱟᱲᱤ",
+        "name": "Santali"
+      },
+      "sr": {
+        "src": "/aitutor/subtitles/non-english-edu/sr.vtt",
+        "label": "Српски",
+        "name": "Serbian"
+      },
+      "sd": {
+        "src": "/aitutor/subtitles/non-english-edu/sd.vtt",
+        "label": "سنڌي",
+        "name": "Sindhi"
+      },
+      "si": {
+        "src": "/aitutor/subtitles/non-english-edu/si.vtt",
+        "label": "සිංහල",
+        "name": "Sinhala"
+      },
+      "sk": {
+        "src": "/aitutor/subtitles/non-english-edu/sk.vtt",
+        "label": "Slovenčina",
+        "name": "Slovak"
+      },
+      "sl": {
+        "src": "/aitutor/subtitles/non-english-edu/sl.vtt",
+        "label": "Slovenščina",
+        "name": "Slovenian"
+      },
+      "so": {
+        "src": "/aitutor/subtitles/non-english-edu/so.vtt",
+        "label": "Soomaali",
+        "name": "Somali"
+      },
+      "su": {
+        "src": "/aitutor/subtitles/non-english-edu/su.vtt",
+        "label": "Basa Sunda",
+        "name": "Sundanese"
+      },
+      "sw": {
+        "src": "/aitutor/subtitles/non-english-edu/sw.vtt",
+        "label": "Kiswahili",
+        "name": "Swahili"
+      },
+      "sv": {
+        "src": "/aitutor/subtitles/non-english-edu/sv.vtt",
+        "label": "Svenska",
+        "name": "Swedish"
+      },
+      "tg": {
+        "src": "/aitutor/subtitles/non-english-edu/tg.vtt",
+        "label": "Тоҷикӣ",
+        "name": "Tajik"
+      },
+      "ta": {
+        "src": "/aitutor/subtitles/non-english-edu/ta.vtt",
+        "label": "தமிழ்",
+        "name": "Tamil"
+      },
+      "th": {
+        "src": "/aitutor/subtitles/non-english-edu/th.vtt",
+        "label": "ไทย",
+        "name": "Thai"
+      },
+      "to": {
+        "src": "/aitutor/subtitles/non-english-edu/to.vtt",
+        "label": "Faka Tonga",
+        "name": "Tongan"
+      },
+      "tr": {
+        "src": "/aitutor/subtitles/non-english-edu/tr.vtt",
+        "label": "Türkçe",
+        "name": "Turkish"
+      },
+      "tk": {
+        "src": "/aitutor/subtitles/non-english-edu/tk.vtt",
+        "label": "Türkmençe",
+        "name": "Turkmen"
+      },
+      "uk": {
+        "src": "/aitutor/subtitles/non-english-edu/uk.vtt",
+        "label": "Українська",
+        "name": "Ukrainian"
+      },
+      "ur": {
+        "src": "/aitutor/subtitles/non-english-edu/ur.vtt",
+        "label": "اردو",
+        "name": "Urdu"
+      },
+      "uz": {
+        "src": "/aitutor/subtitles/non-english-edu/uz.vtt",
+        "label": "Oʻzbekcha",
+        "name": "Uzbek"
+      },
+      "vi": {
+        "src": "/aitutor/subtitles/non-english-edu/vi.vtt",
+        "label": "Tiếng Việt",
+        "name": "Vietnamese"
+      },
+      "cy": {
+        "src": "/aitutor/subtitles/non-english-edu/cy.vtt",
+        "label": "Cymraeg",
+        "name": "Welsh"
+      },
+      "xh": {
+        "src": "/aitutor/subtitles/non-english-edu/xh.vtt",
+        "label": "isiXhosa",
+        "name": "Xhosa"
+      },
+      "zu": {
+        "src": "/aitutor/subtitles/non-english-edu/zu.vtt",
+        "label": "isiZulu",
+        "name": "Zulu"
       }
     },
-    "fingerprint": "8cc80b3cb482f2d8",
-    "updatedAt": "2026-08-03T08:31:05.429Z"
+    "fingerprint": "41537b1461086e59",
+    "updatedAt": "2026-08-04T15:09:55.394Z"
   }
 }

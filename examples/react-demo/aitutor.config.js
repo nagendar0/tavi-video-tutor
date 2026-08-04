@@ -1,6 +1,6 @@
 export default {
   subtitles: {
-    languages: ["en", "te", "hi", "es"]
+    languages: 'all'
   },
   videos: [
     {
