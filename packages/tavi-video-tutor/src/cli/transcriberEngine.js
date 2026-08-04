@@ -38,7 +38,8 @@ export class TranscriptionEngine {
       // Dynamic import transformers or use node pipeline if available
       let cues = [];
       try {
-        const { pipeline, env } = await import('@xenova/transformers');
+        const { getTransformers } = await import('../subtitles/transcription/transformersLoader.js');
+        const { pipeline, env } = await getTransformers();
         env.wasm.numThreads = 1;
 
         const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');

@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { TranslationProvider } from './TranslationProvider.js';
 import { AITUTOR_LANGUAGES, getLanguageByCode } from '../languages/registry.js';
 import { protectTokens, restoreTokens } from './ProtectedTerms.js';
+import { getTransformers } from '../transcription/transformersLoader.js';
 
 // Global in-memory cache for NLLB translation pipeline
 let NLLB_PIPELINE_INSTANCE = null;
@@ -103,7 +104,7 @@ export class LocalNllbProvider extends TranslationProvider {
       return NLLB_PIPELINE_INSTANCE;
     }
 
-    const { pipeline, env } = await import('@xenova/transformers');
+    const { pipeline, env } = await getTransformers();
     if (env) {
       env.allowLocalModels = true;
       if (env.wasm) {

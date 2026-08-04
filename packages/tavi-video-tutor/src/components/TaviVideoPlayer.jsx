@@ -5,7 +5,9 @@ import { transcribeVideoAudio } from '../services/AITranscriber.js';
 import { getCachedSubtitle, setCachedSubtitle } from '../services/SubtitleCache.js';
 import { SubtitleEditorModal } from './SubtitleEditorModal.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
-import { resolveSubtitleSources } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveSubtitleSources, resolveSubtitleVisibility } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveQualitySources } from '../subtitles/resolver/qualityResolver.js';
+import { getLanguageByCode } from '../subtitles/languages/registry.js';
 
 const LANGUAGE_NAMES = {
   en: "English",
@@ -473,6 +475,7 @@ export const TaviVideoPlayer = forwardRef(({
   id,
   subtitles = {},
   manifestSubtitles: manifestSubtitlesProp,
+  manifestQualities: manifestQualitiesProp = [],
   demoSubtitles: demoSubtitlesProp,
   resolvedSubtitles: resolvedSubtitlesProp,
   tracks,
@@ -795,10 +798,14 @@ export const TaviVideoPlayer = forwardRef(({
     });
   };
 
-  const displayQualities = useMemo(() => {
-    if (hlsQualities.length > 0) return hlsQualities;
-    return qualities || [];
-  }, [hlsQualities, qualities]);
+  const { qualities: displayQualities } = useMemo(() => {
+    return resolveQualitySources({
+      hlsQualities,
+      qualities,
+      config,
+      manifestQualities: manifestQualitiesProp
+    });
+  }, [hlsQualities, qualities, config, manifestQualitiesProp]);
 
   // Cues state loaded dynamically (supporting raw strings and URLs)
   const [primaryCues, setPrimaryCues] = useState([]);

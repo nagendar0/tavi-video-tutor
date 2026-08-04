@@ -142,7 +142,7 @@ Or create `aitutor.config.mjs` manually in your project root:
 ```javascript
 export default {
   subtitles: {
-    languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages
+    languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages (or 'all' for 109 languages)
     quality: 'balanced',                 // 'fast' | 'balanced' | 'high'
     glossary: ['React', 'AITutor']       // Protected domain terms
   },
@@ -155,6 +155,33 @@ export default {
   ]
 };
 ```
+
+#### Supported Configuration Formats
+
+AITutor automatically detects and loads any of the following configuration files in your project root:
+
+- **`aitutor.config.mjs` (ESM — Recommended)**:
+  ```javascript
+  export default {
+    subtitles: { languages: ['en', 'es', 'hi', 'te'] },
+    videos: [{ id: 'lesson', src: './public/lesson.mp4' }]
+  };
+  ```
+- **`aitutor.config.cjs` (CommonJS)**:
+  ```javascript
+  module.exports = {
+    subtitles: { languages: ['en', 'es', 'hi', 'te'] },
+    videos: [{ id: 'lesson', src: './public/lesson.mp4' }]
+  };
+  ```
+- **`aitutor.config.json` (JSON)**:
+  ```json
+  {
+    "subtitles": { "languages": ["en", "es", "hi", "te"] },
+    "videos": [{ "id": "lesson", "src": "./public/lesson.mp4" }]
+  }
+  ```
+- **`aitutor.config.js`**: Uses `export default` when host `package.json` contains `"type": "module"`, or `module.exports` when host `package.json` uses CommonJS.
 
 ### Step 2: Run the Subtitle Generator
 Run the CLI generator from your project terminal:
@@ -389,11 +416,31 @@ LOWEST   4. Demo Fallback Track      (Sample demonstration track)
 
 ---
 
-## 12. PROVIDING MANUAL SUBTITLES
+## 12. DEVELOPER SUBTITLE VISIBILITY & CUSTOM TRACKS
 
-Pass custom developer-provided WebVTT subtitle paths directly to `<AITutor />`:
+Control subtitle track visibility and supply custom WebVTT files using the `subtitles` prop on `<AITutor />`:
+
+| Configuration | Behavior |
+| :--- | :--- |
+| **Omitted** | Show all available subtitle tracks (default) |
+| `"all"` | Show all available tracks |
+| `["en", "hi", "te"]` | Only show those languages in player UI selector |
+| `{ en: "/en.vtt", hi: "/hi.vtt" }` | Use developer-provided custom VTT tracks |
+| `false` | Disable subtitle UI & cue rendering completely |
+
+### Examples
 
 ```jsx
+// 1. Default Mode (shows all generated tracks for current video)
+<AITutor src="/lesson.mp4" />
+
+// 2. Explicit All Mode
+<AITutor src="/lesson.mp4" subtitles="all" />
+
+// 3. Language Visibility Filter (UI menu only displays English, Hindi, Telugu)
+<AITutor src="/lesson.mp4" subtitles={["en", "hi", "te"]} />
+
+// 4. Custom Developer WebVTT Files (overrides generated tracks for specified languages)
 <AITutor
   src="/lesson.mp4"
   subtitles={{
@@ -401,9 +448,10 @@ Pass custom developer-provided WebVTT subtitle paths directly to `<AITutor />`:
     te: "/subtitles/custom-te.vtt"
   }}
 />
-```
 
-Developer manual tracks automatically take priority over generated tracks for the specified languages.
+// 5. Disable Subtitle UI Completely
+<AITutor src="/lesson.mp4" subtitles={false} />
+```
 
 ---
 

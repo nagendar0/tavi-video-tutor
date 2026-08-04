@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { getTransformers } from './transformersLoader.js';
 
 // Global in-memory cache for downloaded/loaded transformers pipelines
 const PIPELINE_MODEL_CACHE = new Map();
@@ -30,19 +31,16 @@ export class WhisperProvider extends TranscriptionProvider {
   }
 
   async getTranscriberPipeline(modelName) {
-    let cacheStatus = 'MISS';
-
     if (PIPELINE_MODEL_CACHE.has(modelName)) {
-      cacheStatus = 'HIT';
-      console.log(`\nASR Model\n──────────────\nModel: ${modelName}\nCache: ${cacheStatus}\n`);
+      console.log(`✓ Whisper model found in local cache`);
+      console.log(`✓ No download required\n`);
       return PIPELINE_MODEL_CACHE.get(modelName);
     }
 
-    const { pipeline, env } = await import('@xenova/transformers');
+    const { pipeline, env } = await getTransformers();
     if (env) {
       env.allowLocalModels = false;
       if (env.wasm) {
-        // Multi-threaded WASM execution (default 4 threads for Snapdragon X / 8-core CPUs)
         const threadCount = this.options.numThreads || 4;
         env.wasm.numThreads = threadCount;
         if ('simd' in env.wasm) {
@@ -51,18 +49,115 @@ export class WhisperProvider extends TranscriptionProvider {
       }
     }
 
-    console.log(`\nASR Model\n──────────────\nModel: ${modelName}\nThreads: ${env?.wasm?.numThreads || 1}\nCache: ${cacheStatus}\n`);
+    let downloadStarted = false;
+    const isTTY = Boolean(process.stdout && process.stdout.isTTY && !process.env.CI);
+    const filesMap = new Map();
+    let lastRenderedLineCount = 0;
 
-    const transcriber = await pipeline('automatic-speech-recognition', modelName);
-    PIPELINE_MODEL_CACHE.set(modelName, transcriber);
-    return transcriber;
+    const renderProgress = () => {
+      if (!isTTY) return;
+
+      let totalBytes = 0;
+      let loadedBytes = 0;
+      filesMap.forEach(f => {
+        if (f.total) totalBytes += f.total;
+        if (f.loaded) loadedBytes += f.loaded;
+      });
+
+      const overallPct = totalBytes > 0 ? Math.round((loadedBytes / totalBytes) * 100) : 0;
+
+      if (lastRenderedLineCount > 0) {
+        process.stdout.write(`\x1B[${lastRenderedLineCount}A\x1B[0J`);
+      }
+
+      const lines = [];
+      lines.push(`AITutor ASR Setup`);
+      lines.push(`────────────────────────────────`);
+      lines.push(`Whisper model not cached locally.`);
+      lines.push(`Downloading: ${modelName}\n`);
+
+      filesMap.forEach((info, file) => {
+        const fileName = file.split('/').pop() || file;
+        if (info.status === 'done' || info.progress >= 100) {
+          lines.push(`${fileName.padEnd(22)} ✓`);
+        } else {
+          const pct = Math.round(info.progress || 0);
+          const barWidth = 15;
+          const filled = Math.round((pct / 100) * barWidth);
+          const empty = Math.max(0, barWidth - filled);
+          const bar = '█'.repeat(filled) + '░'.repeat(empty);
+          lines.push(`${fileName.padEnd(22)} [${bar}] ${String(pct).padStart(3)}%`);
+        }
+      });
+
+      lines.push(`\nOverall: ${overallPct}%`);
+      const output = lines.join('\n') + '\n';
+      process.stdout.write(output);
+      lastRenderedLineCount = lines.length;
+    };
+
+    const progress_callback = (evt) => {
+      if (!evt || !evt.file) return;
+      if (!downloadStarted && (evt.status === 'initiate' || evt.status === 'download' || evt.status === 'progress')) {
+        downloadStarted = true;
+      }
+      filesMap.set(evt.file, {
+        status: evt.status,
+        progress: evt.progress || 0,
+        loaded: evt.loaded || 0,
+        total: evt.total || 0
+      });
+      if (downloadStarted) {
+        renderProgress();
+      }
+    };
+
+    try {
+      const transcriber = await pipeline('automatic-speech-recognition', modelName, {
+        progress_callback
+      });
+
+      if (downloadStarted) {
+        if (isTTY && lastRenderedLineCount > 0) {
+          process.stdout.write(`\x1B[${lastRenderedLineCount}A\x1B[0J`);
+        }
+        console.log(`✓ Whisper model downloaded`);
+        console.log(`✓ Model cached locally`);
+        console.log(`✓ Starting transcription\n`);
+      } else {
+        console.log(`✓ Whisper model found in local cache`);
+        console.log(`✓ No download required\n`);
+      }
+
+      PIPELINE_MODEL_CACHE.set(modelName, transcriber);
+      return transcriber;
+    } catch (err) {
+      if (isTTY && lastRenderedLineCount > 0) {
+        process.stdout.write(`\x1B[${lastRenderedLineCount}A\x1B[0J`);
+      }
+
+      const isNetworkError = err.message?.includes('fetch failed') ||
+                             err.message?.includes('ENOTFOUND') ||
+                             err.message?.includes('ETIMEDOUT') ||
+                             err.message?.includes('offline') ||
+                             err.message?.includes('HTTP error') ||
+                             err.code === 'ENOTFOUND';
+
+      if (isNetworkError) {
+        console.error(`\n❌ ASR Setup Error: Unable to download Whisper model "${modelName}".`);
+        console.error(`   Reason: Network connection offline or host unreachable.`);
+        console.error(`   Please check your internet connection or ensure model files exist in local cache.\n`);
+      } else {
+        console.error(`\n❌ ASR Setup Error for model "${modelName}": ${err.message}\n`);
+      }
+      throw err;
+    }
   }
 
   async transcribe(audioInput, videoEntry) {
     const audioPath = typeof audioInput === 'string' ? audioInput : audioInput.audioPath;
 
     if (!fs.existsSync(audioPath) && audioPath.includes('dummy')) {
-      // Create test dummy audio WAV file
       const sampleRate = 16000;
       const numSamples = sampleRate * 2;
       const wavBuffer = Buffer.alloc(44 + numSamples * 2);
@@ -93,7 +188,6 @@ export class WhisperProvider extends TranscriptionProvider {
       const transcriber = await this.getTranscriberPipeline(modelName);
       const buffer = fs.readFileSync(audioPath);
       
-      // Parse WAV header
       let headerOffset = 44;
       if (buffer.length > 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
         for (let i = 12; i < buffer.length - 8; i++) {

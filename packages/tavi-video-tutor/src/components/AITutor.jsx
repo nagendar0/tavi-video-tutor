@@ -1,7 +1,7 @@
 import React, { forwardRef, useState, useEffect, useRef, useMemo } from 'react';
 import TaviVideoPlayer from './TaviVideoPlayer.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
-import { resolveSubtitleSources } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveSubtitleVisibility } from '../subtitles/resolver/subtitleResolver.js';
 import '../styles/ai-tutor.css';
 
 export const AITutor = forwardRef(({
@@ -15,7 +15,7 @@ export const AITutor = forwardRef(({
   onPause,
   onEnded,
   onProgress,
-  subtitles = {},
+  subtitles,
   tracks,
   config,
   audioDubs = {},
@@ -30,12 +30,14 @@ export const AITutor = forwardRef(({
   onTracksChange
 }, ref) => {
   const [manifestSubtitles, setManifestSubtitles] = useState({});
+  const [manifestQualities, setManifestQualities] = useState([]);
   const seqRef = useRef(0);
 
   // Dynamic src switching: detach old track & fetch manifest subtitle for new src
   useEffect(() => {
     const currentSeq = ++seqRef.current;
     setManifestSubtitles({}); // Detach old track immediately
+    setManifestQualities([]); // Clear old qualities
 
     if (!src) return;
 
@@ -47,6 +49,10 @@ export const AITutor = forwardRef(({
         if (!isSubscribed || seqRef.current !== currentSeq) return;
 
         if (manifestEntry) {
+          if (Array.isArray(manifestEntry.qualities) && manifestEntry.qualities.length > 0) {
+            setManifestQualities(manifestEntry.qualities);
+          }
+
           const loadedMap = {};
 
           if (manifestEntry.subtitles && Object.keys(manifestEntry.subtitles).length > 0) {
@@ -86,10 +92,10 @@ export const AITutor = forwardRef(({
     };
   }, [src, id]);
 
-  const { resolvedTracks } = useMemo(() => {
-    return resolveSubtitleSources({
-      generatedSubtitles: manifestSubtitles,
-      developerSubtitles: subtitles
+  const visibilityResult = useMemo(() => {
+    return resolveSubtitleVisibility({
+      subtitlesConfig: subtitles,
+      generatedSubtitles: manifestSubtitles
     });
   }, [subtitles, manifestSubtitles]);
 
@@ -114,7 +120,8 @@ export const AITutor = forwardRef(({
         onProgress={onProgress}
         subtitles={subtitles}
         manifestSubtitles={manifestSubtitles}
-        resolvedSubtitles={resolvedTracks}
+        manifestQualities={manifestQualities}
+        resolvedSubtitles={visibilityResult.resolvedTracks}
         tracks={tracks}
         config={config}
         audioDubs={audioDubs}
@@ -135,5 +142,3 @@ export const AITutor = forwardRef(({
 AITutor.displayName = 'AITutor';
 
 export default AITutor;
-
-
