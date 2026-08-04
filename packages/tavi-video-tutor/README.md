@@ -84,7 +84,7 @@ cd my-tutor-app
 npm install tavi-video-tutor
 ```
 
-### Step 3 — Install Peer Dependencies
+### Step 3 — Install Required Peer Dependencies
 Ensure `react` and `react-dom` are installed in your project:
 ```bash
 npm install react react-dom
