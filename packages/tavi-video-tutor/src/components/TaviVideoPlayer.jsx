@@ -1,0 +1,2703 @@
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { parseWebVTT, SubtitleRenderer } from './SubtitleEngine.jsx';
+import { useAudioDubSync } from './AudioDubSync.jsx';
+import { transcribeVideoAudio } from '../services/AITranscriber.js';
+import { getCachedSubtitle, setCachedSubtitle } from '../services/SubtitleCache.js';
+import { SubtitleEditorModal } from './SubtitleEditorModal.jsx';
+import { resolveManifestSubtitle } from '../services/manifestStore.js';
+import { resolveSubtitleSources } from '../subtitles/resolver/subtitleResolver.js';
+
+const LANGUAGE_NAMES = {
+  en: "English",
+  hi: "Hindi",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  zh: "Chinese",
+  ja: "Japanese",
+  ru: "Russian",
+  pt: "Portuguese",
+  it: "Italian",
+  ar: "Arabic",
+  bn: "Bengali",
+  pa: "Punjabi",
+  te: "Telugu",
+  mr: "Marathi",
+  ta: "Tamil",
+  ur: "Urdu",
+  tr: "Turkish",
+  vi: "Vietnamese",
+  ko: "Korean",
+  pl: "Polish",
+  uk: "Ukrainian",
+  ro: "Romanian",
+  nl: "Dutch",
+  el: "Greek",
+  hu: "Hungarian",
+  sv: "Swedish",
+  cs: "Czech",
+  ca: "Catalan",
+  he: "Hebrew",
+  id: "Indonesian",
+  ms: "Malay",
+  th: "Thai",
+  sk: "Slovak",
+  da: "Danish",
+  fi: "Finnish",
+  no: "Norwegian",
+  hr: "Croatian",
+  sr: "Serbian",
+  lt: "Lithuanian",
+  lv: "Latvian",
+  et: "Estonian",
+  sl: "Slovenian",
+  bg: "Bulgarian",
+  mk: "Macedonian",
+  sq: "Albanian",
+  ka: "Georgian",
+  hy: "Armenian",
+  az: "Azerbaijani",
+  fa: "Persian",
+  am: "Amharic",
+  so: "Somali",
+  sw: "Swahili",
+  zu: "Zulu",
+  xh: "Xhosa",
+  ig: "Igbo",
+  om: "Oromo",
+  tl: "Tagalog",
+  my: "Burmese",
+  km: "Khmer",
+  lo: "Lao",
+  si: "Sinhala",
+  ne: "Nepali",
+  mn: "Mongolian",
+  kk: "Kazakh",
+  ky: "Kyrgyz",
+  tg: "Tajik",
+  tk: "Turkmen",
+  uz: "Uzbek",
+  eu: "Basque",
+  gl: "Galician",
+  ga: "Irish",
+  cy: "Welsh",
+  is: "Icelandic",
+  kl: "Greenlandic",
+  mi: "Maori",
+  haw: "Hawaiian",
+  sm: "Samoan",
+  to: "Tongan",
+  fj: "Fijian",
+  ch: "Chamorro",
+  af: "Afrikaans",
+  as: "Assamese",
+  be: "Belarusian",
+  bho: "Bhojpuri",
+  bi: "Bislama",
+  yue: "Cantonese",
+  ceb: "Cebuano",
+  doi: "Dogri",
+  rw: "Kinyarwanda",
+  kok: "Konkani",
+  ku: "Kurdish",
+  lb: "Luxembourgish",
+  mai: "Maithili",
+  mg: "Malagasy",
+  ml: "Malayalam",
+  mt: "Maltese",
+  mni: "Manipuri",
+  or: "Odia",
+  ps: "Pashto",
+  sa: "Sanskrit",
+  sat: "Santali",
+  sd: "Sindhi",
+  su: "Sundanese",
+  gu: "Gujarati",
+  ha: "Hausa",
+  jv: "Javanese",
+  kn: "Kannada",
+  ks: "Kashmiri",
+};
+
+const isRTL = (lang) => ['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ks'].includes(lang);
+
+const findActiveCue = (cues, time) => {
+  if (!cues || cues.length === 0) return null;
+  let low = 0;
+  let high = cues.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const cue = cues[mid];
+    if (time >= cue.start && time <= cue.end) {
+      return cue;
+    } else if (time < cue.start) {
+      high = mid - 1;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return null;
+};
+
+const wrapText = (ctx, text, maxWidth) => {
+  if (!text) return [];
+  const isCJK = (char) => /[\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u4E00-\u9FFF\u3400-\u4DBF]/.test(char);
+  
+  const tokens = [];
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
+    if (isCJK(char)) {
+      tokens.push(char);
+      i++;
+    } else if (char === ' ') {
+      tokens.push(' ');
+      i++;
+    } else {
+      let word = '';
+      while (i < text.length && !isCJK(text[i]) && text[i] !== ' ') {
+        word += text[i];
+        i++;
+      }
+      tokens.push(word);
+    }
+  }
+
+  const lines = [];
+  let currentLine = '';
+
+  for (let j = 0; j < tokens.length; j++) {
+    const token = tokens[j];
+    if (token === ' ') {
+      continue;
+    }
+
+    let testLine = currentLine;
+    if (currentLine) {
+      const lastChar = currentLine[currentLine.length - 1];
+      const firstChar = token[0];
+      if (isCJK(lastChar) || isCJK(firstChar)) {
+        testLine += token;
+      } else {
+        testLine += ' ' + token;
+      }
+    } else {
+      testLine = token;
+    }
+
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = token;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+
+  // YouTube captions max 2 lines per cue block to prevent obscuring the video screen
+  if (lines.length > 2) {
+    return lines.slice(0, 2);
+  }
+
+  return lines;
+};
+
+const drawSubtitleLine = (ctx, text, x, y, fontSize, textColor) => {
+  const hPadding = fontSize * 0.32;
+  const vPadding = fontSize * 0.14;
+  const metrics = ctx.measureText(text);
+  const boxWidth = metrics.width + (hPadding * 2);
+  const boxHeight = fontSize * 1.12 + (vPadding * 2);
+  const boxX = x - (metrics.width / 2) - hPadding;
+  const boxY = y - (fontSize * 1.12 / 2) - vPadding;
+
+  // Solid dark YouTube pill box background (rgba 8,8,8, 0.82)
+  ctx.fillStyle = 'rgba(8, 8, 8, 0.82)';
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, Math.max(2, fontSize * 0.12));
+    ctx.fill();
+  } else {
+    ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+  }
+
+  // Crisp black outline for legibility
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+  ctx.lineWidth = Math.max(1, fontSize * 0.07);
+  ctx.strokeText(text, x, y);
+
+  // Pure white / yellow text
+  ctx.fillStyle = textColor;
+  ctx.fillText(text, x, y);
+};
+
+const drawCanvasSubtitles = (
+  ctx,
+  canvasWidth,
+  canvasHeight,
+  activePrimaryText,
+  activeSecondaryText,
+  primaryLang,
+  secondaryLang,
+  areControlsVisible
+) => {
+  if (!activePrimaryText && !activeSecondaryText) return;
+
+  const canvas = ctx.canvas;
+  const displayHeight = (canvas && canvas.clientHeight) ? canvas.clientHeight : (canvasHeight / 2);
+  const scale = (canvas && canvas.clientHeight && canvas.height) ? (canvas.height / canvas.clientHeight) : 1;
+
+  // YouTube standard caption sizing (~3.0% of viewport height)
+  const cssFontSize = Math.max(12, Math.min(22, Math.round(displayHeight * 0.03)));
+  const baseFontSize = cssFontSize * scale;
+  const maxWidth = canvasWidth * 0.72; // YouTube line max width ~72%
+  const visibleControlsHeight = areControlsVisible ? (46 * scale) : (8 * scale);
+  const bottomMargin = Math.max(canvasHeight * 0.05, visibleControlsHeight + (8 * scale));
+  const gap = baseFontSize * 0.35;
+  const fontFamily = 'Roboto, "YouTube Noto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // 1. Process and wrap primary text
+  let primaryLines = [];
+  let primaryLineHeight = baseFontSize * 1.3;
+  if (activePrimaryText) {
+    ctx.font = `500 ${baseFontSize}px ${fontFamily}`;
+    ctx.direction = isRTL(primaryLang) ? 'rtl' : 'ltr';
+    primaryLines = wrapText(ctx, activePrimaryText, maxWidth);
+  }
+  const primaryTotalHeight = primaryLines.length * primaryLineHeight;
+
+  // 2. Process and wrap secondary text
+  let secondaryLines = [];
+  const secondaryFontSize = Math.round(baseFontSize * 0.9);
+  let secondaryLineHeight = secondaryFontSize * 1.3;
+  if (activeSecondaryText) {
+    ctx.font = `500 ${secondaryFontSize}px ${fontFamily}`;
+    ctx.direction = isRTL(secondaryLang) ? 'rtl' : 'ltr';
+    secondaryLines = wrapText(ctx, activeSecondaryText, maxWidth);
+  }
+  const secondaryTotalHeight = secondaryLines.length * secondaryLineHeight;
+
+  // 3. Draw Primary lines (Bottom)
+  if (primaryLines.length > 0) {
+    ctx.font = `500 ${baseFontSize}px ${fontFamily}`;
+    ctx.direction = isRTL(primaryLang) ? 'rtl' : 'ltr';
+    const primaryStartY = canvasHeight - bottomMargin - primaryTotalHeight + (primaryLineHeight / 2);
+    
+    primaryLines.forEach((line, index) => {
+      const lineY = primaryStartY + (index * primaryLineHeight);
+      drawSubtitleLine(ctx, line, canvasWidth / 2, lineY, baseFontSize, '#ffffff');
+    });
+  }
+
+  // 4. Draw Secondary lines (Stacked above Primary)
+  if (secondaryLines.length > 0) {
+    ctx.font = `500 ${secondaryFontSize}px ${fontFamily}`;
+    ctx.direction = isRTL(secondaryLang) ? 'rtl' : 'ltr';
+    
+    const secondaryBottomBoundary = activePrimaryText 
+      ? (canvasHeight - bottomMargin - primaryTotalHeight - gap)
+      : (canvasHeight - bottomMargin);
+
+    const secondaryStartY = secondaryBottomBoundary - secondaryTotalHeight + (secondaryLineHeight / 2);
+
+    secondaryLines.forEach((line, index) => {
+      const lineY = secondaryStartY + (index * secondaryLineHeight);
+      drawSubtitleLine(ctx, line, canvasWidth / 2, lineY, secondaryFontSize, '#ffd600');
+    });
+  }
+
+  ctx.restore();
+};
+
+// Canvas transcription overlay utility
+const drawTranscriptionOverlay = (ctx, canvasWidth, canvasHeight, statusText, progressPercent) => {
+  ctx.save();
+  
+  const pillWidth = 240;
+  const pillHeight = 36;
+  const padding = 12;
+  const x = canvasWidth - pillWidth - padding;
+  const y = padding;
+  
+  // Draw glassmorphic pill background (Slate-900 with high opacity)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.lineWidth = 1;
+  
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, pillWidth, pillHeight, 6);
+  } else {
+    // Fallback for older browsers
+    ctx.rect(x, y, pillWidth, pillHeight);
+  }
+  ctx.fill();
+  ctx.stroke();
+  
+  // Draw a pulse/loading indicator dot on the left of the pill
+  const dotX = x + 16;
+  const dotY = y + pillHeight / 2;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 4, 0, 2 * Math.PI);
+  ctx.fillStyle = '#818cf8'; // Indigo-400
+  ctx.fill();
+  
+  // Draw the status text
+  ctx.font = '500 11px sans-serif';
+  ctx.fillStyle = '#f1f5f9';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  let displayTxt = statusText;
+  if (displayTxt.length > 28) {
+    displayTxt = displayTxt.substring(0, 25) + '...';
+  }
+  ctx.fillText(displayTxt, x + 28, y + pillHeight / 2);
+  
+  // Draw progress line at the bottom edge of the pill
+  const loaderY = y + pillHeight - 2;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, loaderY);
+  ctx.lineTo(x + pillWidth - 6, loaderY);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  if (progressPercent > 0) {
+    ctx.beginPath();
+    ctx.moveTo(x + 6, loaderY);
+    ctx.lineTo(x + 6 + (pillWidth - 12) * (Math.min(100, progressPercent) / 100), loaderY);
+    ctx.strokeStyle = '#818cf8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  
+  ctx.restore();
+};
+
+// Inline SVGs for zero dependencies
+const PlayIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M8 5v14l11-7z" />
+  </svg>
+);
+
+const PauseIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+  </svg>
+);
+
+const VolumeHighIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" />
+  </svg>
+);
+
+const VolumeMuteIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+    <line x1="23" y1="9" x2="17" y2="15" />
+    <line x1="17" y1="9" x2="23" y2="15" />
+  </svg>
+);
+
+const GearIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', color: '#818cf8', flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const UploadIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', color: '#818cf8', flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+const CCIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M8 10h3M8 14h4M14 10h2M14 14h2" />
+  </svg>
+);
+
+const FullscreenEnterIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+  </svg>
+);
+
+const FullscreenExitIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 14h4v4m0-4l-5 5m17-5h-4v4m0-4l5 5M4 10h4V6m0 4L3 5m17 5h-4V6m0 4l5-5" />
+  </svg>
+);
+
+const AutoplayIcon = ({ active }) => (
+  <svg width="36" height="20" viewBox="0 0 36 20" fill="none" style={{ cursor: 'pointer', display: 'block' }}>
+    <rect width="36" height="20" rx="10" fill={active ? "#818cf8" : "rgba(255, 255, 255, 0.24)"} style={{ transition: 'fill 0.2s' }} />
+    <circle cx={active ? 26 : 10} cy="10" r="7" fill="#ffffff" style={{ transition: 'cx 0.2s' }} />
+    <polygon points={active ? "25,8 25,12 28,10" : "9,8 9,12 12,10"} fill={active ? "#818cf8" : "#9ca3af"} style={{ transition: 'fill 0.2s' }} />
+  </svg>
+);
+
+const PlayIconLarge = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M8 5v14l11-7z" />
+  </svg>
+);
+
+const PauseIconLarge = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+  </svg>
+);
+
+export const TaviVideoPlayer = forwardRef(({
+  src,
+  id,
+  subtitles = {},
+  manifestSubtitles: manifestSubtitlesProp,
+  demoSubtitles: demoSubtitlesProp,
+  resolvedSubtitles: resolvedSubtitlesProp,
+  tracks,
+  config,
+  audioDubs = {},
+  qualities = [],
+  onPlay,
+  onPause,
+  onEnded,
+  onProgress,
+  subLanguage,
+  defaultSubLanguage = 'en',
+  defaultAudioLanguage = 'original',
+  playbackRates = [0.5, 1, 1.25, 1.5, 2],
+  onSubLanguageChange,
+  onSubtitleGenerated,
+  onUpdateSubtitles,
+  onTracksChange
+}, ref) => {
+  const wrapperRef = useRef(null);
+  const canvasRef = useRef(null);
+  const progressBarRef = useRef(null);
+  const offscreenVideoRef = useRef(null);
+  const pendingSeekTimeRef = useRef(null);
+  const pendingPlayStateRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const clickTimeoutRef = useRef(null);
+
+  // Playback Control States
+  const [activeSrc, setActiveSrc] = useState(src);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [hoverTooltip, setHoverTooltip] = useState(null);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [mediaError, setMediaError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [areControlsVisible, setAreControlsVisible] = useState(true);
+  const areControlsVisibleRef = useRef(areControlsVisible);
+  useEffect(() => {
+    areControlsVisibleRef.current = areControlsVisible;
+  }, [areControlsVisible]);
+
+  const [isMouseOverPlayer, setIsMouseOverPlayer] = useState(false);
+
+  // Settings states
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState('main');
+  const [selectedSubLanguage, setSelectedSubLanguage] = useState(defaultSubLanguage);
+  const [selectedAudioLanguage, setSelectedAudioLanguage] = useState(defaultAudioLanguage);
+  const [isDualSubtitles, setIsDualSubtitles] = useState(false);
+  const [embeddedTracks, setEmbeddedTracks] = useState([]);
+  const originalTrackRef = useRef(null);
+  const [isTranscribingAI, setIsTranscribingAI] = useState(false);
+  const [aiTranscriptionProgress, setAiTranscriptionProgress] = useState(0);
+  const [aiTranscriptionStatusText, setAiTranscriptionStatusText] = useState('');
+  const [subtitlesSearchQuery, setSubtitlesSearchQuery] = useState('');
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  const lastActiveSubLangRef = useRef(defaultSubLanguage && defaultSubLanguage !== 'none' ? defaultSubLanguage : 'en');
+
+  useEffect(() => {
+    if (selectedSubLanguage && selectedSubLanguage !== 'none') {
+      lastActiveSubLangRef.current = selectedSubLanguage;
+    }
+  }, [selectedSubLanguage]);
+
+  // Local state for user-uploaded subtitle files
+  const [localSubtitles, setLocalSubtitles] = useState({});
+  const fileInputRef = useRef(null);
+
+  // Manifest subtitles auto-loaded from build-time aitutor pipeline
+  const [manifestSubtitles, setManifestSubtitles] = useState({});
+  const playerManifestSeqRef = useRef(0);
+
+  useEffect(() => {
+    const currentSeq = ++playerManifestSeqRef.current;
+    setActiveSrc(src);
+    setPrimaryCues([]);
+    setSecondaryCues([]);
+    originalTrackRef.current = null;
+    setManifestSubtitles({});
+
+    if (!src) return;
+
+    let isMounted = true;
+    const loadManifest = async () => {
+      try {
+        const matched = await resolveManifestSubtitle(src, id);
+        if (!isMounted || playerManifestSeqRef.current !== currentSeq) return;
+
+        if (matched && matched.subtitles && Object.keys(matched.subtitles).length > 0) {
+          const map = {};
+          await Promise.all(
+            Object.entries(matched.subtitles).map(async ([lang, info]) => {
+              try {
+                const subSrc = typeof info === 'string' ? info : (info && info.src);
+                if (subSrc) {
+                  const res = await fetch(subSrc);
+                  if (res.ok) {
+                    const vttText = await res.text();
+                    map[lang] = vttText;
+                  }
+                }
+              } catch (_) {}
+            })
+          );
+          if (isMounted && playerManifestSeqRef.current === currentSeq && Object.keys(map).length > 0) {
+            setManifestSubtitles(map);
+          }
+        } else if (matched && matched.subtitle) {
+          const res = await fetch(matched.subtitle);
+          if (res.ok) {
+            const vttText = await res.text();
+            if (isMounted && playerManifestSeqRef.current === currentSeq) {
+              setManifestSubtitles({ [matched.language || 'en']: vttText });
+            }
+          }
+        }
+      } catch (_) {}
+    };
+    loadManifest();
+    return () => { isMounted = false; };
+  }, [src, id]);
+
+  const effectiveManifestSubtitles = useMemo(() => {
+    return {
+      ...(manifestSubtitles || {}),
+      ...(manifestSubtitlesProp || {})
+    };
+  }, [manifestSubtitles, manifestSubtitlesProp]);
+
+  // Priority-resolved subtitle sources: uploaded > developer > generated > demo
+  const { resolvedTracks: combinedSubtitles, sourceByLanguage: subtitlesSourceMetadata } = useMemo(() => {
+    return resolveSubtitleSources({
+      demoSubtitles: demoSubtitlesProp,
+      generatedSubtitles: effectiveManifestSubtitles,
+      developerSubtitles: subtitles,
+      uploadedSubtitles: localSubtitles
+    });
+  }, [demoSubtitlesProp, effectiveManifestSubtitles, subtitles, localSubtitles]);
+
+
+  // Process tracks prop or config.file.tracks if supplied by developer
+  const effectiveTracks = useMemo(() => {
+    if (Array.isArray(tracks) && tracks.length > 0) return tracks;
+    if (config?.file?.tracks && Array.isArray(config.file.tracks)) return config.file.tracks;
+    return null;
+  }, [tracks, config]);
+
+  // Automatically build standard config.file.tracks objects for all 100+ languages
+  const generatedTracks = useMemo(() => {
+    const list = [];
+    Object.entries(combinedSubtitles).forEach(([langCode, vttContent], idx) => {
+      if (!vttContent) return; // deleted or null
+      let srcUrl = vttContent;
+      if (typeof vttContent === 'string' && vttContent.startsWith('WEBVTT')) {
+        try {
+          const blob = new Blob([vttContent], { type: 'text/vtt' });
+          srcUrl = URL.createObjectURL(blob);
+        } catch (_) {}
+      }
+      list.push({
+        kind: 'subtitles',
+        src: srcUrl,
+        srcLang: langCode,
+        label: LANGUAGE_NAMES[langCode] || langCode.toUpperCase(),
+        default: langCode === defaultSubLanguage || (idx === 0 && defaultSubLanguage === 'en')
+      });
+    });
+    return list;
+  }, [combinedSubtitles, defaultSubLanguage]);
+
+  // Trigger onTracksChange whenever tracks array updates
+  useEffect(() => {
+    if (generatedTracks.length > 0) {
+      onTracksChange?.(generatedTracks);
+    }
+  }, [generatedTracks, onTracksChange]);
+
+  const sortedAndFilteredLangs = useMemo(() => {
+    const allCodes = new Set([
+      ...Object.keys(combinedSubtitles),
+      ...Object.keys(LANGUAGE_NAMES)
+    ]);
+    const langObjects = Array.from(allCodes).map(code => ({
+      code,
+      name: code === 'none' ? 'Off' : (localSubtitles[code] ? `📄 ${code}` : (LANGUAGE_NAMES[code] || code.toUpperCase()))
+    }));
+
+    // Don't show Off, and don't show user uploaded files in the auto-translate alphabetical listing
+    const allLangs = langObjects.filter(lang => lang.code !== 'none' && !localSubtitles[lang.code]);
+    allLangs.sort((a, b) => a.name.localeCompare(b.name));
+
+    const query = subtitlesSearchQuery.trim().toLowerCase();
+    if (!query) return allLangs;
+    return allLangs.filter(lang => 
+      lang.name.toLowerCase().includes(query) || 
+      lang.code.toLowerCase().includes(query)
+    );
+  }, [combinedSubtitles, subtitlesSearchQuery, localSubtitles]);
+
+  // Sync selected subtitle language state with prop updates from parent (subLanguage or defaultSubLanguage)
+  useEffect(() => {
+    const targetLang = subLanguage !== undefined ? subLanguage : defaultSubLanguage;
+    if (targetLang !== undefined && targetLang !== null) {
+      setSelectedSubLanguage(targetLang);
+    }
+  }, [subLanguage, defaultSubLanguage]);
+
+  const [selectedQuality, setSelectedQuality] = useState('Auto');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAutoplay, setIsAutoplay] = useState(false);
+  const hlsRef = useRef(null);
+  const [hlsQualities, setHlsQualities] = useState([]);
+
+  // Animation frame ref
+  const animationFrameRef = useRef(null);
+
+  // YouTube Style Gestures State
+  const [leftSkipActive, setLeftSkipActive] = useState(false);
+  const [rightSkipActive, setRightSkipActive] = useState(false);
+  const [leftSkipText, setLeftSkipText] = useState('10s');
+  const [rightSkipText, setRightSkipText] = useState('10s');
+  const [centerFlash, setCenterFlash] = useState(null);
+
+  // Gesture timeout refs
+  const leftSkipTimeoutRef = useRef(null);
+  const rightSkipTimeoutRef = useRef(null);
+  const centerFlashTimeoutRef = useRef(null);
+
+  const triggerLeftSkipAnimation = (text) => {
+    setLeftSkipText(text);
+    setLeftSkipActive(false);
+    if (leftSkipTimeoutRef.current) clearTimeout(leftSkipTimeoutRef.current);
+    setTimeout(() => {
+      setLeftSkipActive(true);
+      leftSkipTimeoutRef.current = setTimeout(() => {
+        setLeftSkipActive(false);
+      }, 800);
+    }, 10);
+  };
+
+  const triggerRightSkipAnimation = (text) => {
+    setRightSkipText(text);
+    setRightSkipActive(false);
+    if (rightSkipTimeoutRef.current) clearTimeout(rightSkipTimeoutRef.current);
+    setTimeout(() => {
+      setRightSkipActive(true);
+      rightSkipTimeoutRef.current = setTimeout(() => {
+        setRightSkipActive(false);
+      }, 800);
+    }, 10);
+  };
+
+  const triggerCenterFlash = (type) => {
+    if (centerFlashTimeoutRef.current) clearTimeout(centerFlashTimeoutRef.current);
+    setCenterFlash({ type, key: Date.now() });
+    centerFlashTimeoutRef.current = setTimeout(() => {
+      setCenterFlash(null);
+    }, 500);
+  };
+
+  // Controls bar auto-hide logic
+  const controlsTimeoutRef = useRef(null);
+
+  const triggerControlsVisibility = () => {
+    setIsMouseOverPlayer(true);
+    setAreControlsVisible(true);
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    if (!isDragging && !isSettingsOpen) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setAreControlsVisible(false);
+      }, 1000);
+    }
+  };
+
+  const handleMouseLeavePlayer = () => {
+    setIsMouseOverPlayer(false);
+    if (!isDragging && !isSettingsOpen) {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = setTimeout(() => {
+        setAreControlsVisible(false);
+      }, 200);
+    }
+  };
+
+  const isHlsUrl = (url) => {
+    return url && (url.includes('.m3u8') || url.includes('/hls/'));
+  };
+
+  const loadHlsScript = () => {
+    return new Promise((resolve, reject) => {
+      if (window.Hls) {
+        resolve(window.Hls);
+        return;
+      }
+      const existingScript = document.querySelector('script[src*="hls.js"]');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => {
+          if (window.Hls) resolve(window.Hls);
+          else reject(new Error('Hls not found'));
+        });
+        existingScript.addEventListener('error', () => {
+          reject(new Error('Hls load failed'));
+        });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
+      script.onload = () => {
+        if (window.Hls) resolve(window.Hls);
+        else reject(new Error('Hls not loaded successfully'));
+      };
+      script.onerror = () => reject(new Error('Hls script error'));
+      document.head.appendChild(script);
+    });
+  };
+
+  const displayQualities = useMemo(() => {
+    if (hlsQualities.length > 0) return hlsQualities;
+    return qualities || [];
+  }, [hlsQualities, qualities]);
+
+  // Cues state loaded dynamically (supporting raw strings and URLs)
+  const [primaryCues, setPrimaryCues] = useState([]);
+  const [secondaryCues, setSecondaryCues] = useState([]);
+  const subtitleCacheRef = useRef({});
+
+  // Asynchronous subtitle loader (handles both URL fetching and raw content)
+  const loadSubtitles = async (contentOrUrl) => {
+    if (!contentOrUrl) return [];
+
+    const isUrl = typeof contentOrUrl === 'string' && (
+      contentOrUrl.startsWith('http://') || 
+      contentOrUrl.startsWith('https://') || 
+      contentOrUrl.startsWith('/') || 
+      contentOrUrl.endsWith('.vtt') || 
+      contentOrUrl.endsWith('.srt')
+    );
+
+    if (isUrl) {
+      if (subtitleCacheRef.current[contentOrUrl]) {
+        return subtitleCacheRef.current[contentOrUrl];
+      }
+      try {
+        const response = await fetch(contentOrUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const text = await response.text();
+        const parsed = parseWebVTT(text);
+        subtitleCacheRef.current[contentOrUrl] = parsed;
+        return parsed;
+      } catch (err) {
+        console.error('Failed to load subtitle file:', contentOrUrl, err);
+        return [];
+      }
+    }
+
+    return parseWebVTT(contentOrUrl);
+  };
+
+  // Translate cues on the fly (Only used when no build-time VTT track exists)
+  const translateCues = async (cues, targetLang) => {
+    if (!cues || cues.length === 0) return [];
+    const batchSize = 35;
+    const translatedCues = [];
+    
+    for (let i = 0; i < cues.length; i += batchSize) {
+      const batch = cues.slice(i, i + batchSize);
+      const combinedText = batch.map(c => c.text).join('\n');
+      
+      try {
+        const response = await fetch(`/api/translate?to=${targetLang}&text=${encodeURIComponent(combinedText)}`);
+        if (!response.ok) throw new Error('Translation failed');
+        const data = await response.json();
+        
+        // Split by newline and handle potential length mismatches
+        const translatedLines = data.translation.split('\n');
+        batch.forEach((cue, index) => {
+          translatedCues.push({
+            ...cue,
+            text: translatedLines[index] ? translatedLines[index].trim() : cue.text
+          });
+        });
+      } catch (err) {
+        console.error('Batch translation error:', err);
+        batch.forEach(cue => translatedCues.push(cue));
+      }
+    }
+    return translatedCues;
+  };
+
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isLoadingSubtitles, setIsLoadingSubtitles] = useState(false);
+  const [subtitleStatusText, setSubtitleStatusText] = useState('Loading subtitles...');
+
+  useEffect(() => {
+    let active = true;
+    const fetchPrimary = async () => {
+      if (!selectedSubLanguage || selectedSubLanguage === 'none') {
+        if (active) setPrimaryCues([]);
+        return;
+      }
+
+      if (selectedSubLanguage.startsWith && selectedSubLanguage.startsWith('embedded-')) {
+        if (active) setPrimaryCues([]);
+        return;
+      }
+
+      const rawContent = combinedSubtitles[selectedSubLanguage];
+      
+      let cues = [];
+      if (rawContent) {
+        // Direct static VTT load from manifest or pre-generated subtitles - NO translation
+        if (selectedSubLanguage === 'en' || selectedSubLanguage.includes('.')) {
+          originalTrackRef.current = { name: selectedSubLanguage, vtt: rawContent };
+        }
+        setIsLoadingSubtitles(true);
+        setSubtitleStatusText('Loading subtitles...');
+        try {
+          cues = await loadSubtitles(rawContent);
+          if (active) {
+            setPrimaryCues(cues);
+            requestAnimationFrame(() => paintSingleFrame());
+          }
+        } finally {
+          if (active) setIsLoadingSubtitles(false);
+        }
+      } else if (originalTrackRef.current && originalTrackRef.current.vtt) {
+        // Fallback translation only when no VTT file exists on disk
+        setIsTranslating(true);
+        setSubtitleStatusText('Loading subtitles...');
+        try {
+          const baseCues = await loadSubtitles(originalTrackRef.current.vtt);
+          const translated = await translateCues(baseCues, selectedSubLanguage);
+          if (active) {
+            setPrimaryCues(translated);
+            requestAnimationFrame(() => paintSingleFrame());
+          }
+        } catch (err) {
+          console.error('Translation failed:', err);
+          if (active) setPrimaryCues([]);
+        } finally {
+          if (active) setIsTranslating(false);
+        }
+      } else {
+        setIsLoadingSubtitles(true);
+        setSubtitleStatusText('Loading subtitles...');
+        try {
+          const fallbackMaster = combinedSubtitles['en'] || combinedSubtitles['English'];
+          let masterVtt = fallbackMaster;
+          if (!masterVtt && activeSrc) {
+            masterVtt = await transcribeVideoAudio(activeSrc, (p) => {
+              setAiTranscriptionStatusText(p.message || 'Transcribing audio...');
+            });
+          }
+          if (masterVtt) {
+            originalTrackRef.current = { name: 'Auto Master', vtt: masterVtt };
+            const baseCues = await loadSubtitles(masterVtt);
+            if (selectedSubLanguage === 'en') {
+              cues = baseCues;
+            } else {
+              cues = await translateCues(baseCues, selectedSubLanguage);
+            }
+            if (active) {
+              setPrimaryCues(cues);
+              requestAnimationFrame(() => paintSingleFrame());
+            }
+          } else if (active) {
+            setPrimaryCues([]);
+          }
+        } catch (err) {
+          console.error('Auto master transcription failed:', err);
+          if (active) setPrimaryCues([]);
+        } finally {
+          if (active) setIsLoadingSubtitles(false);
+        }
+      }
+    };
+    fetchPrimary();
+    return () => { active = false; };
+  }, [combinedSubtitles, selectedSubLanguage]);
+
+  const availableSubLangs = useMemo(() => {
+    const codes = new Set([
+      'none',
+      ...Object.keys(subtitles || {}),
+      ...Object.keys(LANGUAGE_NAMES),
+      ...Object.keys(localSubtitles)
+    ]);
+    return Array.from(codes);
+  }, [subtitles, localSubtitles]);
+
+  const secondarySubLanguage = useMemo(() => {
+    if (!isDualSubtitles) return null;
+    return availableSubLangs.find((lang) => lang !== selectedSubLanguage) ?? null;
+  }, [availableSubLangs, selectedSubLanguage, isDualSubtitles]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchSecondary = async () => {
+      if (!secondarySubLanguage || secondarySubLanguage === 'none') {
+        if (active) setSecondaryCues([]);
+        return;
+      }
+
+      if (secondarySubLanguage.startsWith('embedded-')) {
+        if (active) setSecondaryCues([]);
+        return;
+      }
+
+      const rawContent = combinedSubtitles[secondarySubLanguage];
+      
+      let cues = [];
+      if (rawContent) {
+        cues = await loadSubtitles(rawContent);
+        if (active) setSecondaryCues(cues);
+      } else if (originalTrackRef.current && originalTrackRef.current.vtt) {
+        try {
+          const baseCues = await loadSubtitles(originalTrackRef.current.vtt);
+          const translated = await translateCues(baseCues, secondarySubLanguage);
+          if (active) setSecondaryCues(translated);
+        } catch (err) {
+          console.error('Secondary translation failed:', err);
+          if (active) setSecondaryCues([]);
+        }
+      } else {
+        if (active) setSecondaryCues([]);
+      }
+    };
+    fetchSecondary();
+    return () => { active = false; };
+  }, [combinedSubtitles, secondarySubLanguage]);
+
+  // Upload file handler
+  const handleLocalSubtitleUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        const lowerName = file.name.toLowerCase();
+        let targetLangKey = file.name;
+        
+        // Extract language code if present (e.g., uploaded-en.vtt -> en, manual-te.vtt -> te)
+        const match = lowerName.match(/(?:^|[-_])([a-z]{2,3})(?:\.vtt|\.srt|[-_.]|$)/);
+        if (match && LANGUAGE_NAMES[match[1]]) {
+          targetLangKey = match[1];
+        } else if (selectedSubLanguage && selectedSubLanguage !== 'none' && LANGUAGE_NAMES[selectedSubLanguage]) {
+          targetLangKey = selectedSubLanguage;
+        }
+
+        setLocalSubtitles(prev => ({
+          ...prev,
+          [targetLangKey]: text
+        }));
+        setSelectedSubLanguage(targetLangKey);
+        setIsDualSubtitles(false);
+        setActiveMenu('main');
+        onSubLanguageChange?.(targetLangKey);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+
+  // Refs for zero-latency 60fps canvas draw loop
+  const selectedSubLanguageRef = useRef(selectedSubLanguage);
+  const isDualSubtitlesRef = useRef(isDualSubtitles);
+  const primaryCuesRef = useRef(primaryCues);
+  const secondaryCuesRef = useRef(secondaryCues);
+  const secondarySubLanguageRef = useRef(secondarySubLanguage);
+  const isTranslatingRef = useRef(isTranslating);
+  const isTranscribingAIRef = useRef(isTranscribingAI);
+  const aiTranscriptionProgressRef = useRef(aiTranscriptionProgress);
+  const aiTranscriptionStatusTextRef = useRef(aiTranscriptionStatusText);
+
+  // Sync ref values synchronously to avoid event loop / paint race conditions
+  selectedSubLanguageRef.current = selectedSubLanguage;
+  isDualSubtitlesRef.current = isDualSubtitles;
+  primaryCuesRef.current = primaryCues;
+  secondaryCuesRef.current = secondaryCues;
+  secondarySubLanguageRef.current = secondarySubLanguage;
+  isTranslatingRef.current = isTranslating;
+  isTranscribingAIRef.current = isTranscribingAI;
+  aiTranscriptionProgressRef.current = aiTranscriptionProgress;
+  aiTranscriptionStatusTextRef.current = aiTranscriptionStatusText;
+
+  const speedPresets = useMemo(() => {
+    const rates = [...new Set(playbackRates)].sort((a, b) => a - b);
+    return rates.length > 0 ? rates : [0.5, 1, 1.25, 1.5, 2];
+  }, [playbackRates]);
+
+  const speedMin = useMemo(() => Math.min(0.25, ...speedPresets), [speedPresets]);
+  const speedMax = useMemo(() => Math.max(3, ...speedPresets), [speedPresets]);
+
+  // Audio Dub Track sync hook
+  const activeAudioUrl = audioDubs[selectedAudioLanguage] || null;
+  useAudioDubSync({
+    isPlaying,
+    currentTime,
+    playbackRate,
+    volume,
+    isMuted: isMuted || selectedAudioLanguage === 'original',
+    audioUrl: activeAudioUrl
+  });
+
+  // Helper to extract active subtitle text (canvas VTT or native TextTrack)
+  const getActiveSubtitleText = (video, langRef, cuesRef) => {
+    if (!langRef || langRef === 'none') return '';
+    
+    if (langRef.startsWith('embedded-')) {
+      if (!video) return '';
+      const idx = parseInt(langRef.split('-')[1], 10);
+      const track = video.textTracks?.[idx];
+      if (track) {
+        if (track.mode !== 'hidden') track.mode = 'hidden';
+        const activeCue = track.activeCues?.[0];
+        return activeCue ? activeCue.text : '';
+      }
+      return '';
+    }
+
+    const timeToUse = video ? video.currentTime : currentTime;
+    const activeCue = findActiveCue(cuesRef, timeToUse);
+    return activeCue ? activeCue.text : '';
+  };
+
+  // Canvas paint utility for single frames
+  const paintSingleFrame = () => {
+    const video = offscreenVideoRef.current;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      if (canvas.width === 0 || canvas.height === 0) {
+        canvas.width = 1280;
+        canvas.height = 720;
+      }
+      const ctx = canvas.getContext('2d');
+      // Keep the canvas transparent: the native <video> underneath renders the
+      // media. This avoids a black screen when browsers disallow canvas frame
+      // extraction for a remote/CORS-protected video.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw transcription overlay if active
+      if (isTranscribingAIRef.current) {
+        drawTranscriptionOverlay(
+          ctx,
+          canvas.width,
+          canvas.height,
+          aiTranscriptionStatusTextRef.current,
+          aiTranscriptionProgressRef.current
+        );
+      } else if (selectedSubLanguageRef.current !== 'none') {
+        // Draw canvas subtitles if enabled
+        const activePrimaryText = isTranslatingRef.current
+          ? 'Translating subtitles...'
+          : getActiveSubtitleText(video, selectedSubLanguageRef.current, primaryCuesRef.current);
+        const activeSecondaryText = isDualSubtitlesRef.current
+          ? (isTranslatingRef.current ? '' : getActiveSubtitleText(video, secondarySubLanguageRef.current, secondaryCuesRef.current))
+          : '';
+
+        drawCanvasSubtitles(
+          ctx,
+          canvas.width,
+          canvas.height,
+          activePrimaryText,
+          activeSecondaryText,
+          selectedSubLanguageRef.current,
+          secondarySubLanguageRef.current,
+          areControlsVisibleRef.current
+        );
+      }
+    }
+  };
+
+  // Expose play/pause controllers via ref
+  useImperativeHandle(ref, () => ({
+    play: () => {
+      const video = offscreenVideoRef.current;
+      if (video) {
+        video.play().catch(() => {});
+        setIsPlaying(true);
+      }
+    },
+    pause: () => {
+      const video = offscreenVideoRef.current;
+      if (video) {
+        video.pause();
+        setIsPlaying(false);
+      }
+    },
+    seekTo: (seconds) => {
+      const video = offscreenVideoRef.current;
+      if (video) {
+        video.currentTime = seconds;
+        setCurrentTime(seconds);
+      }
+    },
+    setVolume: (vol) => {
+      const video = offscreenVideoRef.current;
+      if (video) {
+        video.volume = vol;
+        setVolume(vol);
+      }
+    },
+    setPlaybackRate: (rate) => {
+      const video = offscreenVideoRef.current;
+      if (video) {
+        video.playbackRate = rate;
+        setPlaybackRate(rate);
+      }
+    }
+  }));
+
+  // Toggle play/pause
+  const handlePlayPauseToggle = () => {
+    const video = offscreenVideoRef.current;
+    if (!video) return;
+
+    if (isPlaying) {
+      video.pause();
+      setIsPlaying(false);
+      triggerCenterFlash('pause');
+    } else {
+      video.play().catch(() => {});
+      setIsPlaying(true);
+      triggerCenterFlash('play');
+    }
+  };
+
+  const handleScreenClick = (e) => {
+    focusPlayer();
+    
+    // Clicking the video screen when settings is open closes the settings menu first
+    if (isSettingsOpen) {
+      setIsSettingsOpen(false);
+      if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickPercent = clickX / rect.width;
+
+    if (e.detail === 1) {
+      // Single click - set a timeout to toggle play/pause
+      clickTimeoutRef.current = setTimeout(() => {
+        handlePlayPauseToggle();
+      }, 250);
+    } else if (e.detail === 2) {
+      // Double click - clear single click timeout
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+      
+      if (clickPercent < 0.3) {
+        // Left 30% - skip backward 10s
+        triggerManualSkip(-10);
+      } else if (clickPercent > 0.7) {
+        // Right 30% - skip forward 10s
+        triggerManualSkip(10);
+      } else {
+        // Middle 40% - fullscreen
+        handleFullscreenToggle();
+      }
+    }
+  };
+
+  // Manual Skip helper
+  const triggerManualSkip = (offset) => {
+    const video = offscreenVideoRef.current;
+    if (!video || duration === 0) return;
+
+    const timeBeforeSkip = video.currentTime;
+    const targetTime = Math.max(0, Math.min(duration, timeBeforeSkip + offset));
+
+    video.currentTime = targetTime;
+    setCurrentTime(targetTime);
+
+    if (offset < 0) {
+      triggerLeftSkipAnimation(`${Math.abs(offset)}s`);
+    } else if (offset > 0) {
+      triggerRightSkipAnimation(`${Math.abs(offset)}s`);
+    }
+  };
+
+  // Scrubber scrubber
+  const handleTimelineScrub = (e) => {
+    const video = offscreenVideoRef.current;
+    if (!progressBarRef.current || !video || duration === 0) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetSeconds = percentage * duration;
+
+    video.currentTime = targetSeconds;
+    setCurrentTime(targetSeconds);
+  };
+
+  const handleTimelineMouseDown = (e) => {
+    if (duration === 0) return;
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    handleTimelineScrub(e);
+  };
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (e) => {
+      if (!isDraggingRef.current || !progressBarRef.current || duration === 0) return;
+      const video = offscreenVideoRef.current;
+      if (!video) return;
+
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+      const targetSeconds = percentage * duration;
+
+      video.currentTime = targetSeconds;
+      setCurrentTime(targetSeconds);
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+      }
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isDragging, duration]);
+
+  const preservePlaybackState = () => {
+    pendingSeekTimeRef.current = currentTime;
+    pendingPlayStateRef.current = isPlaying;
+  };
+
+  // Quality Changer
+  const handleQualityChange = (qualityOption) => {
+    preservePlaybackState();
+    setSelectedQuality(qualityOption.label);
+    if (hlsRef.current && qualityOption.index !== undefined) {
+      hlsRef.current.currentLevel = qualityOption.index;
+      setActiveMenu('main');
+    } else {
+      setActiveSrc(qualityOption.src);
+      setActiveMenu('main');
+    }
+  };
+
+  const handleAutoQuality = () => {
+    preservePlaybackState();
+    setSelectedQuality('Auto');
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = -1;
+      setActiveMenu('main');
+    } else {
+      setActiveSrc(src);
+      setActiveMenu('main');
+    }
+  };
+
+  const focusPlayer = () => {
+    wrapperRef.current?.focus();
+  };
+
+  const handleFullscreenToggle = () => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    if (!document.fullscreenElement) {
+      wrapper.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  const handleCCToggle = () => {
+    if (selectedSubLanguage === 'none') {
+      const nextLang = lastActiveSubLangRef.current || 'en';
+      setSelectedSubLanguage(nextLang);
+      onSubLanguageChange?.(nextLang);
+    } else {
+      setSelectedSubLanguage('none');
+      setIsDualSubtitles(false);
+      onSubLanguageChange?.('none');
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === wrapperRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Set up the native video element. The canvas is used only for overlays, so
+  // video playback remains visible even when canvas frame extraction is blocked.
+  useEffect(() => {
+    const video = offscreenVideoRef.current;
+    if (!video) return undefined;
+
+    video.onloadedmetadata = () => {
+      setMediaError('');
+      setIsBuffering(false);
+      const canvas = canvasRef.current;
+      if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+        let targetHeight = video.videoHeight;
+        if (selectedQuality !== 'Auto') {
+          const parsed = parseInt(selectedQuality, 10);
+          if (!isNaN(parsed)) targetHeight = parsed;
+        }
+        const aspectRatio = video.videoWidth / video.videoHeight;
+        canvas.width = Math.round(targetHeight * aspectRatio);
+        canvas.height = targetHeight;
+      }
+      setDuration(video.duration);
+
+      // Extract and synchronize embedded text tracks
+      const syncTracks = () => {
+        const tracks = Array.from(video.textTracks || []);
+        const mapped = tracks.map((track, index) => {
+          if (track.mode === 'disabled') {
+            track.mode = 'hidden';
+          }
+          return {
+            id: `embedded-${index}`,
+            label: track.label || track.language || `Track ${index + 1}`,
+            language: track.language || 'und',
+            kind: track.kind || 'subtitles',
+            index
+          };
+        });
+        setEmbeddedTracks(mapped);
+      };
+
+      syncTracks();
+      if (video.textTracks) {
+        video.textTracks.onaddtrack = syncTracks;
+        video.textTracks.onremovetrack = syncTracks;
+      }
+
+      if (pendingSeekTimeRef.current != null) {
+        video.currentTime = pendingSeekTimeRef.current;
+        setCurrentTime(pendingSeekTimeRef.current);
+        pendingSeekTimeRef.current = null;
+      }
+
+      if (pendingPlayStateRef.current != null) {
+        if (pendingPlayStateRef.current) {
+          video.play().catch(() => {});
+        }
+        pendingPlayStateRef.current = null;
+      }
+
+      paintSingleFrame();
+    };
+
+    video.ontimeupdate = () => {
+      setCurrentTime(video.currentTime);
+      onProgress?.({ playedSeconds: video.currentTime });
+    };
+
+    video.onwaiting = () => {
+      setIsBuffering(true);
+    };
+
+    video.oncanplay = () => {
+      setIsBuffering(false);
+    };
+
+    video.onerror = () => {
+      const code = video.error?.code;
+      const message = code === 4
+        ? 'This video format or source is not supported by this browser.'
+        : 'The video could not be loaded. Check the URL, network connection, and CORS settings.';
+      setMediaError(message);
+      setIsBuffering(false);
+      setIsPlaying(false);
+    };
+
+    video.onseeking = () => {
+      setIsBuffering(true);
+    };
+
+    video.onseeked = () => {
+      setIsBuffering(false);
+    };
+
+    video.onplaying = () => {
+      setIsBuffering(false);
+    };
+
+    video.onplay = () => {
+      setIsPlaying(true);
+      onPlay?.();
+    };
+
+    video.onpause = () => {
+      setIsPlaying(false);
+      onPause?.();
+    };
+
+    video.onended = () => {
+      setIsPlaying(false);
+      onEnded?.();
+    };
+
+    return () => {
+      video.pause();
+      video.onloadedmetadata = null;
+      video.ontimeupdate = null;
+      video.onwaiting = null;
+      video.oncanplay = null;
+      video.onerror = null;
+      video.onseeking = null;
+      video.onseeked = null;
+      video.onplaying = null;
+      video.onplay = null;
+      video.onpause = null;
+      video.onended = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, []);
+
+  // Sync when parent changes src
+  useEffect(() => {
+    pendingSeekTimeRef.current = 0;
+    pendingPlayStateRef.current = false;
+    setActiveSrc(src);
+    setSelectedQuality('Auto');
+    setCurrentTime(0);
+    setMediaError('');
+  }, [src]);
+
+  const ytId = useMemo(() => {
+    if (!activeSrc) return null;
+    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+    const match = String(activeSrc).match(regExp);
+    return match ? match[1] : null;
+  }, [activeSrc]);
+
+  const ytIdRef = useRef(null);
+  useEffect(() => {
+    ytIdRef.current = ytId;
+  }, [ytId]);
+
+  // Update source URL (with HLS support)
+  useEffect(() => {
+    const video = offscreenVideoRef.current;
+    if (!video || !activeSrc) return;
+
+    setMediaError('');
+    setIsBuffering(true);
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+      setHlsQualities([]);
+    }
+
+    if (ytId) {
+      // Do NOT load YouTube URLs in the HTML5 video element
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      return;
+    }
+
+    if (isHlsUrl(activeSrc)) {
+      loadHlsScript().then((HlsClass) => {
+        if (HlsClass.isSupported()) {
+          const hls = new HlsClass({
+            capLevelToPlayerSize: false,
+            enableWorker: true
+          });
+          hlsRef.current = hls;
+          hls.loadSource(activeSrc);
+          hls.attachMedia(video);
+          
+          hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
+            const parsedQualities = hls.levels.map((level, idx) => {
+              const label = level.height ? `${level.height}p` : `Quality ${idx}`;
+              return {
+                label,
+                index: idx,
+                src: activeSrc
+              };
+            });
+            parsedQualities.sort((a, b) => {
+              const hA = parseInt(a.label, 10) || 0;
+              const hB = parseInt(b.label, 10) || 0;
+              return hB - hA;
+            });
+            setHlsQualities(parsedQualities);
+          });
+          
+          hls.on(HlsClass.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case HlsClass.ErrorTypes.NETWORK_ERROR:
+                  hls.startLoad();
+                  break;
+                case HlsClass.ErrorTypes.MEDIA_ERROR:
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  break;
+              }
+            }
+          });
+
+          video.playbackRate = playbackRate;
+          video.volume = isMuted ? 0 : volume;
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = activeSrc;
+          video.load();
+          video.playbackRate = playbackRate;
+          video.volume = isMuted ? 0 : volume;
+        }
+      }).catch((err) => {
+        console.error('HLS load error, falling back to native player:', err);
+        video.src = activeSrc;
+        video.load();
+        video.playbackRate = playbackRate;
+        video.volume = isMuted ? 0 : volume;
+      });
+    } else {
+      video.src = activeSrc;
+      video.load();
+      video.playbackRate = playbackRate;
+      video.volume = isMuted ? 0 : volume;
+    }
+  }, [activeSrc]);
+
+  const transcribingUrlRef = useRef(null);
+
+  // Auto-transcribe video on source change
+  useEffect(() => {
+    if (!activeSrc) return;
+
+    // Reset transcription state
+    setIsTranscribingAI(false);
+    setAiTranscriptionProgress(0);
+    setAiTranscriptionStatusText('');
+    
+    // Clear any previous AI subtitles
+    setLocalSubtitles((prev) => {
+      const nextSubs = { ...prev };
+      delete nextSubs['en'];
+      return nextSubs;
+    });
+
+    let active = true;
+    const autoTranscribe = async () => {
+      // If pre-generated subtitles database is provided by parent, bypass heavy ONNX model download
+      if (Object.keys(subtitles).length > 0) return;
+
+      // Small delay to allow the video metadata/decoders to settle
+      await new Promise(resolve => setTimeout(resolve, 800));
+      if (!active) return;
+
+      if (transcribingUrlRef.current === activeSrc) return;
+      transcribingUrlRef.current = activeSrc;
+
+      // 1. Check IndexedDB Cache first
+      try {
+        const cachedVtt = await getCachedSubtitle(activeSrc);
+        if (cachedVtt) {
+          if (active) {
+            setLocalSubtitles((prev) => ({
+              ...prev,
+              ['en']: cachedVtt
+            }));
+            setSelectedSubLanguage('en');
+            onSubtitleGenerated?.(cachedVtt, activeSrc);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to read subtitle cache:', err);
+      }
+
+      // 2. Check if activeSrc is a YouTube URL
+      if (ytId) {
+        setIsTranscribingAI(true);
+        setAiTranscriptionProgress(20);
+        setAiTranscriptionStatusText('Fetching YouTube Transcript...');
+        try {
+          const response = await fetch(`/api/youtube-transcript?v=${ytId}`);
+          if (response.ok) {
+            const transcript = await response.json();
+            let vtt = 'WEBVTT\n\n';
+            transcript.forEach((item, index) => {
+              const formatVttTime = (ms) => {
+                const secondsTotal = ms / 1000;
+                const h = Math.floor(secondsTotal / 3600);
+                const m = Math.floor((secondsTotal % 3600) / 60);
+                const s = Math.floor(secondsTotal % 60);
+                const decMs = Math.floor(ms % 1000);
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(decMs).padStart(3, '0')}`;
+              };
+              const startStr = formatVttTime(item.offset);
+              const endStr = formatVttTime(item.offset + item.duration);
+              vtt += `${index + 1}\n${startStr} --> ${endStr}\n${item.text}\n\n`;
+            });
+
+            if (active) {
+              await setCachedSubtitle(activeSrc, vtt);
+              setLocalSubtitles((prev) => ({
+                ...prev,
+                ['en']: vtt
+              }));
+              setSelectedSubLanguage('en');
+              onSubtitleGenerated?.(vtt, activeSrc);
+            }
+            return;
+          }
+        } catch (ytErr) {
+          console.warn('YouTube transcript fetch failed, falling back to audio transcriber:', ytErr);
+        }
+      }
+
+      // 3. Transcribe audio from scratch using Whisper AI
+      setIsTranscribingAI(true);
+      setAiTranscriptionProgress(0);
+      setAiTranscriptionStatusText('Initializing AI Subtitle Engine...');
+
+      try {
+        const vtt = await transcribeVideoAudio(activeSrc, (progress) => {
+          if (!active) return;
+          if (progress.status === 'downloading-model') {
+            setAiTranscriptionStatusText(progress.message);
+            setAiTranscriptionProgress(progress.percent * 0.4);
+          } else if (progress.status === 'transcribing') {
+            setAiTranscriptionStatusText(progress.message);
+            setAiTranscriptionProgress(40 + (progress.percent * 0.6));
+          } else {
+            setAiTranscriptionStatusText(progress.message);
+          }
+        });
+
+        if (active) {
+          await setCachedSubtitle(activeSrc, vtt);
+          
+          setLocalSubtitles((prev) => ({
+            ...prev,
+            ['en']: vtt
+          }));
+          setSelectedSubLanguage('en');
+          
+          onSubtitleGenerated?.(vtt, activeSrc);
+        }
+      } catch (err) {
+        console.error('Auto AI transcription failed:', err);
+      } finally {
+        if (active) {
+          setIsTranscribingAI(false);
+          setAiTranscriptionProgress(0);
+          setAiTranscriptionStatusText('');
+        }
+      }
+    };
+
+    autoTranscribe();
+    
+    return () => {
+      active = false;
+      transcribingUrlRef.current = null;
+    };
+  }, [activeSrc]);
+
+  // Sync playback rates and volumes
+  useEffect(() => {
+    const video = offscreenVideoRef.current;
+    if (video) {
+      video.playbackRate = playbackRate;
+      video.volume = isMuted ? 0 : volume;
+    }
+  }, [playbackRate, volume, isMuted]);
+
+  // Paint single frame when paused and seeking
+  useEffect(() => {
+    if (!isPlaying) {
+      paintSingleFrame();
+    }
+  }, [currentTime, selectedSubLanguage, isDualSubtitles, primaryCues, secondaryCues, isPlaying, areControlsVisible]);
+
+  // Continuous background canvas rendering loop
+  useEffect(() => {
+    let active = true;
+    
+    const draw = () => {
+      if (!active) return;
+      const video = offscreenVideoRef.current;
+      const canvas = canvasRef.current;
+      
+      if (video && canvas && !video.paused && !video.ended && !video.seeking) {
+        paintSingleFrame();
+      }
+      
+      requestAnimationFrame(draw);
+    };
+    
+    requestAnimationFrame(draw);
+    
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Sync controls visibility timer when play state or dragging state updates
+  useEffect(() => {
+    if (!isPlaying) {
+      setAreControlsVisible(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    } else {
+      triggerControlsVisibility();
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (isDragging) {
+      setAreControlsVisible(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    } else if (isPlaying) {
+      triggerControlsVisibility();
+    }
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (isSettingsOpen) {
+      setAreControlsVisible(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    } else if (isPlaying) {
+      triggerControlsVisibility();
+    }
+  }, [isSettingsOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, []);
+
+  // Handle manual resolution scaling (canvas pixel density) on quality switch
+  useEffect(() => {
+    const video = offscreenVideoRef.current;
+    const canvas = canvasRef.current;
+    if (video && canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+      let targetHeight = video.videoHeight;
+      if (selectedQuality !== 'Auto') {
+        const parsed = parseInt(selectedQuality, 10);
+        if (!isNaN(parsed)) targetHeight = parsed;
+      }
+      const aspectRatio = video.videoWidth / video.videoHeight;
+      canvas.width = Math.round(targetHeight * aspectRatio);
+      canvas.height = targetHeight;
+      
+      if (video.paused) {
+        paintSingleFrame();
+      }
+    }
+  }, [selectedQuality]);
+
+  // Player-scoped keyboard shortcuts (only when the player has focus)
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const handleKeyDown = (e) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (!wrapper.contains(document.activeElement)) {
+        return;
+      }
+
+      const video = offscreenVideoRef.current;
+      if (!video) return;
+
+      switch (e.key.toLowerCase()) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          handlePlayPauseToggle();
+          break;
+        case 'm':
+          e.preventDefault();
+          setIsMuted((prev) => !prev);
+          break;
+        case 'c':
+          e.preventDefault();
+          setSelectedSubLanguage((prev) => {
+            const next = prev === 'none' ? (defaultSubLanguage || 'en') : 'none';
+            onSubLanguageChange?.(next);
+            return next;
+          });
+          break;
+        case 's':
+          e.preventDefault();
+          setIsSettingsOpen(true);
+          setActiveMenu('subtitles');
+          break;
+        case 'f':
+          e.preventDefault();
+          if (!document.fullscreenElement) {
+            wrapper.requestFullscreen().catch(() => {});
+          } else {
+            document.exitFullscreen();
+          }
+          break;
+        case 'arrowleft':
+          e.preventDefault();
+          triggerManualSkip(-5);
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          triggerManualSkip(5);
+          break;
+        case 'j':
+          e.preventDefault();
+          triggerManualSkip(-10);
+          break;
+        case 'l':
+          e.preventDefault();
+          triggerManualSkip(10);
+          break;
+        case 'arrowup':
+          e.preventDefault();
+          setVolume((prev) => Math.min(1, prev + 0.1));
+          setIsMuted(false);
+          break;
+        case 'arrowdown':
+          e.preventDefault();
+          setVolume((prev) => Math.max(0, prev - 0.1));
+          break;
+        default:
+          break;
+      }
+    };
+
+    wrapper.addEventListener('keydown', handleKeyDown);
+    return () => wrapper.removeEventListener('keydown', handleKeyDown);
+  }, [duration, defaultSubLanguage]);
+
+  // Timeline hovering handlers
+  const handleTimelineMouseMove = (e) => {
+    if (!progressBarRef.current || duration === 0) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const hoverX = e.clientX - rect.left;
+    const percent = Math.max(0, Math.min(1, hoverX / rect.width));
+    const hoverTime = percent * duration;
+    setHoverTooltip({ percent, time: hoverTime });
+  };
+
+  const handleTimelineMouseLeave = () => {
+    setHoverTooltip(null);
+  };
+
+  const formatTime = (secs) => {
+    if (isNaN(secs) || secs === Infinity) return '00:00';
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = Math.floor(secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const dualSubtitleLabel = secondarySubLanguage
+    ? `Dual (${selectedSubLanguage.toUpperCase()} + ${secondarySubLanguage.toUpperCase()})`
+    : 'Dual';
+
+  return (
+    <div
+      ref={wrapperRef}
+      className={`tavi-player-wrapper ${!areControlsVisible ? 'hide-cursor' : ''} ${isFullscreen ? 'fullscreen' : ''}`}
+      tabIndex={0}
+      onMouseDown={focusPlayer}
+      onMouseEnter={() => setIsMouseOverPlayer(true)}
+      onMouseMove={triggerControlsVisibility}
+      onMouseLeave={handleMouseLeavePlayer}
+    >
+      {/* Canvas Media Screen */}
+      <div className="tavi-media-screen">
+        {ytId && (
+          <iframe
+            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&controls=1&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&fs=0`}
+            className="tavi-video-element"
+            allow="autoplay; encrypted-media"
+            allowFullScreen={false}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}
+          />
+        )}
+        {!ytId && (
+          <video
+            ref={offscreenVideoRef}
+            className="tavi-native-video"
+            playsInline
+            preload="metadata"
+          />
+        )}
+        <canvas ref={canvasRef} className="tavi-subtitle-canvas" aria-hidden="true" />
+      </div>
+
+      {/* Interaction Shield Blocker */}
+      <div 
+        className="tavi-interaction-blocker" 
+        onClick={handleScreenClick} 
+        style={{ pointerEvents: ytId ? 'none' : 'auto' }}
+      />
+
+      {/* Buffering Overlay */}
+      {isBuffering && (
+        <div className="tavi-buffering-overlay">
+          <div className="tavi-spinner" />
+        </div>
+      )}
+
+      {mediaError && (
+        <div className="tavi-media-error" role="alert">
+          <strong>Unable to play this video</strong>
+          <span>{mediaError}</span>
+        </div>
+      )}
+
+      {/* YouTube Style Left/Right Skip Overlay */}
+      <div className={`tavi-skip-overlay left ${leftSkipActive ? 'active' : ''}`}>
+        <div className="tavi-skip-indicator-box">
+          <div className="tavi-arrow-animation left">
+            <span className="arrow-one">◀</span>
+            <span className="arrow-two">◀</span>
+            <span className="arrow-three">◀</span>
+          </div>
+          <span className="tavi-skip-label">{leftSkipText}</span>
+        </div>
+      </div>
+
+      <div className={`tavi-skip-overlay right ${rightSkipActive ? 'active' : ''}`}>
+        <div className="tavi-skip-indicator-box">
+          <div className="tavi-arrow-animation right">
+            <span className="arrow-one">▶</span>
+            <span className="arrow-two">▶</span>
+            <span className="arrow-three">▶</span>
+          </div>
+          <span className="tavi-skip-label">{rightSkipText}</span>
+        </div>
+      </div>
+
+      {/* YouTube Style Center Play/Pause Flash Overlay */}
+      {centerFlash && (
+        <div 
+          key={centerFlash.key} 
+          className={`tavi-center-action-flash tavi-center-flash-${centerFlash.type}`}
+        >
+          <div className="tavi-center-flash-icon">
+            {centerFlash.type === 'play' ? <PlayIconLarge /> : <PauseIconLarge />}
+          </div>
+        </div>
+      )}
+
+      {/* Subtitles Overlay disabled in DOM - drawn directly in canvas */}
+
+      {/* Controls HUD */}
+      <div className={`tavi-controls-bar ${!areControlsVisible ? 'hidden' : ''} ${!isMouseOverPlayer ? 'mouse-outside' : ''}`}>
+        {/* Timeline Scrubber */}
+        <div 
+          className={`timeline-scrubber-wrapper ${isDragging ? 'dragging' : ''}`}
+          ref={progressBarRef} 
+          onMouseDown={handleTimelineMouseDown}
+          onMouseMove={handleTimelineMouseMove}
+          onMouseLeave={handleTimelineMouseLeave}
+        >
+          <div className="timeline-trail" />
+          <div
+            className="timeline-progress"
+            style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+          />
+          <div
+            className="timeline-thumb"
+            style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+          />
+          {hoverTooltip && (
+            <div 
+              className="timeline-tooltip"
+              style={{ left: `${hoverTooltip.percent * 100}%` }}
+            >
+              {formatTime(hoverTooltip.time)}
+            </div>
+          )}
+        </div>
+
+        <div className="controls-row">
+          <div className="controls-left">
+            <button 
+              type="button"
+              className="control-btn" 
+              onClick={handlePlayPauseToggle}
+              title={isPlaying ? "Pause (space or k)" : "Play (space or k)"}
+            >
+              {isPlaying ? <PauseIcon /> : <PlayIcon />}
+            </button>
+
+            {/* Volume Control Container with Hover Slider */}
+            <div className="volume-control-container">
+              <button 
+                type="button"
+                className="control-btn" 
+                onClick={() => setIsMuted(!isMuted)}
+                title={isMuted ? "Unmute (m)" : "Mute (m)"}
+              >
+                {isMuted || volume === 0 ? <VolumeMuteIcon /> : <VolumeHighIcon />}
+              </button>
+              <input 
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setVolume(val);
+                  if (val > 0 && isMuted) setIsMuted(false);
+                }}
+                className="volume-slider"
+              />
+            </div>
+
+            <span className="timestamp-display">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+
+          <div className="controls-right">
+            {/* Autoplay Toggle Switch */}
+            <button 
+              type="button"
+              className="control-btn autoplay-btn" 
+              onClick={() => setIsAutoplay(prev => !prev)}
+              title={isAutoplay ? "Autoplay is on" : "Autoplay is off"}
+              style={{ padding: '0 6px', display: 'flex', alignItems: 'center' }}
+            >
+              <AutoplayIcon active={isAutoplay} />
+            </button>
+
+            {/* CC Toggle Button */}
+            {availableSubLangs.length > 0 && (
+              <button 
+                type="button"
+                className={`control-btn cc-btn ${selectedSubLanguage !== 'none' ? 'active' : ''}`}
+                onClick={handleCCToggle}
+                title={selectedSubLanguage !== 'none' ? "Subtitles/closed captions (c) - Active" : "Subtitles/closed captions (c)"}
+              >
+                <CCIcon />
+              </button>
+            )}
+
+            {/* Settings Gear Button with optional HD Badge */}
+            <button 
+              type="button"
+              className="control-btn settings-btn" 
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              title="Settings"
+              style={{ position: 'relative' }}
+            >
+              <GearIcon />
+              {(selectedQuality.includes('720') || selectedQuality.includes('1080') || selectedQuality.includes('1440') || selectedQuality.includes('2160') || (selectedQuality === 'Auto' && hlsRef.current && hlsRef.current.currentLevel !== -1)) && (
+                <span className="hd-badge">HD</span>
+              )}
+            </button>
+
+
+            {/* Fullscreen Button */}
+            <button 
+              type="button"
+              className="control-btn" 
+              onClick={handleFullscreenToggle}
+              title={isFullscreen ? "Exit full screen (f)" : "Full screen (f)"}
+            >
+              {isFullscreen ? <FullscreenExitIcon /> : <FullscreenEnterIcon />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Multi-Level Settings Cards */}
+      {isSettingsOpen && (
+        <div 
+          className="tavi-settings-card"
+          style={
+            activeMenu === 'speed' 
+              ? { width: '280px' } 
+              : activeMenu === 'subtitles' 
+                ? { width: '260px', maxHeight: '340px', display: 'flex', flexDirection: 'column' } 
+                : {}
+          }
+        >
+          {activeMenu === 'main' && (
+            <div className="settings-list">
+              <div className="settings-item" onClick={() => setActiveMenu('speed')}>
+                <span>Playback Speed</span>
+                <span className="value-label">{playbackRate}x ›</span>
+              </div>
+              <div className="settings-item" onClick={() => { setActiveMenu('subtitles'); setSubtitlesSearchQuery(''); }}>
+                <span>Subtitles</span>
+                <span className="value-label">
+                  {isDualSubtitles ? 'Dual' : (!selectedSubLanguage || selectedSubLanguage === 'none' ? 'Off' : (selectedSubLanguage.startsWith?.('embedded-') ? (embeddedTracks.find(t => t.id === selectedSubLanguage)?.label || 'Embedded') : (LANGUAGE_NAMES[selectedSubLanguage] || (selectedSubLanguage || '').toUpperCase())))} ›
+                </span>
+              </div>
+              {Object.keys(audioDubs).length > 0 && (
+                <div className="settings-item" onClick={() => setActiveMenu('audio')}>
+                  <span>Audio Track</span>
+                  <span className="value-label">
+                    {selectedAudioLanguage === 'original' ? 'Original' : (LANGUAGE_NAMES[selectedAudioLanguage] || selectedAudioLanguage.toUpperCase())} ›
+                  </span>
+                </div>
+              )}
+              {displayQualities.length > 0 && (
+                <div className="settings-item" onClick={() => setActiveMenu('quality')}>
+                  <span>Quality</span>
+                  <span className="value-label">{selectedQuality} ›</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeMenu === 'speed' && (
+            <div className="settings-submenu" style={{ padding: '6px 0' }}>
+              <div 
+                className="submenu-header" 
+                onClick={() => setActiveMenu('main')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  cursor: 'pointer', 
+                  padding: '10px 16px', 
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  color: '#ffffff',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'translateY(-1px)' }}>
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                <span>Playback speed</span>
+              </div>
+              
+              {/* Big Centered Current Speed Display */}
+              <div style={{ display: 'flex', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', color: '#ffffff', margin: '18px 0 10px 0', fontFamily: 'system-ui, sans-serif' }}>
+                {playbackRate.toFixed(2)}x
+              </div>
+
+              {/* Slider Row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', gap: '10px', marginBottom: '18px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPlaybackRate(prev => Math.max(0.25, parseFloat((prev - 0.05).toFixed(2))))}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background-color 0.2s',
+                    paddingBottom: '2px'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)'}
+                >
+                  —
+                </button>
+                <input 
+                  type="range"
+                  min="0.25"
+                  max="3.0"
+                  step="0.05"
+                  value={playbackRate}
+                  onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                  style={{
+                    flexGrow: 1,
+                    height: '4px',
+                    background: `linear-gradient(to right, #ffffff 0%, #ffffff ${((playbackRate - 0.25) / 2.75) * 100}%, rgba(255, 255, 255, 0.15) ${((playbackRate - 0.25) / 2.75) * 100}%, rgba(255, 255, 255, 0.15) 100%)`,
+                    borderRadius: '2px',
+                    outline: 'none',
+                    WebkitAppearance: 'none',
+                    cursor: 'pointer',
+                    margin: 0
+                  }}
+                  className="speed-range-input-custom"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPlaybackRate(prev => Math.min(3.0, parseFloat((prev + 0.05).toFixed(2))))}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)'}
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Horizontal Presets Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 16px 12px 16px', gap: '4px', borderBottom: 'none' }}>
+                {/* 1.0 Preset */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPlaybackRate(1.0)}
+                    style={{
+                      height: '28px',
+                      backgroundColor: Math.abs(playbackRate - 1.0) < 0.01 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: Math.abs(playbackRate - 1.0) < 0.01 ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '14px',
+                      color: '#ffffff',
+                      padding: '0 12px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    1.0
+                  </button>
+                  <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: '500' }}>Normal</span>
+                </div>
+
+                {/* 1.25 Preset */}
+                <button
+                  type="button"
+                  onClick={() => setPlaybackRate(1.25)}
+                  style={{
+                    height: '28px',
+                    backgroundColor: Math.abs(playbackRate - 1.25) < 0.01 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: Math.abs(playbackRate - 1.25) < 0.01 ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '14px',
+                    color: '#ffffff',
+                    padding: '0 12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  1.25
+                </button>
+
+                {/* 1.5 Preset */}
+                <button
+                  type="button"
+                  onClick={() => setPlaybackRate(1.5)}
+                  style={{
+                    height: '28px',
+                    backgroundColor: Math.abs(playbackRate - 1.5) < 0.01 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: Math.abs(playbackRate - 1.5) < 0.01 ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '14px',
+                    color: '#ffffff',
+                    padding: '0 12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  1.5
+                </button>
+
+                {/* 2.0 Preset */}
+                <button
+                  type="button"
+                  onClick={() => setPlaybackRate(2.0)}
+                  style={{
+                    height: '28px',
+                    backgroundColor: Math.abs(playbackRate - 2.0) < 0.01 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: Math.abs(playbackRate - 2.0) < 0.01 ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '14px',
+                    color: '#ffffff',
+                    padding: '0 12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  2.0
+                </button>
+
+                {/* 3.0 Preset */}
+                <button
+                  type="button"
+                  onClick={() => setPlaybackRate(3.0)}
+                  style={{
+                    height: '28px',
+                    backgroundColor: Math.abs(playbackRate - 3.0) < 0.01 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: Math.abs(playbackRate - 3.0) < 0.01 ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '14px',
+                    color: '#ffffff',
+                    padding: '0 12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  3.0
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'subtitles' && (
+            <div className="settings-submenu" style={{ flex: 1, maxHeight: '320px', display: 'flex', flexDirection: 'column' }}>
+              <div className="submenu-header" onClick={() => setActiveMenu('main')}>
+                ‹ Subtitles/CC
+              </div>
+              
+              {/* Search input field */}
+              <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', boxSizing: 'border-box' }}>
+                <input
+                  type="text"
+                  placeholder="Search language..."
+                  value={subtitlesSearchQuery}
+                  onChange={(e) => setSubtitlesSearchQuery(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    color: '#fff',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Scrollable list */}
+              <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1, minHeight: '140px', maxHeight: '200px', paddingBottom: '8px' }}>
+                {(!subtitlesSearchQuery || 'off'.includes(subtitlesSearchQuery.toLowerCase())) && (
+                  <div
+                    className={`submenu-item ${selectedSubLanguage === 'none' && !isDualSubtitles ? 'active' : ''}`}
+                    style={{ padding: '6px 16px' }}
+                    onClick={() => {
+                      setSelectedSubLanguage('none');
+                      setIsDualSubtitles(false);
+                      setIsSettingsOpen(false);
+                      setActiveMenu('main');
+                      onSubLanguageChange?.('none');
+                      requestAnimationFrame(() => paintSingleFrame());
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      {selectedSubLanguage === 'none' && !isDualSubtitles && <CheckIcon />}
+                      <span>Off</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Render Embedded (extracted) tracks */}
+                {embeddedTracks.map((track) => {
+                  const isSelected = selectedSubLanguage === track.id;
+                  if (subtitlesSearchQuery && !track.label.toLowerCase().includes(subtitlesSearchQuery.toLowerCase())) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={track.id}
+                      className={`submenu-item ${!isDualSubtitles && isSelected ? 'active' : ''}`}
+                      style={{ padding: '6px 16px', color: '#10b981' }}
+                      onClick={() => {
+                        setSelectedSubLanguage(track.id);
+                        setIsDualSubtitles(false);
+                        setIsSettingsOpen(false);
+                        setActiveMenu('main');
+                        onSubLanguageChange?.(track.id);
+                        requestAnimationFrame(() => paintSingleFrame());
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {!isDualSubtitles && isSelected && <CheckIcon />}
+                        <span style={{ fontSize: '11px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '190px' }}>
+                          🎥 {track.label} (Embedded)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Local user-uploaded subtitle files */}
+                {Object.keys(localSubtitles).map((fileName) => (
+                  <div
+                    key={fileName}
+                    className={`submenu-item ${!isDualSubtitles && selectedSubLanguage === fileName ? 'active' : ''}`}
+                    style={{ padding: '6px 16px', color: '#818cf8' }}
+                    onClick={() => {
+                      setSelectedSubLanguage(fileName);
+                      setIsDualSubtitles(false);
+                      setIsSettingsOpen(false);
+                      setActiveMenu('main');
+                      onSubLanguageChange?.(fileName);
+                      requestAnimationFrame(() => paintSingleFrame());
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      {!isDualSubtitles && selectedSubLanguage === fileName && <CheckIcon />}
+                      <span style={{ fontSize: '11px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '190px' }}>
+                        📄 {fileName}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+                {availableSubLangs.length >= 2 && (!subtitlesSearchQuery || 'dual'.includes(subtitlesSearchQuery.toLowerCase())) && (
+                  <div
+                    className={`submenu-item ${isDualSubtitles ? 'active' : ''}`}
+                    style={{ padding: '6px 16px' }}
+                    onClick={() => {
+                      setIsDualSubtitles(true);
+                      setIsSettingsOpen(false);
+                      setActiveMenu('main');
+                      requestAnimationFrame(() => paintSingleFrame());
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      {isDualSubtitles && <CheckIcon />}
+                      <span>{dualSubtitleLabel}</span>
+                    </div>
+                  </div>
+                )}
+
+                {sortedAndFilteredLangs.map((langObj) => {
+                  const lang = langObj.code;
+                  return (
+                    <div
+                      key={lang}
+                      className={`submenu-item ${!isDualSubtitles && selectedSubLanguage === lang ? 'active' : ''}`}
+                      style={{ padding: '6px 16px' }}
+                      onClick={() => {
+                        setSelectedSubLanguage(lang);
+                        setIsDualSubtitles(false);
+                        setIsSettingsOpen(false);
+                        setActiveMenu('main');
+                        onSubLanguageChange?.(lang);
+                        requestAnimationFrame(() => paintSingleFrame());
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {!isDualSubtitles && selectedSubLanguage === lang && <CheckIcon />}
+                        <span>{langObj.name}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {sortedAndFilteredLangs.length === 0 && Object.keys(localSubtitles).length === 0 && embeddedTracks.length === 0 && (
+                  <div style={{ padding: '16px 12px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>
+                    No subtitle languages found
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'audio' && (
+            <div className="settings-submenu">
+              <div className="submenu-header" onClick={() => setActiveMenu('main')}>
+                ‹ Back to Settings
+              </div>
+              <div
+                className={`submenu-item ${selectedAudioLanguage === 'original' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedAudioLanguage('original');
+                  setActiveMenu('main');
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  {selectedAudioLanguage === 'original' && <CheckIcon />}
+                  <span>Original</span>
+                </div>
+              </div>
+              {Object.keys(audioDubs).map((lang) => (
+                <div
+                  key={lang}
+                  className={`submenu-item ${selectedAudioLanguage === lang ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedAudioLanguage(lang);
+                    setActiveMenu('main');
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    {selectedAudioLanguage === lang && <CheckIcon />}
+                    <span>{LANGUAGE_NAMES[lang] || lang.toUpperCase()} (Translation)</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeMenu === 'quality' && (
+            <div className="settings-submenu">
+              <div className="submenu-header" onClick={() => setActiveMenu('main')}>
+                ‹ Back to Settings
+              </div>
+              <div
+                className={`submenu-item ${selectedQuality === 'Auto' ? 'active' : ''}`}
+                onClick={handleAutoQuality}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  {selectedQuality === 'Auto' && <CheckIcon />}
+                  <span>Auto</span>
+                </div>
+              </div>
+              {displayQualities.map((q) => {
+                const isHD = q.label.includes('1080') || q.label.includes('720') || q.label.includes('1440') || q.label.includes('2160');
+                const badgeText = q.label.includes('2160') ? '4K' : 'HD';
+                return (
+                  <div
+                    key={q.label}
+                    className={`submenu-item ${selectedQuality === q.label ? 'active' : ''}`}
+                    onClick={() => handleQualityChange(q)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {selectedQuality === q.label && <CheckIcon />}
+                        <span>
+                          {q.label}
+                          {isHD && (
+                            <sup style={{ fontSize: '8px', marginLeft: '4px', color: '#818cf8', fontWeight: 'bold' }}>
+                              {badgeText}
+                            </sup>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".vtt,.srt"
+        onChange={handleLocalSubtitleUpload}
+        style={{ display: 'none' }}
+      />
+      <SubtitleEditorModal
+        isOpen={isEditorOpen}
+        onClose={() => setIsEditorOpen(false)}
+        subtitles={combinedSubtitles}
+        onUpdateSubtitles={(lang, newVtt) => {
+          if (newVtt === null) {
+            setLocalSubtitles(prev => {
+              const copy = { ...prev };
+              delete copy[lang];
+              return copy;
+            });
+            onUpdateSubtitles?.(lang, null);
+          } else {
+            setLocalSubtitles(prev => ({
+              ...prev,
+              [lang]: newVtt
+            }));
+            onUpdateSubtitles?.(lang, newVtt);
+          }
+          requestAnimationFrame(() => paintSingleFrame());
+        }}
+        currentTime={currentTime}
+        onSeekTo={(t) => {
+          if (offscreenVideoRef.current) offscreenVideoRef.current.currentTime = t;
+          setCurrentTime(t);
+        }}
+      />
+    </div>
+  );
+});
+
+TaviVideoPlayer.displayName = 'TaviVideoPlayer';
+export default TaviVideoPlayer;

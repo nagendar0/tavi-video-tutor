@@ -1,0 +1,157 @@
+{
+  "recorded-demo": {
+    "id": "recorded-demo",
+    "src": "/demo-video.mp4",
+    "sourceLanguage": "en",
+    "language": "en",
+    "subtitle": "/aitutor/subtitles/recorded-demo/en.vtt",
+    "subtitles": {
+      "en": {
+        "src": "/aitutor/subtitles/recorded-demo/en.vtt",
+        "label": "English",
+        "name": "English"
+      },
+      "te": {
+        "src": "/aitutor/subtitles/recorded-demo/te.vtt",
+        "label": "తెలుగు",
+        "name": "Telugu"
+      },
+      "hi": {
+        "src": "/aitutor/subtitles/recorded-demo/hi.vtt",
+        "label": "हिन्दी",
+        "name": "Hindi"
+      },
+      "es": {
+        "src": "/aitutor/subtitles/recorded-demo/es.vtt",
+        "label": "Español",
+        "name": "Spanish"
+      }
+    },
+    "fingerprint": "d8dad3bb2a50d2e2",
+    "updatedAt": "2026-08-03T08:29:24.453Z"
+  },
+  "sample-local": {
+    "id": "sample-local",
+    "src": "/sample.mp4",
+    "sourceLanguage": "en",
+    "language": "en",
+    "subtitle": "/aitutor/subtitles/sample-local/en.vtt",
+    "subtitles": {
+      "en": {
+        "src": "/aitutor/subtitles/sample-local/en.vtt",
+        "label": "English",
+        "name": "English"
+      },
+      "te": {
+        "src": "/aitutor/subtitles/sample-local/te.vtt",
+        "label": "తెలుగు",
+        "name": "Telugu"
+      },
+      "hi": {
+        "src": "/aitutor/subtitles/sample-local/hi.vtt",
+        "label": "हिन्दी",
+        "name": "Hindi"
+      },
+      "es": {
+        "src": "/aitutor/subtitles/sample-local/es.vtt",
+        "label": "Español",
+        "name": "Spanish"
+      }
+    },
+    "fingerprint": "571dcf8d8220d9c3",
+    "updatedAt": "2026-08-03T08:29:50.485Z"
+  },
+  "math-edu": {
+    "id": "math-edu",
+    "src": "/math-edu.mp4",
+    "sourceLanguage": "en",
+    "language": "en",
+    "subtitle": "/aitutor/subtitles/math-edu/en.vtt",
+    "subtitles": {
+      "en": {
+        "src": "/aitutor/subtitles/math-edu/en.vtt",
+        "label": "English",
+        "name": "English"
+      },
+      "te": {
+        "src": "/aitutor/subtitles/math-edu/te.vtt",
+        "label": "తెలుగు",
+        "name": "Telugu"
+      },
+      "hi": {
+        "src": "/aitutor/subtitles/math-edu/hi.vtt",
+        "label": "हिन्दी",
+        "name": "Hindi"
+      },
+      "es": {
+        "src": "/aitutor/subtitles/math-edu/es.vtt",
+        "label": "Español",
+        "name": "Spanish"
+      }
+    },
+    "fingerprint": "2c5b2583ee934232",
+    "updatedAt": "2026-08-03T08:30:17.076Z"
+  },
+  "science-edu": {
+    "id": "science-edu",
+    "src": "/science-edu.mp4",
+    "sourceLanguage": "en",
+    "language": "en",
+    "subtitle": "/aitutor/subtitles/science-edu/en.vtt",
+    "subtitles": {
+      "en": {
+        "src": "/aitutor/subtitles/science-edu/en.vtt",
+        "label": "English",
+        "name": "English"
+      },
+      "te": {
+        "src": "/aitutor/subtitles/science-edu/te.vtt",
+        "label": "తెలుగు",
+        "name": "Telugu"
+      },
+      "hi": {
+        "src": "/aitutor/subtitles/science-edu/hi.vtt",
+        "label": "हिन्दी",
+        "name": "Hindi"
+      },
+      "es": {
+        "src": "/aitutor/subtitles/science-edu/es.vtt",
+        "label": "Español",
+        "name": "Spanish"
+      }
+    },
+    "fingerprint": "e23fc12aa8134a8a",
+    "updatedAt": "2026-08-03T08:30:22.052Z"
+  },
+  "non-english-edu": {
+    "id": "non-english-edu",
+    "src": "/non-english-edu.mp4",
+    "sourceLanguage": "en",
+    "language": "en",
+    "subtitle": "/aitutor/subtitles/non-english-edu/en.vtt",
+    "subtitles": {
+      "en": {
+        "src": "/aitutor/subtitles/non-english-edu/en.vtt",
+        "label": "English",
+        "name": "English"
+      },
+      "te": {
+        "src": "/aitutor/subtitles/non-english-edu/te.vtt",
+        "label": "తెలుగు",
+        "name": "Telugu"
+      },
+      "hi": {
+        "src": "/aitutor/subtitles/non-english-edu/hi.vtt",
+        "label": "हिन्दी",
+        "name": "Hindi"
+      },
+      "es": {
+        "src": "/aitutor/subtitles/non-english-edu/es.vtt",
+        "label": "Español",
+        "name": "Spanish"
+      }
+    },
+    "fingerprint": "8cc80b3cb482f2d8",
+    "updatedAt": "2026-08-03T08:31:05.429Z"
+  }
+}

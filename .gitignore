@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs & internal caches
+dist/
+build/
+.aitutor/
+.ag-kit-backups/
+scratch/
+*.log
+
+# Heavy binaries & media assets
+bin/*.exe
+bin/*.dll
+*.mp4
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Temporary test audio
+dummy.wav

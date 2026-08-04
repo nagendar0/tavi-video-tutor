@@ -1,0 +1,214 @@
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { getLanguageByCode } from '../languages/registry.js';
+
+export const computeMediaFingerprint = (srcOrEntry, cwd = process.cwd(), extra = null, remoteMetadata = null) => {
+  const src = typeof srcOrEntry === 'string' ? srcOrEntry : (srcOrEntry && srcOrEntry.src ? srcOrEntry.src : '');
+  if (!src) {
+    return crypto.createHash('sha256').update(JSON.stringify({ src: '', extra })).digest('hex').substring(0, 16);
+  }
+
+  // 1. Remote HTTP/HTTPS URL Media Identity
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    let cleanUrl = src;
+    try {
+      const parsed = new URL(src);
+      // Clean sensitive/ephemeral query tokens so identical videos with different signed tokens match if remote metadata matches
+      const sensitiveKeys = ['token', 'signature', 'key', 'expires', 'auth', 'sig', 'access_token', 'apiKey'];
+      sensitiveKeys.forEach(k => {
+        parsed.searchParams.forEach((_, pKey) => {
+          if (pKey.toLowerCase().includes(k.toLowerCase())) {
+            parsed.searchParams.delete(pKey);
+          }
+        });
+      });
+      cleanUrl = parsed.toString();
+    } catch (_) {}
+
+    const payload = JSON.stringify({
+      url: cleanUrl,
+      etag: remoteMetadata?.etag || null,
+      lastModified: remoteMetadata?.lastModified || null,
+      contentLength: remoteMetadata?.contentLength || null,
+      extra
+    });
+    return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 16);
+  }
+
+  // 2. Local File Media Identity
+  let localPath = path.isAbsolute(src) ? src : path.join(cwd, src);
+  if (!fs.existsSync(localPath) && src.startsWith('/')) {
+    const publicPath = path.join(cwd, 'public', src.slice(1));
+    if (fs.existsSync(publicPath)) {
+      localPath = publicPath;
+    }
+  }
+
+  if (fs.existsSync(localPath)) {
+    try {
+      const canonicalPath = path.normalize(fs.realpathSync.native ? fs.realpathSync.native(localPath) : fs.realpathSync(localPath)).replace(/\\/g, '/');
+      const stat = fs.statSync(localPath);
+      const size = stat.size;
+      const mtimeMs = stat.mtimeMs;
+
+      let contentSample = '';
+      if (size <= 2 * 1024 * 1024) { // <= 2MB: read full file into hash
+        const buf = fs.readFileSync(localPath);
+        contentSample = crypto.createHash('sha256').update(buf).digest('hex');
+      } else { // > 2MB: sampled head (64KB), middle (64KB), tail (64KB)
+        const fd = fs.openSync(localPath, 'r');
+        const chunkSize = 64 * 1024;
+        const headBuf = Buffer.alloc(chunkSize);
+        const midBuf = Buffer.alloc(chunkSize);
+        const tailBuf = Buffer.alloc(chunkSize);
+
+        fs.readSync(fd, headBuf, 0, chunkSize, 0);
+        fs.readSync(fd, midBuf, 0, chunkSize, Math.floor(size / 2));
+        fs.readSync(fd, tailBuf, 0, chunkSize, size - chunkSize);
+        fs.closeSync(fd);
+
+        contentSample = crypto.createHash('sha256')
+          .update(headBuf)
+          .update(midBuf)
+          .update(tailBuf)
+          .digest('hex');
+      }
+
+      const payload = JSON.stringify({
+        path: canonicalPath,
+        size,
+        mtimeMs,
+        sample: contentSample,
+        extra
+      });
+
+      return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 16);
+    } catch (_) {
+      // Fallback on read error
+    }
+  }
+
+  // Fallback string hash
+  const payload = extra ? JSON.stringify({ src: String(src || ''), extra }) : String(src || '');
+  return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 16);
+};
+
+export const computeFingerprint = (src, extra = null, cwd = process.cwd()) => {
+  return computeMediaFingerprint(src, cwd, extra);
+};
+
+export class ManifestStore {
+  constructor(cwd = process.cwd()) {
+    this.cwd = cwd;
+    this.internalDir = path.join(cwd, '.aitutor');
+    this.internalSubDir = path.join(this.internalDir, 'subtitles');
+    this.internalManifestPath = path.join(this.internalDir, 'manifest.json');
+
+    this.publicDir = path.join(cwd, 'public', 'aitutor');
+    this.publicSubDir = path.join(this.publicDir, 'subtitles');
+    this.publicManifestPath = path.join(this.publicDir, 'manifest.json');
+
+    fs.mkdirSync(this.internalSubDir, { recursive: true });
+    fs.mkdirSync(this.publicSubDir, { recursive: true });
+  }
+
+  loadManifest() {
+    if (fs.existsSync(this.internalManifestPath)) {
+      try {
+        return JSON.parse(fs.readFileSync(this.internalManifestPath, 'utf8'));
+      } catch (_) {
+        return {};
+      }
+    }
+    return {};
+  }
+
+  isCached(videoEntry, force = false, extraFingerprint = null) {
+    if (force) return false;
+
+    const manifest = this.loadManifest();
+    const entry = manifest[videoEntry.id];
+    const fingerprint = extraFingerprint || computeMediaFingerprint(videoEntry, this.cwd);
+
+    if (!entry || entry.fingerprint !== fingerprint) {
+      return false;
+    }
+
+    const requestedLangs = Array.isArray(videoEntry.languages) ? videoEntry.languages : ['en'];
+    return requestedLangs.every(lang => this.isLanguageCached(videoEntry.id, lang, fingerprint));
+  }
+
+  isLanguageCached(videoId, langCode, fingerprint = null) {
+    const manifest = this.loadManifest();
+    const entry = manifest[videoId];
+    if (!entry) return false;
+    if (fingerprint && entry.fingerprint !== fingerprint) return false;
+
+    const subInfo = entry.subtitles?.[langCode] || (entry.language === langCode ? { src: entry.subtitle } : null);
+    if (!subInfo || !subInfo.src) return false;
+
+    const publicPath = path.join(this.publicDir, subInfo.src.replace('/aitutor/', ''));
+    return fs.existsSync(publicPath);
+  }
+
+  saveSubtitle(videoEntry, vttContent, language = 'en', extraFingerprint = null) {
+    return this.saveMultilingualSubtitles(videoEntry, language, { [language]: vttContent }, extraFingerprint)[language]?.src;
+  }
+
+  saveMultilingualSubtitles(videoEntry, sourceLanguage, subtitlesMap, extraFingerprint = null) {
+    const manifest = this.loadManifest();
+    const videoSubDirName = videoEntry.id;
+    
+    const internalVideoDir = path.join(this.internalSubDir, videoSubDirName);
+    const publicVideoDir = path.join(this.publicSubDir, videoSubDirName);
+
+    fs.mkdirSync(internalVideoDir, { recursive: true });
+    fs.mkdirSync(publicVideoDir, { recursive: true });
+
+    const fingerprint = extraFingerprint || computeMediaFingerprint(videoEntry, this.cwd);
+    const existingEntry = manifest[videoEntry.id] || {};
+    const subtitlesEntryMap = existingEntry.subtitles || {};
+
+    Object.entries(subtitlesMap).forEach(([langCode, vttContent]) => {
+      const filename = `${langCode}.vtt`;
+      const internalFilePath = path.join(internalVideoDir, filename);
+      const publicFilePath = path.join(publicVideoDir, filename);
+      const publicUrl = `/aitutor/subtitles/${videoSubDirName}/${filename}`;
+
+      // Write files
+      fs.writeFileSync(internalFilePath, vttContent, 'utf8');
+      fs.writeFileSync(publicFilePath, vttContent, 'utf8');
+
+      // Legacy flat copy for backwards compatibility
+      const flatFilename = `${videoEntry.id}.${langCode}.vtt`;
+      fs.writeFileSync(path.join(this.internalSubDir, flatFilename), vttContent, 'utf8');
+      fs.writeFileSync(path.join(this.publicSubDir, flatFilename), vttContent, 'utf8');
+
+      const langMeta = getLanguageByCode(langCode);
+      const label = langMeta ? (langMeta.nativeName || langMeta.name) : langCode;
+
+      subtitlesEntryMap[langCode] = {
+        src: publicUrl,
+        label: label,
+        name: langMeta ? langMeta.name : langCode
+      };
+    });
+
+    manifest[videoEntry.id] = {
+      id: videoEntry.id,
+      src: videoEntry.src,
+      sourceLanguage: sourceLanguage || 'en',
+      language: sourceLanguage || 'en',
+      subtitle: subtitlesEntryMap['en']?.src || Object.values(subtitlesEntryMap)[0]?.src || '',
+      subtitles: subtitlesEntryMap,
+      fingerprint: fingerprint,
+      updatedAt: new Date().toISOString()
+    };
+
+    fs.writeFileSync(this.internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    fs.writeFileSync(this.publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+    return subtitlesEntryMap;
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "qa:subtitle": "npm --prefix packages/tavi-video-tutor run qa:subtitle"
+  },
+  "devDependencies": {
+    "eslint": "^10.8.0",
+    "prettier": "3.9.4"
+  },
+  "dependencies": {
+    "intellisense": "^0.0.1",
+    "path": "^0.12.7"
+  }
+}

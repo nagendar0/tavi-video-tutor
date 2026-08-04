@@ -1,0 +1,780 @@
+/* Base Player Container */
+.tavi-player-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  background-color: #030712;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+  outline: none;
+}
+
+.tavi-player-wrapper:focus-visible {
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.6);
+}
+
+.tavi-player-wrapper.hide-cursor,
+.tavi-player-wrapper.hide-cursor * {
+  cursor: none !important;
+}
+
+/* Video Frame Screen */
+.tavi-media-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.tavi-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: none;
+}
+
+/* The native video is the reliable media layer; the canvas above it only
+   renders subtitles and status overlays. */
+.tavi-native-video,
+.tavi-subtitle-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.tavi-native-video {
+  z-index: 0;
+  object-fit: contain;
+  background: #030712;
+}
+
+.tavi-subtitle-canvas {
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Interaction Shield Blocker */
+.tavi-interaction-blocker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100% - 50px);
+  z-index: 2;
+  background: transparent;
+  cursor: default;
+}
+
+.tavi-controls-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  z-index: 3;
+  background: transparent;
+  overflow: visible;
+  transform: translateY(0);
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.tavi-controls-bar.hidden {
+  transform: translateY(44px);
+}
+
+.tavi-controls-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%);
+  z-index: -1;
+  opacity: 1;
+  transition: opacity 0.15s cubic-bezier(0, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.tavi-controls-bar.hidden::before {
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Controls Buttons & Info Row */
+.controls-row {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 44px;
+  padding: 0 20px 4px 20px;
+  box-sizing: border-box;
+  opacity: 1;
+  transition: opacity 0.15s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.tavi-controls-bar.hidden .controls-row {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Left controls group */
+.controls-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Right controls group */
+.controls-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.control-btn {
+  background: none;
+  border: none;
+  color: #f3f4f6;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.control-btn:active {
+  transform: scale(0.92);
+}
+
+.control-btn.cc-btn {
+  position: relative;
+}
+
+.control-btn.cc-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+  background-color: #ef4444; /* YouTube-like red indicator */
+  border-radius: 1.5px;
+}
+
+.control-btn.settings-btn {
+  position: relative;
+}
+
+.hd-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  background-color: #ef4444; /* Red badge */
+  color: #ffffff;
+  font-size: 7px;
+  font-weight: 800;
+  padding: 1px 3px;
+  border-radius: 2px;
+  line-height: 1;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, sans-serif;
+  letter-spacing: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.timestamp-display {
+  color: #d1d5db;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+}
+
+/* Scrubber Timeline - Full Width at Top of HUD */
+.timeline-scrubber-wrapper {
+  position: absolute;
+  bottom: 44px;
+  left: 0;
+  right: 0;
+  width: calc(100% - 32px);
+  margin: 0 16px;
+  height: 12px;
+  display: flex;
+  align-items: flex-start;
+  cursor: pointer;
+  z-index: 5;
+  box-sizing: border-box;
+  transition: bottom 0.2s cubic-bezier(0.25, 1, 0.5, 1), width 0.2s cubic-bezier(0.25, 1, 0.5, 1), margin 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* When controls are hidden (during playback), show the mini progress bar */
+.tavi-controls-bar.hidden .timeline-scrubber-wrapper {
+  bottom: 32px;
+  width: 100%;
+  margin: 0;
+  opacity: 1;
+  pointer-events: none; /* prevent click tracking when hidden */
+  transition: bottom 0.2s cubic-bezier(0.25, 1, 0.5, 1), width 0.2s cubic-bezier(0.25, 1, 0.5, 1), margin 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Force scale(0) on timeline thumb/knob when controls are hidden to avoid visual glitches */
+.tavi-controls-bar.hidden .timeline-scrubber-wrapper .timeline-thumb {
+  transform: translate(-50%, -50%) scale(0) !important;
+}
+
+/* In fullscreen mode, when controls are hidden, hide the progress bar completely for distraction-free viewing */
+.tavi-player-wrapper.fullscreen .tavi-controls-bar.hidden .timeline-scrubber-wrapper {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.timeline-trail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: height 0.1s ease;
+}
+
+.timeline-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  background: #ef4444; /* YouTube red fill */
+  transition: height 0.1s ease;
+}
+
+.timeline-thumb {
+  position: absolute;
+  top: 1.5px; /* Aligned vertically with 3px height bar */
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #ef4444; /* YouTube red knob */
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.1s ease;
+}
+
+.timeline-scrubber-wrapper:hover .timeline-trail,
+.timeline-scrubber-wrapper:hover .timeline-progress,
+.timeline-scrubber-wrapper.dragging .timeline-trail,
+.timeline-scrubber-wrapper.dragging .timeline-progress {
+  height: 5px;
+}
+
+.timeline-scrubber-wrapper:hover .timeline-thumb,
+.timeline-scrubber-wrapper.dragging .timeline-thumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Settings Menu Card */
+.tavi-settings-card {
+  position: absolute;
+  bottom: 56px;
+  right: 24px;
+  width: 200px;
+  z-index: 4;
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  padding: 8px 0;
+  overflow: hidden;
+  animation: tavi-fade-in 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.settings-list, .settings-submenu {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  color: #f3f4f6;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.settings-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.value-label {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.submenu-header {
+  padding: 10px 16px;
+  color: #818cf8;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background-color 0.15s ease;
+}
+
+.submenu-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.submenu-item {
+  padding: 10px 16px;
+  color: #f3f4f6;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.submenu-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.submenu-item.active {
+  color: #6366f1;
+  font-weight: 600;
+  background-color: rgba(99, 102, 241, 0.08);
+}
+
+@keyframes tavi-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Subtitles Overlay Layer */
+.tavi-subtitle-display-overlay {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: 80%;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
+.tavi-subtitles-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 8px 16px;
+  border-radius: 6px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.subtitle-line {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.subtitle-line.secondary {
+  color: #fbbf24; /* yellow/gold tint for secondary track in dual mode */
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Scrubber Timeline Hover Tooltip */
+.timeline-tooltip {
+  position: absolute;
+  bottom: 30px;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  font-family: monospace;
+  z-index: 10;
+}
+
+/* Volume Slider Container & Hover Expansion */
+.volume-control-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.volume-slider {
+  width: 0;
+  opacity: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  border: none;
+  transition: width 0.25s ease, opacity 0.25s ease;
+  -webkit-appearance: none;
+}
+
+.volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  margin-top: -4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.volume-control-container:hover .volume-slider {
+  width: 68px;
+  opacity: 1;
+  margin-left: 8px;
+}
+
+/* Advanced Playback Speed Selector styles */
+.speed-submenu-container {
+  padding: 10px 16px;
+  width: 210px; /* widen slightly for comfortable slider */
+}
+
+.speed-slider-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.slider-label {
+  font-size: 12px;
+  color: #818cf8;
+  font-weight: 500;
+  font-family: monospace;
+}
+
+.speed-range-input {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.speed-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6366f1;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+}
+
+.speed-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.speed-preset-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.speed-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.speed-preset-btn.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: #6366f1;
+  color: #818cf8;
+  font-weight: 600;
+}
+
+/* Buffering Spinner Overlay */
+.tavi-buffering-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tavi-media-error {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+  color: #f9fafb;
+  background: rgba(3, 7, 18, 0.86);
+  font-size: 14px;
+}
+
+.tavi-media-error strong {
+  font-size: 16px;
+}
+
+.tavi-media-error span {
+  max-width: 420px;
+  color: #cbd5e1;
+}
+
+.tavi-spinner {
+  width: 64px;
+  height: 64px;
+  border: 6px solid rgba(255, 255, 255, 0.2);
+  border-left-color: #ef4444; /* YouTube Red color */
+  border-radius: 50%;
+  animation: tavi-spin 1s linear infinite;
+}
+
+@keyframes tavi-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* YouTube Style Center Play/Pause Indicator */
+.tavi-center-action-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  z-index: 4;
+  pointer-events: none;
+  animation: tavi-youtube-center-flash 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.tavi-center-flash-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes tavi-youtube-center-flash {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.0);
+  }
+  80% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1.0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+}
+
+/* YouTube Style Left/Right Skip Overlay Ripple */
+.tavi-skip-overlay {
+  position: absolute;
+  top: 0;
+  width: 45%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tavi-skip-overlay.left {
+  left: 0;
+  background: radial-gradient(circle at 0% 50%, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.tavi-skip-overlay.right {
+  right: 0;
+  background: radial-gradient(circle at 100% 50%, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.tavi-skip-overlay.active {
+  animation: tavi-youtube-skip-fade 0.8s ease-in-out forwards;
+}
+
+.tavi-skip-indicator-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.tavi-skip-label {
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 6px;
+  font-family: system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Arrow Sequence wave animations */
+.tavi-arrow-animation {
+  display: flex;
+  gap: 3px;
+  font-size: 18px;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.tavi-arrow-animation span {
+  animation: tavi-arrow-blink 0.6s infinite ease-in-out;
+  opacity: 0.2;
+}
+
+/* Wave direction for left skips */
+.tavi-arrow-animation.left .arrow-three {
+  animation-delay: 0s;
+}
+.tavi-arrow-animation.left .arrow-two {
+  animation-delay: 0.15s;
+}
+.tavi-arrow-animation.left .arrow-one {
+  animation-delay: 0.3s;
+}
+
+/* Wave direction for right skips */
+.tavi-arrow-animation.right .arrow-one {
+  animation-delay: 0s;
+}
+.tavi-arrow-animation.right .arrow-two {
+  animation-delay: 0.15s;
+}
+.tavi-arrow-animation.right .arrow-three {
+  animation-delay: 0.3s;
+}
+
+@keyframes tavi-youtube-skip-fade {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tavi-arrow-blink {
+  0%, 100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Custom Scrollbar for Settings submenus */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
