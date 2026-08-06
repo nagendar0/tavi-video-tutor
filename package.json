@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "publish:package": "npm publish ./packages/tavi-video-tutor",
     "qa:subtitle": "npm --prefix packages/tavi-video-tutor run qa:subtitle"
   },
   "devDependencies": {

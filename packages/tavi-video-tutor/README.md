@@ -18,7 +18,7 @@ npx aitutor
 
 ---
 
-## 1. NEW IN v0.4.7 — MAJOR FEATURES
+## 1. NEW IN v0.4.8 — MAJOR FEATURES
 
 ### 🎥 Automatic Video Quality Transcoding Pipeline
 - **Zero-Config Developer Experience**: Simply place `public/lesson.mp4` and run `npx aitutor`. AITutor automatically probes your video, generates downscaled H.264/AAC quality renditions (`720p`, `480p`, `360p`, `240p`, `144p`), preserves original source resolution for top rendition without re-encoding (`source: true`), and registers them in `manifest.json`.
