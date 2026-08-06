@@ -1,13 +1,15 @@
 import { loadConfig } from '../config/loadConfig.js';
 import { ManifestStore } from '../cache/manifest.js';
 import { processSingleVideo } from './processVideo.js';
+import { processVideoQuality } from '../video/processVideoQuality.js';
 import { checkEnvironment, printEnvironmentReport } from '../env/checkEnv.js';
 
 export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
-  const { videos, globalLanguages } = await loadConfig(cwd);
+  const loadedConfig = await loadConfig(cwd);
+  const { videos, globalLanguages } = loadedConfig;
   const manifestStore = new ManifestStore(cwd);
 
-  console.log(`\nAITutor Multilingual Subtitle Engine\n─────────────────────────────────────\n`);
+  console.log(`\nAITutor Multilingual Subtitle & Video Quality Engine\n─────────────────────────────────────\n`);
 
   const envStatus = await checkEnvironment();
   printEnvironmentReport(envStatus);
@@ -20,6 +22,8 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
   let transcriptCacheHits = 0;
   let totalSubtitlesGenerated = 0;
   let totalSubtitlesCached = 0;
+  let totalQualitiesGenerated = 0;
+  let totalQualitiesCached = 0;
   let totalFailed = 0;
   const failedList = [];
 
@@ -29,6 +33,7 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
     console.log(`URL: ${video.src}`);
     console.log(`Languages: ${video.languages.join(', ')}\n`);
 
+    // 1. Subtitle Pipeline Execution
     try {
       let masterWasCached = false;
       const res = await processSingleVideo(video, manifestStore, options, (evt) => {
@@ -50,12 +55,32 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
 
       totalSubtitlesGenerated += (res.generatedCount || 0);
       totalSubtitlesCached += (res.cachedCount || 0);
-      console.log(`\n✓ Complete\n`);
     } catch (err) {
-      console.error(`\n❌ Failed processing ${video.id}: ${err.message}\n`);
+      console.error(`\n❌ Subtitle pipeline failed for ${video.id}: ${err.message}\n`);
       totalFailed++;
-      failedList.push({ id: video.id, reason: err.message });
+      failedList.push({ id: video.id, reason: `Subtitles: ${err.message}` });
     }
+
+    // 2. Video Quality Pipeline Execution
+    try {
+      console.log(`\n--- Video Quality Pipeline ---`);
+      const qRes = await processVideoQuality(video, manifestStore, { ...options, config: loadedConfig }, (evt) => {
+        if (typeof evt === 'string') {
+          console.log(evt);
+        } else {
+          console.log(evt.message || evt);
+        }
+      });
+
+      if (qRes.status === 'complete') {
+        totalQualitiesGenerated += (qRes.transcodedCount || 0);
+        totalQualitiesCached += (qRes.cachedCount || 0);
+      }
+    } catch (err) {
+      console.error(`\n⚠ Video quality pipeline notice for ${video.id}: ${err.message}\n`);
+    }
+
+    console.log(`\n✓ Complete\n`);
   }
 
   const durationSec = Math.round((Date.now() - startTime) / 1000);
@@ -67,6 +92,8 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
   console.log(`Transcript cache hits:    ${transcriptCacheHits}`);
   console.log(`Subtitle files generated: ${totalSubtitlesGenerated}`);
   console.log(`Subtitle cache hits:      ${totalSubtitlesCached}`);
+  console.log(`Quality renditions gen:   ${totalQualitiesGenerated}`);
+  console.log(`Quality renditions cached:${totalQualitiesCached}`);
   console.log(`Failed videos:            ${totalFailed}`);
   console.log(`Total time:               ${durationSec}s\n`);
 
@@ -84,6 +111,8 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
     transcriptCacheHits,
     generatedSubtitles: totalSubtitlesGenerated,
     cachedSubtitles: totalSubtitlesCached,
+    generatedQualities: totalQualitiesGenerated,
+    cachedQualities: totalQualitiesCached,
     failed: totalFailed
   };
 };

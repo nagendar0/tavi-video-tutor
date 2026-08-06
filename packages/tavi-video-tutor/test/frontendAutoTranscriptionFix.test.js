@@ -16,7 +16,6 @@ class MockPlayerState {
     this.errorCount = 0;
   }
 
-  // Merged combinedSubtitles (matching resolveSubtitleSources priority)
   get combinedSubtitles() {
     return {
       ...this.demoSubtitles,
@@ -26,7 +25,6 @@ class MockPlayerState {
     };
   }
 
-  // Simulated fetchPrimary / autoTranscribe effect evaluation
   async evaluateAutoTranscribe(forceError = false) {
     this.renderCount++;
 
@@ -45,8 +43,7 @@ class MockPlayerState {
     this.isTranscribingRef = true;
     this.transcribeCallCount++;
 
-    // Yield to event loop to simulate asynchronous transcription
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
       if (forceError) {
@@ -62,8 +59,6 @@ class MockPlayerState {
   }
 }
 
-console.log('🧪 Running AITutor Frontend Auto-Transcription Freeze Regression Suite...\n');
-
 test('TEST 1: Generated subtitles exist -> Expected: Browser AI never starts', async () => {
   const player = new MockPlayerState({
     src: '/lesson.mp4',
@@ -72,8 +67,7 @@ test('TEST 1: Generated subtitles exist -> Expected: Browser AI never starts', a
 
   const res = await player.evaluateAutoTranscribe();
   assert.strictEqual(res.status, 'bypassed-subtitles-exist');
-  assert.strictEqual(player.transcribeCallCount, 0, 'Browser AI must never start when generated subtitles exist');
-  console.log('  ✅ PASS: TEST 1: Generated subtitles exist -> Browser AI call count = 0');
+  assert.strictEqual(player.transcribeCallCount, 0);
 });
 
 test('TEST 2: No subtitles exist -> Expected: Browser AI starts once', async () => {
@@ -85,8 +79,7 @@ test('TEST 2: No subtitles exist -> Expected: Browser AI starts once', async () 
 
   const res = await player.evaluateAutoTranscribe();
   assert.strictEqual(res.status, 'transcribed');
-  assert.strictEqual(player.transcribeCallCount, 1, 'Browser AI must start exactly once when no subtitles exist');
-  console.log('  ✅ PASS: TEST 2: No subtitles exist -> Browser AI starts exactly once');
+  assert.strictEqual(player.transcribeCallCount, 1);
 });
 
 test('TEST 3: Generated subtitles exist -> Mount component 100 times -> Expected: Called 0 times', async () => {
@@ -99,9 +92,8 @@ test('TEST 3: Generated subtitles exist -> Mount component 100 times -> Expected
     await player.evaluateAutoTranscribe();
   }
 
-  assert.strictEqual(player.transcribeCallCount, 0, 'Browser AI must be called 0 times across 100 mounts');
+  assert.strictEqual(player.transcribeCallCount, 0);
   assert.strictEqual(player.renderCount, 100);
-  console.log('  ✅ PASS: TEST 3: Component mounted 100 times with generated subtitles -> Browser AI called 0 times');
 });
 
 test('TEST 4: Force AITranscriber exception -> Expected: 1 error, no infinite render loop', async () => {
@@ -110,12 +102,11 @@ test('TEST 4: Force AITranscriber exception -> Expected: 1 error, no infinite re
     manifestSubtitles: {}
   });
 
-  const res = await player.evaluateAutoTranscribe(true); // force error
+  const res = await player.evaluateAutoTranscribe(true);
   assert.strictEqual(res.status, 'error-handled');
   assert.strictEqual(player.errorCount, 1);
-  assert.strictEqual(player.isTranscribingRef, false, 'Concurrency lock must be released after error');
-  assert.strictEqual(player.renderCount, 1, 'Render count must remain 1 without infinite loop');
-  console.log('  ✅ PASS: TEST 4: Forced AITranscriber exception -> Handled cleanly with 0 infinite render loops');
+  assert.strictEqual(player.isTranscribingRef, false);
+  assert.strictEqual(player.renderCount, 1);
 });
 
 test('TEST 5: Rapid video switching -> Expected: No duplicate transcription jobs', async () => {
@@ -124,7 +115,6 @@ test('TEST 5: Rapid video switching -> Expected: No duplicate transcription jobs
     manifestSubtitles: {}
   });
 
-  // Simulate concurrent rapid calls during source transition
   const p1 = player.evaluateAutoTranscribe();
   const p2 = player.evaluateAutoTranscribe();
   const p3 = player.evaluateAutoTranscribe();
@@ -133,9 +123,8 @@ test('TEST 5: Rapid video switching -> Expected: No duplicate transcription jobs
   const transcribedCount = results.filter(r => r.status === 'transcribed').length;
   const lockedCount = results.filter(r => r.status === 'bypassed-concurrency-lock').length;
 
-  assert.strictEqual(transcribedCount, 1, 'Only 1 transcription job can run concurrently');
-  assert.strictEqual(lockedCount, 2, 'Duplicate concurrent jobs must be bypassed');
-  console.log('  ✅ PASS: TEST 5: Rapid video switching -> Concurrency lock prevents duplicate jobs');
+  assert.strictEqual(transcribedCount, 1);
+  assert.strictEqual(lockedCount, 2);
 });
 
 test('TEST 6: Rapid language switching -> Expected: No browser freeze', async () => {
@@ -150,6 +139,5 @@ test('TEST 6: Rapid language switching -> Expected: No browser freeze', async ()
     await player.evaluateAutoTranscribe();
   }
 
-  assert.strictEqual(player.transcribeCallCount, 0, 'Rapid language switching must never trigger AI transcription');
-  console.log('  ✅ PASS: TEST 6: Rapid language switching -> 0 AI transcription calls (No browser freeze)');
+  assert.strictEqual(player.transcribeCallCount, 0);
 });

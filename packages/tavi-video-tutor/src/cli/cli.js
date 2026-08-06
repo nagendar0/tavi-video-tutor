@@ -96,16 +96,27 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
       removedCount++;
     }
 
+    const publicVideoSubDir = path.join(publicDir, 'videos', targetVideoId);
+    if (fs.existsSync(publicVideoSubDir)) {
+      fs.rmSync(publicVideoSubDir, { recursive: true, force: true });
+      removedCount++;
+    }
+
+    const internalVideoSubDir = path.join(internalDir, 'videos', targetVideoId);
+    if (fs.existsSync(internalVideoSubDir)) {
+      fs.rmSync(internalVideoSubDir, { recursive: true, force: true });
+    }
+
     const publicManifestPath = path.join(publicDir, 'manifest.json');
     if (fs.existsSync(internalManifestPath) && fs.existsSync(publicDir)) {
       fs.copyFileSync(internalManifestPath, publicManifestPath);
     }
 
-    console.log(`✓ Cleaned generated subtitles for "${targetVideoId}" (${removedCount} files removed)\n`);
+    console.log(`✓ Cleaned generated subtitles & video qualities for "${targetVideoId}" (${removedCount} items removed)\n`);
     return;
   }
 
-  console.log(`\nAITutor Subtitle Engine — Cleaning All Generated Subtitles\n`);
+  console.log(`\nAITutor Engine — Cleaning All Generated Subtitles & Video Qualities\n`);
   
   if (fs.existsSync(internalDir)) {
     fs.rmSync(internalDir, { recursive: true, force: true });
@@ -115,7 +126,7 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
     fs.rmSync(publicDir, { recursive: true, force: true });
   }
 
-  console.log(`✓ All generated AITutor subtitles and manifests cleaned successfully.\n`);
+  console.log(`✓ All generated AITutor subtitles, video qualities, and manifests cleaned successfully.\n`);
 };
 
 export const runStatus = async (options = {}, cwd = process.cwd()) => {

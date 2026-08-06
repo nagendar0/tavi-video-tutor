@@ -20,7 +20,9 @@ export function resolveSubtitleSources({
 } = {}) {
   const demo = demoSubtitles || {};
   const generated = generatedSubtitles || {};
-  const developer = developerSubtitles || {};
+  const developer = (developerSubtitles && typeof developerSubtitles === 'object' && !Array.isArray(developerSubtitles))
+    ? developerSubtitles
+    : {};
   const uploaded = uploadedSubtitles || {};
 
   const isVal = (val) => val !== null && val !== undefined && val !== '';

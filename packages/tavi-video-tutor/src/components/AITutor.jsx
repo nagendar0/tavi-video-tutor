@@ -24,6 +24,7 @@ export const AITutor = forwardRef(({
   defaultSubLanguage = 'en',
   defaultAudioLanguage = 'original',
   playbackRates = [0.5, 1, 1.25, 1.5, 2],
+  subtitleStyle,
   onSubLanguageChange,
   onSubtitleGenerated,
   onUpdateSubtitles,
@@ -130,6 +131,7 @@ export const AITutor = forwardRef(({
         defaultSubLanguage={defaultSubLanguage}
         defaultAudioLanguage={defaultAudioLanguage}
         playbackRates={playbackRates}
+        subtitleStyle={subtitleStyle}
         onSubLanguageChange={onSubLanguageChange}
         onSubtitleGenerated={onSubtitleGenerated}
         onUpdateSubtitles={onUpdateSubtitles}
