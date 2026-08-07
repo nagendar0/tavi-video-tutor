@@ -151,9 +151,9 @@ export default function App() {
 
 ---
 
-## 7. AUTOMATIC SUBTITLE GENERATION
+## 7. AUTOMATIC SUBTITLE & VIDEO QUALITY GENERATION
 
-Follow this step-by-step workflow to generate multilingual subtitles for your videos from zero:
+Follow this step-by-step workflow to generate multilingual subtitles and video quality renditions for your videos from zero:
 
 ### Step 1: Create Starter Configuration (`npx aitutor init`)
 Run `npx aitutor init` to generate `aitutor.config.mjs` starter configuration automatically:
@@ -170,6 +170,10 @@ export default {
     languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages (or 'all' for 109 languages)
     quality: 'balanced',                 // 'fast' | 'balanced' | 'high'
     glossary: ['React', 'AITutor']       // Protected domain terms
+  },
+  qualities: {
+    generate: true,                      // Automatically generate quality ladder (720p, 480p, 360p, 240p, 144p)
+    targets: [1080, 720, 480, 360, 240, 144]
   },
   videos: [
     {
@@ -189,6 +193,7 @@ AITutor automatically detects and loads any of the following configuration files
   ```javascript
   export default {
     subtitles: { languages: ['en', 'es', 'hi', 'te'] },
+    qualities: { generate: true },
     videos: [{ id: 'lesson', src: './public/lesson.mp4' }]
   };
   ```
@@ -196,6 +201,7 @@ AITutor automatically detects and loads any of the following configuration files
   ```javascript
   module.exports = {
     subtitles: { languages: ['en', 'es', 'hi', 'te'] },
+    qualities: { generate: true },
     videos: [{ id: 'lesson', src: './public/lesson.mp4' }]
   };
   ```
@@ -203,12 +209,13 @@ AITutor automatically detects and loads any of the following configuration files
   ```json
   {
     "subtitles": { "languages": ["en", "es", "hi", "te"] },
+    "qualities": { "generate": true },
     "videos": [{ "id": "lesson", "src": "./public/lesson.mp4" }]
   }
   ```
 - **`aitutor.config.js`**: Uses `export default` when host `package.json` contains `"type": "module"`, or `module.exports` when host `package.json` uses CommonJS.
 
-### Step 2: Run the Subtitle Generator
+### Step 2: Run the AITutor Generator
 Run the CLI generator from your project terminal:
 
 ```bash
@@ -217,9 +224,22 @@ npx aitutor
 
 ### Execution Output:
 ```text
-AITUTOR SUBTITLE GENERATOR
+AITUTOR PIPELINE ENGINE
 ─────────────────────────────
 Processing video 1 of 1: lesson
+  → Probing video metadata for lesson (1920x1080 @ 30fps)
+  ✓ Quality plan: 1080p, 720p, 480p, 360p, 240p, 144p
+  ✓ 1080p (source file preserved)
+  → Generating 720p [████████████████████] 100%
+  ✓ 720p complete (8.2 MB)
+  → Generating 480p [████████████████████] 100%
+  ✓ 480p complete (5.1 MB)
+  → Generating 360p [████████████████████] 100%
+  ✓ 360p complete (3.3 MB)
+  → Generating 240p [████████████████████] 100%
+  ✓ 240p complete (2.1 MB)
+  → Generating 144p [████████████████████] 100%
+  ✓ 144p complete (1.2 MB)
   → Reading video URL with FFmpeg
   → Extracting audio stream
   ✓ Audio extracted (audio.wav, 2.40 MB)
@@ -236,18 +256,25 @@ Processing video 1 of 1: lesson
 
 ---
 
-## 8. GENERATED FILES
+## 8. GENERATED ASSETS STRUCTURE
 
-Subtitle generation outputs public production assets and maintains an internal processing cache:
+Subtitle generation and video quality transcoding output public production assets and maintain an internal processing cache:
 
 ```text
 my-tutor-app/
 ├── public/
-│   ├── lesson.mp4
+│   ├── lesson.mp4                          # ORIGINAL SOURCE VIDEO
 │   └── aitutor/                            # PUBLIC ASSETS (Deploy to Production)
-│       ├── manifest.json                   # Subtitle registry index
+│       ├── manifest.json                   # Subtitles & Quality registry index
+│       ├── videos/
+│       │   └── lesson/                     # TRANSCODED QUALITIES
+│       │       ├── 720.mp4
+│       │       ├── 480.mp4
+│       │       ├── 360.mp4
+│       │       ├── 240.mp4
+│       │       └── 144.mp4
 │       └── subtitles/
-│           └── lesson/
+│           └── lesson/                     # MULTILINGUAL SUBTITLES
 │               ├── en.vtt
 │               ├── es.vtt
 │               ├── hi.vtt
@@ -257,8 +284,7 @@ my-tutor-app/
     ├── manifest.json
     ├── transcripts/
     │   └── lesson.json                     # Master ASR transcript cache
-    └── subtitles/
-        └── lesson/
+    └── videos/                             # Transcoding cache
 ```
 
 - **`public/aitutor/`**: Production static artifacts loaded by browser client. Must be included in your static site deployment.
