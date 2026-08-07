@@ -567,14 +567,39 @@ export const TaviVideoPlayer = forwardRef(({
   const isDraggingRef = useRef(false);
   const clickTimeoutRef = useRef(null);
 
-  // Playback Control States
+  // Helper functions for LocalStorage Student Preference Persistence
+  const loadSavedPref = (key, fallback) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const raw = localStorage.getItem('aitutor_user_preferences');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed[key] !== undefined) return parsed[key];
+        }
+      }
+    } catch (_) {}
+    return fallback;
+  };
+
+  const savePref = (key, value) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const raw = localStorage.getItem('aitutor_user_preferences');
+        const current = raw ? JSON.parse(raw) : {};
+        current[key] = value;
+        localStorage.setItem('aitutor_user_preferences', JSON.stringify(current));
+      }
+    } catch (_) {}
+  };
+
+  // Playback Control States (Restored from LocalStorage when available)
   const [activeSrc, setActiveSrc] = useState(src);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [volume, setVolume] = useState(() => loadSavedPref('volume', 1));
+  const [isMuted, setIsMuted] = useState(() => loadSavedPref('isMuted', false));
+  const [playbackRate, setPlaybackRate] = useState(() => loadSavedPref('playbackRate', 1));
   const [hoverTooltip, setHoverTooltip] = useState(null);
   const [isBuffering, setIsBuffering] = useState(false);
   const [mediaError, setMediaError] = useState('');
@@ -1068,15 +1093,7 @@ export const TaviVideoPlayer = forwardRef(({
     return () => { active = false; };
   }, [combinedSubtitles, selectedSubLanguage, subtitles, isSubtitleEnabled, hasAvailableSubtitles]);
 
-  const availableSubLangs = useMemo(() => {
-    if (!hasAvailableSubtitles || !isSubtitleEnabled) return [];
-    const codes = new Set([
-      'none',
-      ...Object.keys(combinedSubtitles).filter(lang => Boolean(combinedSubtitles[lang])),
-      ...Object.keys(localSubtitles).filter(lang => Boolean(localSubtitles[lang]))
-    ]);
-    return Array.from(codes);
-  }, [combinedSubtitles, localSubtitles, isSubtitleEnabled, hasAvailableSubtitles]);
+
 
   const secondarySubLanguage = useMemo(() => {
     if (!isDualSubtitles) return null;
@@ -1219,14 +1236,21 @@ export const TaviVideoPlayer = forwardRef(({
     return activeCue ? activeCue.text : '';
   };
 
-  // Canvas paint utility for single frames
+  // Canvas paint utility for single frames with High-DPI Retina auto-scaling
   const paintSingleFrame = () => {
     const video = offscreenVideoRef.current;
     const canvas = canvasRef.current;
     if (canvas) {
-      if (canvas.width === 0 || canvas.height === 0) {
-        canvas.width = 1280;
-        canvas.height = 720;
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+      const rect = canvas.getBoundingClientRect();
+      const cssWidth = rect.width || 1280;
+      const cssHeight = rect.height || 720;
+      const targetWidth = Math.round(cssWidth * dpr);
+      const targetHeight = Math.round(cssHeight * dpr);
+
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
       }
       const ctx = canvas.getContext('2d');
       // Keep the canvas transparent: the native <video> underneath renders the
@@ -2171,6 +2195,11 @@ export const TaviVideoPlayer = forwardRef(({
         <canvas ref={canvasRef} className="tavi-subtitle-canvas" aria-hidden="true" />
       </div>
 
+      {/* Visually Hidden Screen Reader Subtitle Live Region (Section 508 / WAI-ARIA) */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {hasAvailableSubtitles && selectedSubLanguage !== 'none' ? getActiveSubtitleText(offscreenVideoRef.current, selectedSubLanguage, primaryCues) : ''}
+      </div>
+
       {/* Interaction Shield Blocker */}
       <div 
         className="tavi-interaction-blocker" 
@@ -2276,6 +2305,7 @@ export const TaviVideoPlayer = forwardRef(({
                 className="control-btn" 
                 onClick={() => setIsMuted(!isMuted)}
                 title={isMuted ? "Unmute (m)" : "Mute (m)"}
+                aria-label={isMuted ? "Unmute audio (m)" : "Mute audio (m)"}
               >
                 {isMuted || volume === 0 ? <VolumeMuteIcon /> : <VolumeHighIcon />}
               </button>
@@ -2291,6 +2321,10 @@ export const TaviVideoPlayer = forwardRef(({
                   if (val > 0 && isMuted) setIsMuted(false);
                 }}
                 className="volume-slider"
+                aria-label="Volume slider"
+                aria-valuenow={Math.round((isMuted ? 0 : volume) * 100)}
+                aria-valuemin="0"
+                aria-valuemax="100"
               />
             </div>
 
@@ -2306,6 +2340,8 @@ export const TaviVideoPlayer = forwardRef(({
               className="control-btn autoplay-btn" 
               onClick={() => setIsAutoplay(prev => !prev)}
               title={isAutoplay ? "Autoplay is on" : "Autoplay is off"}
+              aria-label={isAutoplay ? "Autoplay is on" : "Autoplay is off"}
+              aria-pressed={isAutoplay}
               style={{ padding: '0 6px', display: 'flex', alignItems: 'center' }}
             >
               <AutoplayIcon active={isAutoplay} />
@@ -2318,6 +2354,8 @@ export const TaviVideoPlayer = forwardRef(({
                 className={`control-btn cc-btn ${selectedSubLanguage !== 'none' ? 'active' : ''}`}
                 onClick={handleCCToggle}
                 title={selectedSubLanguage !== 'none' ? "Subtitles/closed captions (c) - Active" : "Subtitles/closed captions (c)"}
+                aria-label="Subtitles and closed captions (c)"
+                aria-pressed={selectedSubLanguage !== 'none'}
               >
                 <CCIcon />
               </button>
@@ -2329,6 +2367,8 @@ export const TaviVideoPlayer = forwardRef(({
               className="control-btn settings-btn" 
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               title="Settings"
+              aria-label="Player settings"
+              aria-expanded={isSettingsOpen}
               style={{ position: 'relative' }}
             >
               <GearIcon />

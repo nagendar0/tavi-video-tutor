@@ -1,7 +1,7 @@
 {
   "name": "tavi-video-tutor",
-  "version": "0.4.9",
-  "description": "Enterprise-grade React video player & automated multilingual subtitle engine powered by real Whisper ASR, NLLB/M2M100 neural translation, canvas subtitle renderer, automatic video quality ladder, and multi-tier source priority.",
+  "version": "1.1.0",
+  "description": "Enterprise-grade React video player & automated multilingual subtitle engine powered by real Whisper ASR, NLLB/M2M100 neural translation, razor-sharp High-DPI canvas subtitle renderer, automatic video quality ladder, WAI-ARIA accessibility, and multi-tier source priority.",
   "type": "module",
   "main": "./dist/tavi-video-tutor.umd.cjs",
   "module": "./dist/tavi-video-tutor.js",
@@ -20,6 +20,19 @@
       "types": "./src/index.d.ts",
       "import": "./dist/tavi-video-tutor.js",
       "require": "./dist/tavi-video-tutor.umd.cjs"
+    },
+    "./player": {
+      "types": "./src/index.d.ts",
+      "import": "./src/components/AITutor.jsx",
+      "default": "./src/components/AITutor.jsx"
+    },
+    "./cli": {
+      "import": "./src/cli/cli.js",
+      "default": "./src/cli/cli.js"
+    },
+    "./subtitles": {
+      "import": "./src/subtitles/resolver/subtitleResolver.js",
+      "default": "./src/subtitles/resolver/subtitleResolver.js"
     },
     "./dist/style.css": "./dist/tavi-video-tutor.css",
     "./style.css": "./dist/tavi-video-tutor.css",

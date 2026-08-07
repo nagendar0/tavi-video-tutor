@@ -18,20 +18,41 @@ npx aitutor
 
 ---
 
-## 1. NEW IN v0.4.8 — MAJOR FEATURES
+## 1. NEW IN v1.1.0 — MAJOR FEATURES & ACCESSIBILITY
 
-### 🎥 Automatic Video Quality Transcoding Pipeline
-- **Zero-Config Developer Experience**: Simply place `public/lesson.mp4` and run `npx aitutor`. AITutor automatically probes your video, generates downscaled H.264/AAC quality renditions (`720p`, `480p`, `360p`, `240p`, `144p`), preserves original source resolution for top rendition without re-encoding (`source: true`), and registers them in `manifest.json`.
-- **Automatic Quality Discovery**: `<AITutor src="/lesson.mp4" />` automatically discovers all available manifest quality renditions and populates the player's Settings > Quality menu without requiring manual `qualities={[...]}` props.
-- **State-Preserved Quality Switching**: Seamlessly switch quality mid-video with **zero timestamp reset**, preserving `currentTime`, playback state (`playing`/`paused`), volume, mute, playback rate, active primary subtitle language, secondary subtitle language, and active cue synchronization.
-- **Strict No-Upscaling Guarantee**: Never generates renditions larger than the source video height.
-- **Aspect-Ratio & Encoder Safety**: Maintains exact aspect ratio across 16:9, 4:3, 1:1, 9:16 portrait, and ultrawide formats with H.264-safe even integer dimensions.
-- **Smart Fingerprinting & Partial Cache Recovery**: Content-aware media fingerprinting skips unchanged files instantly. If a single rendition is missing or deleted, partial recovery regenerates **only** the missing rendition.
+### 🔍 Razor-Sharp High-DPI Canvas Rendering (`devicePixelRatio`)
+- **Retina & 4K Auto-Scaling**: Automatically detects `window.devicePixelRatio` and scales the canvas backing store resolution (`canvas.width = rect.width * dpr`) to guarantee vector-sharp subtitle typography on MacBook Retina displays, 4K monitors, Surface devices, and high-DPI mobile screens.
+- **Zero-Allocation 60fps Rendering Loop**: Prevents layout thrashing and V8 Garbage Collection micro-stutters during 4K video playback.
 
-### 🎨 Universal High-Contrast Canvas Subtitle System (109 Languages)
-- **Zero-Glitch Canvas Renderer**: Renders subtitles on an overlay HTML5 Canvas with custom drop-shadow, high-contrast dark backdrop pill (`rgba(0,0,0,0.75)`), and precise baseline alignment.
-- **Native Browser Engine Fallback Safety**: Bypasses browser-native `<track>` bugs and text-freezes during dynamic quality changes or fast seek operations across all desktop & mobile browsers.
-- **Bi-Directional & RTL Support**: Native rendering for 109 global languages including Right-to-Left (Arabic, Hebrew, Persian, Urdu) with precise glyph placement.
+### ♿ Full WAI-ARIA Accessibility & Screen Reader Support (Section 508)
+- **Screen Reader Live Region (`aria-live="polite"`)**: Includes a visually-hidden live region (`<div className="sr-only" aria-live="polite">`) that synchronizes and announces active subtitle text for visually impaired students using VoiceOver, NVDA, or JAWS.
+- **Comprehensive WAI-ARIA Controls**: Full `aria-label`, `aria-expanded`, `aria-pressed`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, and `:focus-visible` outline indicators across all player buttons and volume sliders.
+
+### 💾 LocalStorage Student Preference Persistence
+- **Automatic Preference Restoration**: Student player choices (`volume`, `isMuted`, `playbackRate`, `selectedSubLanguage`, `selectedQuality`) are automatically saved to `localStorage` (`aitutor_user_preferences`) and restored seamlessly across course modules and page reloads.
+
+### 🌲 Tree-Shakeable Sub-Path Package Exports
+- **Modular Entrypoints**: Sub-path exports configured in `package.json`:
+  - `import { AITutor } from "tavi-video-tutor";` (Main bundle)
+  - `import { AITutor } from "tavi-video-tutor/player";` (Pure React Player - Zero CLI bloat)
+  - `import { resolveSubtitleAvailability } from "tavi-video-tutor/subtitles";` (Resolver logic)
+  - `import "tavi-video-tutor/style.css";` (CSS styling)
+
+### 🚀 Next.js & Server-Side Rendering (SSR) Integration
+- **SSR Safe**: Fully safe for Next.js (App Router & Pages Router) using `next/dynamic` with `ssr: false`:
+```jsx
+// components/VideoPlayer.jsx
+import dynamic from 'next/dynamic';
+import 'tavi-video-tutor/style.css';
+
+const AITutor = dynamic(() => import('tavi-video-tutor/player').then(m => m.AITutor), {
+  ssr: false
+});
+
+export default function VideoLesson() {
+  return <AITutor src="/lesson.mp4" />;
+}
+```
 
 ---
 
