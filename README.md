@@ -51,30 +51,37 @@ npx aitutor
 
 ## 3. HOW AITUTOR WORKS
 
-AITutor separates expensive heavy media processing (audio extraction, speech-to-text, and translation) from lightweight runtime client rendering:
+AITutor separates expensive heavy media processing (audio extraction, speech-to-text, multilingual translation, and multi-resolution video transcoding) from lightweight runtime client rendering:
 
 ```text
-Video File (Local / Remote)
-         ↓
-FFmpeg Audio Extraction (16kHz PCM WAV)
-         ↓
-Whisper Speech-to-Text (Master Transcript)
-         ↓
-Transcript Normalizer (Glossary & Punctuation)
-         ↓
-Subtitle Segmenter (Readability & Timing Constraints)
-         ↓
-Multilingual Translation (Online / Local NLLB Fallback)
-         ↓
-WebVTT File Generator (en.vtt, te.vtt, hi.vtt...)
-         ↓
-Manifest Store (/public/aitutor/manifest.json)
-         ↓
-<AITutor /> Player (Renders VTT in Browser)
+                        Video File (Local / Remote)
+                                     │
+            ┌────────────────────────┴────────────────────────┐
+            ▼                                                 ▼
+[ Subtitle Processing Pipeline ]             [ Video Quality Transcoding Pipeline ]
+            │                                                 │
+FFmpeg Audio Extraction (16kHz PCM WAV)             FFmpeg Probe Video Metadata
+            │                                                 │
+Whisper Speech-to-Text (Master Transcript)          Quality Ladder Planner (Height <= Source)
+            │                                                 │
+Transcript Normalizer (Glossary Preservation)       Multi-Resolution H.264/AAC Encoder
+            │                                       (720p, 480p, 360p, 240p, 144p)
+Subtitle Segmenter (Readability & Timing)                     │
+            │                                                 │
+Multilingual Translation (Online / Offline NLLB)              │
+            │                                                 │
+WebVTT File Generator (en.vtt, te.vtt...)                      │
+            │                                                 │
+            └────────────────────────┬────────────────────────┘
+                                     ▼
+                      Manifest Store (/public/aitutor/manifest.json)
+                                     ▼
+                <AITutor /> Player (Renders VTT & Transcoded Qualities)
 ```
 
-- **Preprocessing Stage**: The CLI command `npx aitutor` processes video files, runs Whisper ASR, translates transcriptions into target languages, writes `.vtt` files into `public/aitutor/subtitles/{videoId}/`, and updates `public/aitutor/manifest.json`.
-- **Runtime Stage**: When `<AITutor src="/lesson.mp4" />` mounts in the browser, it loads `/aitutor/manifest.json`, finds the matching video entry, and fetches the requested WebVTT subtitle track. Heavy processing (FFmpeg/Whisper) **never** runs in the student's browser when pre-generated tracks exist.
+- **Preprocessing Stage**: The CLI command `npx aitutor` probes video files, runs Whisper ASR speech-to-text, translates transcriptions into target languages, transcodes downscaled H.264/AAC quality renditions (`720p`, `480p`, `360p`, `240p`, `144p`), writes static assets to `public/aitutor/`, and registers everything in `public/aitutor/manifest.json`.
+- **Runtime Stage**: When `<AITutor src="/lesson.mp4" />` mounts in the browser, it loads `/aitutor/manifest.json`, discovers available WebVTT subtitle tracks and video quality renditions, and enables dynamic language & quality switching. Heavy processing (FFmpeg/Whisper/Transcoding) **never** runs in the student's browser.
+
 
 ---
 
