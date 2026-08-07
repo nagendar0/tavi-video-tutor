@@ -1,7 +1,7 @@
 import React, { forwardRef, useState, useEffect, useRef, useMemo } from 'react';
 import TaviVideoPlayer from './TaviVideoPlayer.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
-import { resolveSubtitleVisibility } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
 import '../styles/ai-tutor.css';
 
 export const AITutor = forwardRef(({
@@ -93,8 +93,8 @@ export const AITutor = forwardRef(({
     };
   }, [src, id]);
 
-  const visibilityResult = useMemo(() => {
-    return resolveSubtitleVisibility({
+  const availabilityResult = useMemo(() => {
+    return resolveSubtitleAvailability({
       subtitlesConfig: subtitles,
       generatedSubtitles: manifestSubtitles
     });
@@ -122,7 +122,7 @@ export const AITutor = forwardRef(({
         subtitles={subtitles}
         manifestSubtitles={manifestSubtitles}
         manifestQualities={manifestQualities}
-        resolvedSubtitles={visibilityResult.resolvedTracks}
+        resolvedSubtitles={availabilityResult.resolvedTracks}
         tracks={tracks}
         config={config}
         audioDubs={audioDubs}

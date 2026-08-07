@@ -5,7 +5,7 @@ import { transcribeVideoAudio } from '../services/AITranscriber.js';
 import { getCachedSubtitle, setCachedSubtitle } from '../services/SubtitleCache.js';
 import { SubtitleEditorModal } from './SubtitleEditorModal.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
-import { resolveSubtitleSources, resolveSubtitleVisibility } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveSubtitleSources, resolveSubtitleVisibility, resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
 import { resolveQualitySources } from '../subtitles/resolver/qualityResolver.js';
 import { getLanguageByCode } from '../subtitles/languages/registry.js';
 
@@ -681,20 +681,23 @@ export const TaviVideoPlayer = forwardRef(({
     };
   }, [manifestSubtitles, manifestSubtitlesProp]);
 
-  // Priority-resolved subtitle sources & visibility: uploaded > developer > generated > demo
-  const visibilityResult = useMemo(() => {
-    return resolveSubtitleVisibility({
+  // SINGLE SOURCE OF TRUTH: Subtitle Availability & Visibility
+  const subtitleAvailability = useMemo(() => {
+    return resolveSubtitleAvailability({
       subtitlesConfig: subtitles,
       demoSubtitles: demoSubtitlesProp,
       generatedSubtitles: effectiveManifestSubtitles,
-      uploadedSubtitles: localSubtitles
+      uploadedSubtitles: localSubtitles,
+      embeddedTracks
     });
-  }, [subtitles, demoSubtitlesProp, effectiveManifestSubtitles, localSubtitles]);
+  }, [subtitles, demoSubtitlesProp, effectiveManifestSubtitles, localSubtitles, embeddedTracks]);
 
-  const combinedSubtitles = visibilityResult.resolvedTracks;
-  const subtitlesSourceMetadata = visibilityResult.sourceByLanguage;
-  const isSubtitleEnabled = visibilityResult.enabled;
-  const visibleSubLanguages = visibilityResult.visibleLanguages;
+  const hasAvailableSubtitles = subtitleAvailability.hasAvailableSubtitles;
+  const isSubtitleEnabled = subtitleAvailability.enabled;
+  const combinedSubtitles = subtitleAvailability.resolvedTracks;
+  const subtitlesSourceMetadata = subtitleAvailability.sourceByLanguage;
+  const visibleSubLanguages = subtitleAvailability.visibleLanguages;
+  const availableSubLangs = subtitleAvailability.availableLanguages;
 
   // Process tracks prop or config.file.tracks if supplied by developer
   const effectiveTracks = useMemo(() => {
@@ -734,24 +737,21 @@ export const TaviVideoPlayer = forwardRef(({
   }, [generatedTracks, onTracksChange]);
 
   const sortedAndFilteredLangs = useMemo(() => {
-    if (!isSubtitleEnabled) return [];
+    if (!hasAvailableSubtitles || !isSubtitleEnabled) return [];
 
     let codesToExpose = [];
     if (subtitles === undefined || subtitles === 'all' || (typeof subtitles === 'object' && subtitles !== null && !Array.isArray(subtitles))) {
-      if (Object.keys(combinedSubtitles).length > 0) {
-        codesToExpose = Object.keys(combinedSubtitles);
-      } else {
-        codesToExpose = Object.keys(LANGUAGE_NAMES);
-      }
+      codesToExpose = Object.keys(combinedSubtitles).filter(lang => Boolean(combinedSubtitles[lang]));
     } else if (Array.isArray(subtitles)) {
-      codesToExpose = visibleSubLanguages;
+      const allowedSet = new Set(subtitles);
+      codesToExpose = Object.keys(combinedSubtitles).filter(lang => Boolean(combinedSubtitles[lang]) && allowedSet.has(lang));
     } else {
-      codesToExpose = Object.keys(combinedSubtitles);
+      codesToExpose = Object.keys(combinedSubtitles).filter(lang => Boolean(combinedSubtitles[lang]));
     }
 
     const allCodes = new Set([
       ...codesToExpose,
-      ...Object.keys(localSubtitles)
+      ...Object.keys(localSubtitles).filter(lang => Boolean(localSubtitles[lang]))
     ]);
 
     const langObjects = Array.from(allCodes).map(code => {
@@ -778,7 +778,7 @@ export const TaviVideoPlayer = forwardRef(({
       lang.name.toLowerCase().includes(query) || 
       lang.code.toLowerCase().includes(query)
     );
-  }, [combinedSubtitles, isSubtitleEnabled, visibleSubLanguages, subtitles, subtitlesSearchQuery, localSubtitles]);
+  }, [combinedSubtitles, hasAvailableSubtitles, isSubtitleEnabled, visibleSubLanguages, subtitles, subtitlesSearchQuery, localSubtitles]);
 
   // Sync selected subtitle language state with prop updates from parent (subLanguage or defaultSubLanguage)
   useEffect(() => {
@@ -998,7 +998,11 @@ export const TaviVideoPlayer = forwardRef(({
         setPrimaryCues([]);
       }
 
-      if (!selectedSubLanguage || selectedSubLanguage === 'none' || subtitles === false || !isSubtitleEnabled) {
+      if (!selectedSubLanguage || selectedSubLanguage === 'none' || subtitles === false || !isSubtitleEnabled || !hasAvailableSubtitles) {
+        if (active && currentSeq === fetchPrimarySeqRef.current) {
+          setPrimaryCues([]);
+          setIsLoadingSubtitles(false);
+        }
         return;
       }
 
@@ -1052,68 +1056,27 @@ export const TaviVideoPlayer = forwardRef(({
           if (active && currentSeq === fetchPrimarySeqRef.current) setIsTranslating(false);
         }
       } else {
-        // Only run browser AI transcription if NO subtitles exist across any source
-        const hasAnySubtitles = Object.keys(combinedSubtitles).length > 0 || subtitles === false;
-        if (hasAnySubtitles) {
-          if (active && currentSeq === fetchPrimarySeqRef.current) {
-            setPrimaryCues([]);
-            setIsLoadingSubtitles(false);
-          }
-          return;
-        }
-
-        if (isTranscribingRef.current) return;
-        isTranscribingRef.current = true;
-
+        // When no subtitle tracks exist across any source, do NOT run auto-transcription in production
         if (active && currentSeq === fetchPrimarySeqRef.current) {
-          setIsLoadingSubtitles(true);
-          setSubtitleStatusText('Loading subtitles...');
+          setPrimaryCues([]);
+          setIsLoadingSubtitles(false);
         }
-        try {
-          const fallbackMaster = combinedSubtitles['en'] || combinedSubtitles['English'];
-          let masterVtt = fallbackMaster;
-          if (!masterVtt && activeSrc) {
-            masterVtt = await transcribeVideoAudio(activeSrc, (p) => {
-              setAiTranscriptionStatusText(p.message || 'Transcribing audio...');
-            });
-          }
-          if (masterVtt) {
-            originalTrackRef.current = { name: 'Auto Master', vtt: masterVtt };
-            const baseCues = await loadSubtitles(masterVtt);
-            if (selectedSubLanguage === 'en') {
-              cues = baseCues;
-            } else {
-              cues = await translateCues(baseCues, selectedSubLanguage);
-            }
-            if (active && currentSeq === fetchPrimarySeqRef.current) {
-              setPrimaryCues(cues);
-              requestAnimationFrame(() => paintSingleFrame());
-            }
-          } else if (active && currentSeq === fetchPrimarySeqRef.current) {
-            setPrimaryCues([]);
-          }
-        } catch (err) {
-          console.error('Auto master transcription failed:', err);
-          if (active && currentSeq === fetchPrimarySeqRef.current) setPrimaryCues([]);
-        } finally {
-          isTranscribingRef.current = false;
-          if (active && currentSeq === fetchPrimarySeqRef.current) setIsLoadingSubtitles(false);
-        }
+        return;
       }
     };
     fetchPrimary();
     return () => { active = false; };
-  }, [combinedSubtitles, selectedSubLanguage, subtitles, isSubtitleEnabled]);
+  }, [combinedSubtitles, selectedSubLanguage, subtitles, isSubtitleEnabled, hasAvailableSubtitles]);
 
   const availableSubLangs = useMemo(() => {
-    if (!isSubtitleEnabled) return [];
+    if (!hasAvailableSubtitles || !isSubtitleEnabled) return [];
     const codes = new Set([
       'none',
-      ...Object.keys(combinedSubtitles),
-      ...Object.keys(localSubtitles)
+      ...Object.keys(combinedSubtitles).filter(lang => Boolean(combinedSubtitles[lang])),
+      ...Object.keys(localSubtitles).filter(lang => Boolean(localSubtitles[lang]))
     ]);
     return Array.from(codes);
-  }, [combinedSubtitles, localSubtitles, isSubtitleEnabled]);
+  }, [combinedSubtitles, localSubtitles, isSubtitleEnabled, hasAvailableSubtitles]);
 
   const secondarySubLanguage = useMemo(() => {
     if (!isDualSubtitles) return null;
@@ -1190,6 +1153,9 @@ export const TaviVideoPlayer = forwardRef(({
     e.target.value = '';
   };
 
+
+  const hasAvailableSubtitlesRef = useRef(hasAvailableSubtitles);
+  hasAvailableSubtitlesRef.current = hasAvailableSubtitles;
 
   // Refs for zero-latency 60fps canvas draw loop
   const selectedSubLanguageRef = useRef(selectedSubLanguage);
@@ -1277,7 +1243,7 @@ export const TaviVideoPlayer = forwardRef(({
           aiTranscriptionStatusTextRef.current,
           aiTranscriptionProgressRef.current
         );
-      } else if (selectedSubLanguageRef.current !== 'none') {
+      } else if (hasAvailableSubtitlesRef.current && selectedSubLanguageRef.current !== 'none') {
         // Draw canvas subtitles if enabled
         const activePrimaryText = isTranslatingRef.current
           ? 'Translating subtitles...'
@@ -2346,7 +2312,7 @@ export const TaviVideoPlayer = forwardRef(({
             </button>
 
             {/* CC Toggle Button */}
-            {isSubtitleEnabled && availableSubLangs.length > 0 && (
+            {hasAvailableSubtitles && isSubtitleEnabled && availableSubLangs.length > 0 && (
               <button 
                 type="button"
                 className={`control-btn cc-btn ${selectedSubLanguage !== 'none' ? 'active' : ''}`}
@@ -2403,7 +2369,7 @@ export const TaviVideoPlayer = forwardRef(({
                 <span>Playback Speed</span>
                 <span className="value-label">{playbackRate}x ›</span>
               </div>
-              {isSubtitleEnabled && (
+              {hasAvailableSubtitles && isSubtitleEnabled && (
                 <div className="settings-item" onClick={() => { setActiveMenu('subtitles'); setSubtitlesSearchQuery(''); }}>
                   <span>Subtitles</span>
                   <span className="value-label">
