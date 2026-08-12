@@ -1,23 +1,25 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      sharp: resolve(__dirname, 'src/shims/sharp-stub/index.js')
-    }
-  },
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.js'),
+      entry: {
+        'tavi-video-tutor': path.resolve(__dirname, 'src/index.js'),
+        'player': path.resolve(__dirname, 'src/player.js')
+      },
       name: 'TaviVideoTutor',
-      fileName: (format) => `tavi-video-tutor.${format === 'es' ? 'js' : 'umd.cjs'}`
+      formats: ['es', 'cjs']
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime', '@huggingface/transformers'],
+      external: ['react', 'react-dom', 'react/jsx-runtime'],
       output: {
+        exports: 'named',
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
@@ -27,3 +29,4 @@ export default defineConfig({
     }
   }
 });
+

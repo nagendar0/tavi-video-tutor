@@ -1,8 +1,11 @@
+import { NodeTTSProvider } from '../tts/NodeTTSProvider.js';
+import { alignAudioSegment } from '../audio/alignAudioSegment.js';
+import { stitchAudioSegments } from '../audio/stitchAudioSegments.js';
 import { TempWorkspace } from '../storage/tempWorkspace.js';
 import { resolveDirectMediaSource, resolveVideoSource } from '../video/resolveVideo.js';
 import { extractAudio } from '../audio/extractAudio.js';
 import { WhisperProvider } from '../transcription/WhisperProvider.js';
-import { AITutorTranslationProvider } from '../translation/TranslationProvider.js';
+import { TranslationRouter } from '../translation/TranslationRouter.js';
 import { TranscriptCache } from '../transcript/transcriptCache.js';
 import { TranscriptNormalizer } from '../transcript/normalizer.js';
 import { SubtitleSegmenter } from '../segmentation/SubtitleSegmenter.js';
@@ -10,25 +13,31 @@ import { MetricsCollector } from '../metrics/MetricsCollector.js';
 import { TranslationValidator } from '../translation/TranslationValidator.js';
 import { generateWebVTT, secondsToVttTimestamp } from '../vtt/generateVtt.js';
 import { computeMediaFingerprint } from '../cache/manifest.js';
+import path from 'path';
 
 export const processSingleVideo = async (videoEntry, manifestStore, options = {}, onProgress) => {
   const metrics = new MetricsCollector();
   const transcriptCache = options.transcriptCache || new TranscriptCache(manifestStore.cwd);
-  const translator = options.translator || new AITutorTranslationProvider();
+  const translator = options.translator || new TranslationRouter(options.translationOptions || options);
   const normalizer = options.normalizer || new TranscriptNormalizer({ glossaryTerms: options.glossary });
   const segmenter = options.segmenter || new SubtitleSegmenter(options.segmentationOptions);
   const validator = options.validator || new TranslationValidator({ customProtectedTerms: options.glossary });
+  const ttsProvider = options.ttsProvider || new NodeTTSProvider(options.ttsOptions || options);
 
   const requestedLanguages = Array.isArray(videoEntry.languages) ? videoEntry.languages : ['en'];
+  const requestedAudioLanguages = options.audioLanguages || videoEntry.audioLanguages || [];
 
   onProgress?.({ type: 'checking-cache', message: '→ Checking cache' });
 
   const currentFingerprint = computeMediaFingerprint(videoEntry, manifestStore.cwd, options.fingerprintExtra);
 
-  // Check if ALL requested languages are already cached for this exact media content fingerprint
-  if (manifestStore.isCached(videoEntry, options.force, currentFingerprint)) {
+  // Check if ALL requested subtitles and audio tracks are already cached for this exact media content fingerprint
+  const subtitlesCached = manifestStore.isCached(videoEntry, options.force, currentFingerprint);
+  const audioCached = requestedAudioLanguages.length === 0 || requestedAudioLanguages.every(lang => manifestStore.isAudioLanguageCached(videoEntry.id, lang, currentFingerprint));
+
+  if (subtitlesCached && audioCached && !options.force) {
     metrics.cacheStats.hits++;
-    onProgress?.({ type: 'cache-hit', message: '✓ All requested languages cached' });
+    onProgress?.({ type: 'cache-hit', message: '✓ All requested subtitles & audio cached' });
     return { status: 'cached', video: videoEntry, metrics: metrics.getSummaryReport(videoEntry.id) };
   }
 
@@ -130,25 +139,29 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       return;
     }
 
-    const translatedSegments = await translator.translateSegments(
-      masterSegments,
-      sourceLang,
-      targetLang
-    );
+    try {
+      const translatedSegments = await translator.translateSegments(
+        masterSegments,
+        sourceLang,
+        targetLang
+      );
 
-    // Readability alignment & segmentation for target language
-    const segmentedTranslated = segmenter.segmentTranscript(translatedSegments);
-    const validationResult = validator.validateSegments(masterSegments, segmentedTranslated, targetLang);
+      // Readability alignment & segmentation for target language
+      const segmentedTranslated = segmenter.segmentTranscript(translatedSegments);
+      const validationResult = validator.validateSegments(masterSegments, segmentedTranslated, targetLang);
 
-    const vttStart = Date.now();
-    const vttString = generateWebVTT(segmentedTranslated);
-    metrics.recordTiming('vttTime', Date.now() - vttStart);
+      const vttStart = Date.now();
+      const vttString = generateWebVTT(segmentedTranslated);
+      metrics.recordTiming('vttTime', Date.now() - vttStart);
 
-    generatedSubtitlesMap[targetLang] = vttString;
-    newGeneratedCount++;
+      generatedSubtitlesMap[targetLang] = vttString;
+      newGeneratedCount++;
 
-    const statusBadge = validationResult.status === 'PASS' ? '✓' : '⚠';
-    onProgress?.({ type: 'lang-generated', lang: targetLang, message: `${statusBadge} Generated ${targetLang}.vtt [${validationResult.status}]` });
+      const statusBadge = validationResult.status === 'PASS' ? '✓' : '⚠';
+      onProgress?.({ type: 'lang-generated', lang: targetLang, message: `${statusBadge} Generated ${targetLang}.vtt [${validationResult.status}]` });
+    } catch (err) {
+      onProgress?.({ type: 'lang-failed', lang: targetLang, message: `⚠ ${targetLang} (translation error: ${err.message})` });
+    }
   };
 
   // Execute languages with controlled concurrency
@@ -163,12 +176,95 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
     manifestStore.saveMultilingualSubtitles(videoEntry, sourceLang, generatedSubtitlesMap, currentFingerprint);
   }
 
+  // --- AUDIO DUBBING PIPELINE ---
+  const generatedAudioMap = {};
+  let newAudioCount = 0;
+
+  if (requestedAudioLanguages.length > 0) {
+    onProgress?.({ type: 'audio-dub-header', message: '\nAudio Translation Pipeline\n--------------------------' });
+
+    const totalDuration = masterSegments.length > 0
+      ? masterSegments[masterSegments.length - 1].end
+      : 10;
+
+    const audioConcurrency = options.audioConcurrency || 3;
+
+    const processAudioLanguage = async (targetLang, index, total) => {
+      const isAudioCached = manifestStore.isAudioLanguageCached(videoEntry.id, targetLang, currentFingerprint);
+
+      if (isAudioCached && !options.force) {
+        onProgress?.({ type: 'audio-cached', lang: targetLang, message: `✓ ${targetLang} audio (cached)` });
+        return;
+      }
+
+      onProgress?.({ type: 'audio-step-1', lang: targetLang, message: `[${index + 1}/${total}] ${targetLang} transcript` });
+
+      try {
+        let translatedSegments = masterSegments;
+        if (targetLang !== sourceLang) {
+          onProgress?.({ type: 'audio-step-2', lang: targetLang, message: `[${index + 1}/${total}] ${targetLang} translation` });
+          translatedSegments = await translator.translateSegments(masterSegments, sourceLang, targetLang);
+        }
+
+        onProgress?.({ type: 'audio-step-3', lang: targetLang, message: `[${index + 1}/${total}] ${targetLang} TTS` });
+        
+        const audioWorkspace = new TempWorkspace(`audio_${videoEntry.id}_${targetLang}`, manifestStore.cwd);
+        const alignedSegments = [];
+
+        try {
+          for (const seg of translatedSegments) {
+            const ttsResult = await ttsProvider.synthesize(seg.text, targetLang, { outputDir: audioWorkspace.workspaceDir });
+            const alignedPath = await alignAudioSegment(
+              ttsResult.audioPath,
+              ttsResult.duration,
+              seg.start,
+              seg.end,
+              audioWorkspace.workspaceDir
+            );
+            alignedSegments.push({
+              start: seg.start,
+              end: seg.end,
+              audioPath: alignedPath
+            });
+          }
+
+          const targetM4a = path.join(audioWorkspace.workspaceDir, `${targetLang}.m4a`);
+          await stitchAudioSegments(alignedSegments, targetM4a, totalDuration);
+
+          manifestStore.saveMultilingualAudio(videoEntry, sourceLang, { [targetLang]: targetM4a }, currentFingerprint);
+          generatedAudioMap[targetLang] = targetM4a;
+          newAudioCount++;
+          onProgress?.({ type: 'audio-generated', lang: targetLang, message: `✓ ${targetLang} audio generated` });
+        } finally {
+          if (!options.keepTemp) {
+            audioWorkspace.cleanup();
+          }
+        }
+      } catch (err) {
+        // Isolation: A failure for one audio language must NOT destroy other languages
+        onProgress?.({ type: 'audio-failed', lang: targetLang, message: `⚠ ${targetLang} audio generation failed: ${err.message}` });
+      }
+    };
+
+    for (let i = 0; i < requestedAudioLanguages.length; i += audioConcurrency) {
+      const chunk = requestedAudioLanguages.slice(i, i + audioConcurrency);
+      await Promise.all(chunk.map((lang, idx) => processAudioLanguage(lang, i + idx, requestedAudioLanguages.length)));
+    }
+
+    if (Object.keys(generatedAudioMap).length > 0) {
+      manifestStore.saveMultilingualAudio(videoEntry, sourceLang, generatedAudioMap, currentFingerprint);
+    }
+  }
+
   return {
     status: 'completed',
     video: videoEntry,
     generatedCount: newGeneratedCount,
     cachedCount: subCachedCount,
+    generatedAudioCount: newAudioCount,
     sourceLanguage: sourceLang,
     metrics: metrics.getSummaryReport(videoEntry.id)
   };
 };
+
+export default processSingleVideo;

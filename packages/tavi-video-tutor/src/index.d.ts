@@ -22,6 +22,28 @@ export interface VideoQuality {
   index?: number;
 }
 
+export interface AudioTrack {
+  label: string;
+  src: string;
+  language: string;
+  source?: boolean;
+}
+
+export type AudioLanguage = string;
+export type AudioLanguageMap = Record<string, string | AudioTrack>;
+export type AudioLanguages = 'all' | false | string[] | AudioLanguageMap;
+
+export interface AudioAvailability {
+  enabled: boolean;
+  hasAvailableAudio: boolean;
+  availableLanguages: string[];
+  visibleLanguages: string[];
+  resolvedTracks: Record<string, AudioTrack>;
+  sourceByLanguage: Record<string, string>;
+  selectedLanguage: string;
+  reason: string;
+}
+
 export interface AITutorProps {
   src: string;
   id?: string;
@@ -30,9 +52,10 @@ export interface AITutorProps {
   style?: React.CSSProperties;
   className?: string;
   subtitles?: 'all' | false | string[] | Record<string, string>;
+  audioLanguages?: AudioLanguages;
   tracks?: any[];
   config?: any;
-  audioDubs?: Record<string, string>;
+  audioDubs?: Record<string, string | AudioTrack>;
   qualities?: VideoQuality[];
   subLanguage?: string;
   defaultSubLanguage?: string;
@@ -44,6 +67,8 @@ export interface AITutorProps {
   onEnded?: () => void;
   onProgress?: (progress: { playedSeconds: number }) => void;
   onSubLanguageChange?: (lang: string) => void;
+  onAudioLanguageChange?: (event: { language: string; previousLanguage?: string; source?: string }) => void;
+  onQualityChange?: (quality: VideoQuality | string) => void;
   onSubtitleGenerated?: (vttText: string, videoSrc: string) => void;
   onUpdateSubtitles?: (updatedSubtitles: any) => void;
   onTracksChange?: (tracks: any[]) => void;
@@ -52,7 +77,10 @@ export interface AITutorProps {
 export interface TaviVideoPlayerProps extends AITutorProps {
   manifestSubtitles?: Record<string, string>;
   manifestQualities?: VideoQuality[];
+  manifestAudioLanguages?: Record<string, AudioTrack>;
   resolvedSubtitles?: Record<string, string>;
+  resolvedAudioTracks?: Record<string, AudioTrack>;
+  audioAvailability?: AudioAvailability;
   demoSubtitles?: Record<string, string>;
 }
 
@@ -62,5 +90,7 @@ export declare const TaviVideoPlayer: React.ForwardRefExoticComponent<TaviVideoP
 export declare function resolveSubtitleVisibility(params: any): any;
 export declare function resolveSubtitleSources(params: any): any;
 export declare function resolveQualitySources(params: any): any;
+export declare function resolveAudioSources(params: any): any;
+export declare function resolveAudioAvailability(params: any): AudioAvailability;
 
 export default AITutor;

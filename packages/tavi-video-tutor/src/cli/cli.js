@@ -73,47 +73,108 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
       try {
         const manifest = JSON.parse(fs.readFileSync(internalManifestPath, 'utf8'));
         if (manifest[targetVideoId]) {
-          const subRelPath = manifest[targetVideoId].subtitle;
-          delete manifest[targetVideoId];
-          fs.writeFileSync(internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-
-          if (subRelPath) {
+          const entry = manifest[targetVideoId];
+          // Clean specific subtitle files
+          if (entry.subtitles && typeof entry.subtitles === 'object') {
+            Object.values(entry.subtitles).forEach(subInfo => {
+              const subSrc = typeof subInfo === 'string' ? subInfo : (subInfo && subInfo.src);
+              if (subSrc) {
+                try {
+                  const fullSubPath = normalizeSubtitlePath(subSrc, publicDir);
+                  if (fs.existsSync(fullSubPath)) {
+                    fs.unlinkSync(fullSubPath);
+                    removedCount++;
+                  }
+                } catch (_) {}
+              }
+            });
+          } else if (entry.subtitle) {
             try {
-              const fullSubPath = normalizeSubtitlePath(subRelPath, publicDir);
+              const fullSubPath = normalizeSubtitlePath(entry.subtitle, publicDir);
               if (fs.existsSync(fullSubPath)) {
                 fs.unlinkSync(fullSubPath);
+                removedCount++;
               }
             } catch (_) {}
           }
-          removedCount++;
+
+          delete manifest[targetVideoId];
+          fs.writeFileSync(internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
         }
       } catch (_) {}
     }
 
-    const publicSubFile = path.join(publicDir, 'subtitles', `${targetVideoId}.en.vtt`);
-    if (fs.existsSync(publicSubFile)) {
-      fs.unlinkSync(publicSubFile);
+    // 1. Clean public subtitles folder for target video
+    const publicVideoSubtitlesDir = path.join(publicDir, 'subtitles', targetVideoId);
+    if (fs.existsSync(publicVideoSubtitlesDir)) {
+      fs.rmSync(publicVideoSubtitlesDir, { recursive: true, force: true });
       removedCount++;
     }
 
-    const publicVideoSubDir = path.join(publicDir, 'videos', targetVideoId);
-    if (fs.existsSync(publicVideoSubDir)) {
-      fs.rmSync(publicVideoSubDir, { recursive: true, force: true });
+    // 2. Clean standalone public subtitle files for target video
+    const publicSubtitlesDir = path.join(publicDir, 'subtitles');
+    if (fs.existsSync(publicSubtitlesDir)) {
+      try {
+        const subFiles = fs.readdirSync(publicSubtitlesDir);
+        subFiles.forEach(file => {
+          if (file.startsWith(`${targetVideoId}.`) || file === `${targetVideoId}.vtt`) {
+            fs.unlinkSync(path.join(publicSubtitlesDir, file));
+            removedCount++;
+          }
+        });
+      } catch (_) {}
+    }
+
+    // 3. Clean public quality videos
+    const publicVideoQualitiesDir = path.join(publicDir, 'videos', targetVideoId);
+    if (fs.existsSync(publicVideoQualitiesDir)) {
+      fs.rmSync(publicVideoQualitiesDir, { recursive: true, force: true });
       removedCount++;
     }
 
-    const internalVideoSubDir = path.join(internalDir, 'videos', targetVideoId);
-    if (fs.existsSync(internalVideoSubDir)) {
-      fs.rmSync(internalVideoSubDir, { recursive: true, force: true });
+    // 4. Clean internal cache videos
+    const internalVideoDir = path.join(internalDir, 'videos', targetVideoId);
+    if (fs.existsSync(internalVideoDir)) {
+      fs.rmSync(internalVideoDir, { recursive: true, force: true });
+      removedCount++;
     }
 
+    // 5. Clean master transcript cache
+    const transcriptsDir = path.join(internalDir, 'transcripts');
+    if (fs.existsSync(transcriptsDir)) {
+      try {
+        const transcriptFiles = fs.readdirSync(transcriptsDir);
+        transcriptFiles.forEach(file => {
+          if (file.startsWith(`${targetVideoId}.`) || file.startsWith(`${targetVideoId}-`) || file === `${targetVideoId}.json`) {
+            fs.unlinkSync(path.join(transcriptsDir, file));
+            removedCount++;
+          }
+        });
+      } catch (_) {}
+    }
+
+    // 6. Clean temporary workspace
+    const tmpDir = path.join(internalDir, 'tmp');
+    if (fs.existsSync(tmpDir)) {
+      try {
+        const tmpFiles = fs.readdirSync(tmpDir);
+        tmpFiles.forEach(file => {
+          if (file.startsWith(`${targetVideoId}-`) || file === targetVideoId) {
+            fs.rmSync(path.join(tmpDir, file), { recursive: true, force: true });
+            removedCount++;
+          }
+        });
+      } catch (_) {}
+    }
+
+    // 7. Sync updated manifest to public
     const publicManifestPath = path.join(publicDir, 'manifest.json');
     if (fs.existsSync(internalManifestPath) && fs.existsSync(publicDir)) {
       fs.copyFileSync(internalManifestPath, publicManifestPath);
     }
 
     console.log(`✓ Cleaned generated subtitles & video qualities for "${targetVideoId}" (${removedCount} items removed)\n`);
-    return;
+    return { cleaned: true, videoId: targetVideoId, removedCount };
   }
 
   console.log(`\nAITutor Engine — Cleaning All Generated Subtitles & Video Qualities\n`);
@@ -127,6 +188,7 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
   }
 
   console.log(`✓ All generated AITutor subtitles, video qualities, and manifests cleaned successfully.\n`);
+  return { cleaned: true, all: true };
 };
 
 export const runStatus = async (options = {}, cwd = process.cwd()) => {
@@ -232,24 +294,51 @@ export const runGenerate = async (options = {}, cwd = process.cwd()) => {
 };
 
 export const main = async (args = process.argv.slice(2), cwd = process.cwd()) => {
-  const command = args[0] || 'generate';
+  const force = args.includes('--force');
+  const keepTemp = args.includes('--keep-temp') || args.includes('--keepTemp');
+  const noQuality = args.includes('--no-quality') || args.includes('--noQuality');
+
+  let videoVal = null;
+  const videoIdx = args.indexOf('--video');
+  const vIdx = args.indexOf('-v');
+  if (videoIdx !== -1 && args[videoIdx + 1]) {
+    videoVal = args[videoIdx + 1];
+  } else if (vIdx !== -1 && args[vIdx + 1]) {
+    videoVal = args[vIdx + 1];
+  } else {
+    const videoEq = args.find(a => a.startsWith('--video='));
+    if (videoEq) {
+      videoVal = videoEq.split('=')[1];
+    }
+  }
+
+  let audioLanguagesVal = undefined;
+  const audioIdx = args.indexOf('--audio-languages');
+  if (audioIdx !== -1 && args[audioIdx + 1] && !args[audioIdx + 1].startsWith('-')) {
+    audioLanguagesVal = args[audioIdx + 1] === 'all' ? 'all' : args[audioIdx + 1].split(',').map(s => s.trim()).filter(Boolean);
+  } else {
+    const audioEq = args.find(a => a.startsWith('--audio-languages='));
+    if (audioEq) {
+      const val = audioEq.split('=')[1];
+      audioLanguagesVal = val === 'all' ? 'all' : val.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
+  const firstArg = args[0] || 'generate';
+  const isFlag = firstArg.startsWith('-');
+  const command = isFlag ? 'generate' : firstArg;
 
   if (command === 'init') {
-    const force = args.includes('--force');
     await runInit({ force }, cwd);
   } else if (command === 'clean') {
-    const videoIdx = args.indexOf('--video');
-    const videoVal = videoIdx !== -1 ? args[videoIdx + 1] : null;
     await runClean({ video: videoVal }, cwd);
   } else if (command === 'status') {
     await runStatus({}, cwd);
   } else if (command === 'validate') {
     await runValidate({}, cwd);
-  } else if (command === 'generate' || command === 'build' || !command.startsWith('-')) {
-    const force = args.includes('--force');
-    const keepTemp = args.includes('--keep-temp');
+  } else if (command === 'generate' || command === 'build') {
     try {
-      const result = await runGenerate({ force, keepTemp }, cwd);
+      const result = await runGenerate({ force, keepTemp, noQuality, quality: !noQuality, audioLanguages: audioLanguagesVal }, cwd);
       if (result && result.failed > 0) {
         process.exitCode = 1;
       }
@@ -258,6 +347,6 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
       process.exitCode = 1;
     }
   } else {
-    console.log(`Usage: aitutor [init|generate|status|validate|clean] [--video <id>] [--force]`);
+    console.log(`Usage: aitutor [init|generate|status|validate|clean] [--video <id>] [--audio-languages en,hi,te] [--force] [--no-quality] [--keep-temp]`);
   }
 };

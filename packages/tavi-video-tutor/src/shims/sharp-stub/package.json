@@ -1,6 +1,0 @@
-{
-  "name": "sharp",
-  "version": "0.32.5",
-  "main": "index.js",
-  "type": "module"
-}

@@ -3,10 +3,11 @@ import { ManifestStore } from '../cache/manifest.js';
 import { processSingleVideo } from './processVideo.js';
 import { processVideoQuality } from '../video/processVideoQuality.js';
 import { checkEnvironment, printEnvironmentReport } from '../env/checkEnv.js';
+import { AITUTOR_LANGUAGES } from '../languages/registry.js';
 
 export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
   const loadedConfig = await loadConfig(cwd);
-  const { videos, globalLanguages } = loadedConfig;
+  const { videos, globalLanguages, globalAudioLanguages } = loadedConfig;
   const manifestStore = new ManifestStore(cwd);
 
   console.log(`\nAITutor Multilingual Subtitle & Video Quality Engine\n─────────────────────────────────────\n`);
@@ -31,12 +32,30 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
     const video = videos[i];
     console.log(`[${i + 1}/${videos.length}] ${video.id}`);
     console.log(`URL: ${video.src}`);
-    console.log(`Languages: ${video.languages.join(', ')}\n`);
+    console.log(`Languages: ${video.languages.join(', ')}`);
 
-    // 1. Subtitle Pipeline Execution
+    let effectiveAudioLangs = [];
+    if (options.audioLanguages !== undefined) {
+      if (options.audioLanguages === 'all') {
+        effectiveAudioLangs = AITUTOR_LANGUAGES.map(l => l.code);
+      } else if (Array.isArray(options.audioLanguages)) {
+        effectiveAudioLangs = options.audioLanguages;
+      }
+    } else if (video.audioLanguages && video.audioLanguages.length > 0) {
+      effectiveAudioLangs = video.audioLanguages;
+    } else if (globalAudioLanguages && globalAudioLanguages.length > 0) {
+      effectiveAudioLangs = globalAudioLanguages;
+    }
+
+    if (effectiveAudioLangs.length > 0) {
+      console.log(`Audio Dub Languages: ${effectiveAudioLangs.join(', ')}`);
+    }
+    console.log('');
+
+    // 1. Subtitle & Audio Dub Pipeline Execution
     try {
       let masterWasCached = false;
-      const res = await processSingleVideo(video, manifestStore, options, (evt) => {
+      const res = await processSingleVideo(video, manifestStore, { ...options, audioLanguages: effectiveAudioLangs }, (evt) => {
         if (typeof evt === 'string') {
           console.log(evt);
         } else {

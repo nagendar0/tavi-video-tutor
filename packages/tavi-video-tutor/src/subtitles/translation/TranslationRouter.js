@@ -4,21 +4,24 @@ import { LocalNllbProvider } from './LocalNllbProvider.js';
 export class TranslationRouter {
   constructor(options = {}) {
     this.options = options;
-    this.mode = options.mode || 'auto'; // 'auto' | 'online' | 'offline'
-    this.onlineProvider = new AITutorTranslationProvider(options);
-    this.localProvider = new LocalNllbProvider(options);
+    this.mode = options.mode || options.provider || 'auto'; // 'auto' | 'online' | 'offline'
+    this.onlineProvider = options.onlineProvider || new AITutorTranslationProvider(options);
+    this.localProvider = options.localProvider || new LocalNllbProvider(options);
   }
 
   supports(sourceLang, targetLang) {
+    const srcClean = String(sourceLang || 'en').toLowerCase();
+    const tgtClean = String(targetLang || 'en').toLowerCase();
+    if (srcClean === tgtClean) return true;
     if (this.mode === 'offline') {
-      return this.localProvider.supports(sourceLang, targetLang);
+      return this.localProvider.supports(srcClean, tgtClean);
     }
-    return this.onlineProvider.supports(sourceLang, targetLang) || this.localProvider.supports(sourceLang, targetLang);
+    return this.onlineProvider.supports(srcClean, tgtClean) || this.localProvider.supports(srcClean, tgtClean);
   }
 
   async translateSegments(segments, sourceLang, targetLang) {
-    const srcClean = String(sourceLang).toLowerCase();
-    const tgtClean = String(targetLang).toLowerCase();
+    const srcClean = String(sourceLang || 'en').toLowerCase();
+    const tgtClean = String(targetLang || 'en').toLowerCase();
 
     if (srcClean === tgtClean) {
       return segments.map((s, idx) => ({
@@ -41,7 +44,10 @@ export class TranslationRouter {
     // Auto Mode: Online Preferred → Local Fallback
     try {
       if (this.mode !== 'offline') {
-        return await this.onlineProvider.translateSegments(segments, srcClean, tgtClean);
+        const onlineResult = await this.onlineProvider.translateSegments(segments, srcClean, tgtClean);
+        if (onlineResult && Array.isArray(onlineResult) && onlineResult.length > 0) {
+          return onlineResult;
+        }
       }
     } catch (onlineErr) {
       if (this.mode === 'online') {
@@ -54,7 +60,7 @@ export class TranslationRouter {
         console.log(`→ Switching to Local NLLB Fallback for ${targetLang}...`);
         return await this.localProvider.translateSegments(segments, srcClean, tgtClean);
       } else {
-        throw new Error(`UNSUPPORTED_OFFLINE: Online translation failed and language '${targetLanguage}' is unsupported by local NLLB-200 fallback model.`);
+        throw new Error(`UNSUPPORTED_OFFLINE: Online translation failed and language '${targetLang}' is unsupported by local NLLB-200 fallback model.`);
       }
     }
 
@@ -67,3 +73,4 @@ export class TranslationRouter {
   }
 }
 
+export default TranslationRouter;

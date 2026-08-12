@@ -3,10 +3,22 @@
 export const transcribeVideoAudio = async (videoUrl, onProgress) => {
   onProgress?.({ status: 'loading-model', message: 'Loading Whisper AI model...' });
 
-  const { pipeline, env } = await import('@huggingface/transformers');
-  if (env.backends?.onnx?.wasm) {
+  let transformersModule;
+  try {
+    const dynamicImport = new Function('specifier', 'return import(specifier)');
+    transformersModule = await dynamicImport('@huggingface/transformers');
+  } catch (_) {
+    try {
+      const dynamicImport = new Function('specifier', 'return import(specifier)');
+      transformersModule = await dynamicImport('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3');
+    } catch (e) {
+      throw new Error('In-browser transcription requires @huggingface/transformers. Run pre-transcription with "npx aitutor generate" or install @huggingface/transformers.');
+    }
+  }
+  const { pipeline, env } = transformersModule;
+  if (env?.backends?.onnx?.wasm) {
     env.backends.onnx.wasm.numThreads = 1;
-  } else if (env.wasm) {
+  } else if (env?.wasm) {
     env.wasm.numThreads = 1;
   }
 

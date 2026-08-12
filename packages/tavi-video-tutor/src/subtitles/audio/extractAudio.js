@@ -42,7 +42,12 @@ export const checkFFmpegAvailable = () => {
 export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace) => {
   const isFFmpegInstalled = await checkFFmpegAvailable();
   if (!isFFmpegInstalled) {
-    throw new Error('BLOCKED: FFmpeg executable is not installed or not available on PATH');
+    const installGuide = process.platform === 'win32'
+      ? 'Windows: Run "winget install Gyan.FFmpeg" or download from https://ffmpeg.org and add to PATH.'
+      : process.platform === 'darwin'
+      ? 'macOS: Run "brew install ffmpeg".'
+      : 'Linux: Run "sudo apt install ffmpeg" (or equivalent for your distribution).';
+    throw new Error(`BLOCKED: FFmpeg executable was not found on your system PATH or FFMPEG_PATH.\n${installGuide}\nAlternatively, set process.env.FFMPEG_PATH="path/to/ffmpeg".`);
   }
 
   const binPath = getFFmpegBinaryPath();

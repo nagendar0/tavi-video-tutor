@@ -2,6 +2,7 @@ import React, { forwardRef, useState, useEffect, useRef, useMemo } from 'react';
 import TaviVideoPlayer from './TaviVideoPlayer.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
 import { resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveAudioAvailability } from '../subtitles/resolver/audioResolver.js';
 import '../styles/ai-tutor.css';
 
 export const AITutor = forwardRef(({
@@ -16,6 +17,7 @@ export const AITutor = forwardRef(({
   onEnded,
   onProgress,
   subtitles,
+  audioLanguages,
   tracks,
   config,
   audioDubs = {},
@@ -25,20 +27,25 @@ export const AITutor = forwardRef(({
   defaultAudioLanguage = 'original',
   playbackRates = [0.5, 1, 1.25, 1.5, 2],
   subtitleStyle,
+  autoTranscribe = false,
   onSubLanguageChange,
+  onAudioLanguageChange,
+  onQualityChange,
   onSubtitleGenerated,
   onUpdateSubtitles,
   onTracksChange
 }, ref) => {
   const [manifestSubtitles, setManifestSubtitles] = useState({});
   const [manifestQualities, setManifestQualities] = useState([]);
+  const [manifestAudioLanguages, setManifestAudioLanguages] = useState({});
   const seqRef = useRef(0);
 
-  // Dynamic src switching: detach old track & fetch manifest subtitle for new src
+  // Dynamic src switching: detach old track & fetch manifest subtitle/audio for new src
   useEffect(() => {
     const currentSeq = ++seqRef.current;
-    setManifestSubtitles({}); // Detach old track immediately
-    setManifestQualities([]); // Clear old qualities
+    setManifestSubtitles(prev => (Object.keys(prev).length === 0 ? prev : {}));
+    setManifestQualities(prev => (prev.length === 0 ? prev : []));
+    setManifestAudioLanguages(prev => (Object.keys(prev).length === 0 ? prev : {}));
 
     if (!src) return;
 
@@ -51,36 +58,36 @@ export const AITutor = forwardRef(({
 
         if (manifestEntry) {
           if (Array.isArray(manifestEntry.qualities) && manifestEntry.qualities.length > 0) {
-            setManifestQualities(manifestEntry.qualities);
+            setManifestQualities(prev => {
+              if (prev.length === manifestEntry.qualities.length && prev.every((q, i) => q === manifestEntry.qualities[i])) return prev;
+              return manifestEntry.qualities;
+            });
+          }
+
+          if (manifestEntry.audioLanguages && typeof manifestEntry.audioLanguages === 'object') {
+            setManifestAudioLanguages(manifestEntry.audioLanguages);
           }
 
           const loadedMap = {};
 
           if (manifestEntry.subtitles && Object.keys(manifestEntry.subtitles).length > 0) {
-            await Promise.all(
-              Object.entries(manifestEntry.subtitles).map(async ([langCode, subInfo]) => {
-                try {
-                  const subSrc = typeof subInfo === 'string' ? subInfo : (subInfo && subInfo.src);
-                  if (subSrc) {
-                    const res = await fetch(subSrc);
-                    if (res.ok) {
-                      const vttText = await res.text();
-                      loadedMap[langCode] = vttText;
-                    }
-                  }
-                } catch (_) {}
-              })
-            );
+            Object.entries(manifestEntry.subtitles).forEach(([langCode, subInfo]) => {
+              const subSrc = typeof subInfo === 'string' ? subInfo : (subInfo && subInfo.src);
+              if (subSrc) {
+                loadedMap[langCode] = subSrc;
+              }
+            });
           } else if (manifestEntry.subtitle) {
-            const res = await fetch(manifestEntry.subtitle);
-            if (res.ok) {
-              const vttText = await res.text();
-              loadedMap[manifestEntry.language || 'en'] = vttText;
-            }
+            loadedMap[manifestEntry.language || 'en'] = manifestEntry.subtitle;
           }
 
           if (isSubscribed && seqRef.current === currentSeq && Object.keys(loadedMap).length > 0) {
-            setManifestSubtitles(loadedMap);
+            setManifestSubtitles(prev => {
+              const prevKeys = Object.keys(prev);
+              const newKeys = Object.keys(loadedMap);
+              if (prevKeys.length === newKeys.length && prevKeys.every(k => prev[k] === loadedMap[k])) return prev;
+              return loadedMap;
+            });
           }
         }
       } catch (_) {
@@ -99,6 +106,15 @@ export const AITutor = forwardRef(({
       generatedSubtitles: manifestSubtitles
     });
   }, [subtitles, manifestSubtitles]);
+
+  const audioAvailabilityResult = useMemo(() => {
+    return resolveAudioAvailability({
+      audioLanguagesConfig: audioLanguages,
+      manifestAudio: manifestAudioLanguages,
+      developerAudio: audioDubs,
+      selectedLanguage: defaultAudioLanguage
+    });
+  }, [audioLanguages, manifestAudioLanguages, audioDubs, defaultAudioLanguage]);
 
   return (
     <div 
@@ -120,9 +136,13 @@ export const AITutor = forwardRef(({
         onEnded={onEnded}
         onProgress={onProgress}
         subtitles={subtitles}
+        audioLanguages={audioLanguages}
         manifestSubtitles={manifestSubtitles}
         manifestQualities={manifestQualities}
+        manifestAudioLanguages={manifestAudioLanguages}
         resolvedSubtitles={availabilityResult.resolvedTracks}
+        resolvedAudioTracks={audioAvailabilityResult.resolvedTracks}
+        audioAvailability={audioAvailabilityResult}
         tracks={tracks}
         config={config}
         audioDubs={audioDubs}
@@ -132,7 +152,10 @@ export const AITutor = forwardRef(({
         defaultAudioLanguage={defaultAudioLanguage}
         playbackRates={playbackRates}
         subtitleStyle={subtitleStyle}
+        autoTranscribe={autoTranscribe}
         onSubLanguageChange={onSubLanguageChange}
+        onAudioLanguageChange={onAudioLanguageChange}
+        onQualityChange={onQualityChange}
         onSubtitleGenerated={onSubtitleGenerated}
         onUpdateSubtitles={onUpdateSubtitles}
         onTracksChange={onTracksChange}

@@ -18,7 +18,11 @@ npx aitutor
 
 ---
 
-## 1. NEW IN v1.1.0 — MAJOR FEATURES & ACCESSIBILITY
+## 1. NEW IN v2.0.1 — ENTERPRISE PLAYER SDK & RELEASE REMEDIATION
+
+### ⚡ Pure Lightweight Browser Player (`tavi-video-tutor/player`)
+- **Zero AI Runtime Bloat**: Normal player imports (`import { AITutor } from "tavi-video-tutor/player"`) bundle only the vector-sharp React video player, canvas subtitle renderer, and resolution hooks with **0 ONNX WASM runtime files** and **0 Transformers overhead**.
+- **On-Demand Auto-Transcription**: In-browser Whisper ASR speech-to-text is fully isolated behind dynamic import and only loaded if `autoTranscribe={true}` is explicitly passed.
 
 ### 🔍 Razor-Sharp High-DPI Canvas Rendering (`devicePixelRatio`)
 - **Retina & 4K Auto-Scaling**: Automatically detects `window.devicePixelRatio` and scales the canvas backing store resolution (`canvas.width = rect.width * dpr`) to guarantee vector-sharp subtitle typography on MacBook Retina displays, 4K monitors, Surface devices, and high-DPI mobile screens.
@@ -111,7 +115,7 @@ WebVTT File Generator (en.vtt, te.vtt...)                      │
 - **Node.js**: `v18.0.0` or higher.
 - **npm**: `v9.0.0` or higher.
 - **React**: `^18.0.0` or `^19.0.0` (Peer dependency).
-- **FFmpeg**: System `ffmpeg` binary on PATH or specified via `process.env.FFMPEG_PATH`. (Local fallback binaries in `bin/ffmpeg.exe` are auto-resolved if available).
+- **FFmpeg**: System `ffmpeg` binary on PATH or specified via `process.env.FFMPEG_PATH`. (Windows: `winget install Gyan.FFmpeg`, macOS: `brew install ffmpeg`, Linux: `sudo apt install ffmpeg`).
 - **Browsers**: Any modern browser supporting HTML5 Video and ES2022 JavaScript (Chrome, Firefox, Safari, Edge).
 
 ---

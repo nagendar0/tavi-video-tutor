@@ -1,9 +1,9 @@
 {
   "name": "tavi-video-tutor",
-  "version": "2.0.0",
-  "description": "Enterprise-grade React video player SDK & automated multilingual subtitle engine powered by Web Worker VTT parsing, modular custom hooks, plugin architecture, offline IndexedDB storage, razor-sharp High-DPI canvas subtitle renderer, automatic video quality ladder, and WAI-ARIA accessibility.",
+  "version": "2.1.0",
+  "description": "Enterprise-grade React video player SDK & automated multilingual subtitle & audio dubbing engine powered by Web Worker VTT parsing, TTS speech synthesis, timestamp alignment, automatic video quality ladder, and WAI-ARIA accessibility.",
   "type": "module",
-  "main": "./dist/tavi-video-tutor.umd.cjs",
+  "main": "./dist/tavi-video-tutor.cjs",
   "module": "./dist/tavi-video-tutor.js",
   "types": "./src/index.d.ts",
   "bin": {
@@ -11,20 +11,22 @@
   },
   "files": [
     "dist",
-    "bin",
+    "bin/aitutor.js",
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
       "import": "./dist/tavi-video-tutor.js",
-      "require": "./dist/tavi-video-tutor.umd.cjs"
+      "require": "./dist/tavi-video-tutor.cjs"
     },
     "./player": {
       "types": "./src/index.d.ts",
-      "import": "./src/components/AITutor.jsx",
-      "default": "./src/components/AITutor.jsx"
+      "import": "./dist/player.js",
+      "require": "./dist/player.cjs",
+      "default": "./dist/player.js"
     },
     "./cli": {
       "import": "./src/cli/cli.js",
@@ -34,10 +36,13 @@
       "import": "./src/subtitles/resolver/subtitleResolver.js",
       "default": "./src/subtitles/resolver/subtitleResolver.js"
     },
+    "./audio": {
+      "import": "./src/subtitles/resolver/audioResolver.js",
+      "default": "./src/subtitles/resolver/audioResolver.js"
+    },
     "./dist/style.css": "./dist/tavi-video-tutor.css",
     "./style.css": "./dist/tavi-video-tutor.css",
-    "./package.json": "./package.json",
-    "./*": "./*"
+    "./package.json": "./package.json"
   },
   "scripts": {
     "dev": "vite",
@@ -61,8 +66,21 @@
     "h264-transcoding"
   ],
   "license": "MIT",
-  "dependencies": {
-    "@huggingface/transformers": "^4.2.0"
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
-  "devDependencies": {}
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "vite": "^8.2.1"
+  }
 }

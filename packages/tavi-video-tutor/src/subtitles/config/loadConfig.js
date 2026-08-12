@@ -4,15 +4,17 @@ import { pathToFileURL } from 'url';
 import { AITUTOR_LANGUAGES } from '../languages/registry.js';
 
 export class VideoEntry {
-  constructor(entry, defaultLanguages = ['en'], defaultIndex = 1) {
+  constructor(entry, defaultLanguages = ['en'], defaultIndex = 1, defaultAudioLanguages = []) {
     if (typeof entry === 'string') {
       this.src = entry;
       this.id = this.deriveIdFromSrc(entry, defaultIndex);
       this.languages = defaultLanguages;
+      this.audioLanguages = defaultAudioLanguages;
     } else if (entry && typeof entry === 'object' && entry.src) {
       this.src = entry.src;
       this.id = entry.id || this.deriveIdFromSrc(entry.src, defaultIndex);
       this.languages = entry.subtitles?.languages || entry.languages || defaultLanguages;
+      this.audioLanguages = entry.audio?.languages || entry.audioLanguages || defaultAudioLanguages;
     } else {
       throw new Error('Malformed video configuration entry');
     }
@@ -21,6 +23,12 @@ export class VideoEntry {
       this.languages = AITUTOR_LANGUAGES.map(l => l.code);
     } else if (!Array.isArray(this.languages)) {
       this.languages = ['en'];
+    }
+
+    if (this.audioLanguages === 'all') {
+      this.audioLanguages = AITUTOR_LANGUAGES.map(l => l.code);
+    } else if (!Array.isArray(this.audioLanguages)) {
+      this.audioLanguages = [];
     }
   }
 
@@ -94,11 +102,16 @@ export const loadConfig = async (cwd = process.cwd()) => {
     globalLanguages = AITUTOR_LANGUAGES.map(l => l.code);
   }
 
+  let globalAudioLanguages = rawConfig.audio?.languages || rawConfig.audioLanguages || [];
+  if (globalAudioLanguages === 'all') {
+    globalAudioLanguages = AITUTOR_LANGUAGES.map(l => l.code);
+  }
+
   const videos = [];
   const seenIds = new Set();
 
   rawConfig.videos.forEach((entry, idx) => {
-    const video = new VideoEntry(entry, globalLanguages, idx + 1);
+    const video = new VideoEntry(entry, globalLanguages, idx + 1, globalAudioLanguages);
     if (seenIds.has(video.id)) {
       const err = new Error(`Duplicate video ID "${video.id}" found in configuration "${configPath}".`);
       err.code = 'CONFIG_DUPLICATE_ID';
@@ -111,14 +124,17 @@ export const loadConfig = async (cwd = process.cwd()) => {
   const quality = rawConfig.subtitles?.quality || 'balanced';
   const transcription = rawConfig.subtitles?.transcription || {};
   const translation = rawConfig.subtitles?.translation || {};
+  const audio = rawConfig.audio || {};
   const glossary = Array.isArray(rawConfig.subtitles?.glossary) ? rawConfig.subtitles.glossary : [];
 
   return {
     configPath,
     globalLanguages,
+    globalAudioLanguages,
     quality,
     transcription,
     translation,
+    audio,
     glossary,
     videos
   };

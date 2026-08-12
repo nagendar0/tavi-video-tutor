@@ -1,5 +1,8 @@
 import { AITUTOR_LANGUAGES, getLanguageByCode } from '../languages/registry.js';
 
+const EMPTY_OBJECT = Object.freeze({});
+const EMPTY_ARRAY = Object.freeze([]);
+
 /**
  * Central Subtitle Source Resolver
  * 
@@ -40,6 +43,13 @@ export function resolveSubtitleSources({
     ...Object.keys(uploaded)
   ]);
 
+  if (allLanguages.size === 0) {
+    return {
+      resolvedTracks: EMPTY_OBJECT,
+      sourceByLanguage: EMPTY_OBJECT
+    };
+  }
+
   const resolvedTracks = {};
   const sourceByLanguage = {};
 
@@ -57,6 +67,14 @@ export function resolveSubtitleSources({
       resolvedTracks[lang] = getSourceSrc(demo[lang]);
       sourceByLanguage[lang] = 'demo';
     }
+  }
+
+  const keys = Object.keys(resolvedTracks);
+  if (keys.length === 0) {
+    return {
+      resolvedTracks: EMPTY_OBJECT,
+      sourceByLanguage: EMPTY_OBJECT
+    };
   }
 
   return {
@@ -87,10 +105,10 @@ export function resolveSubtitleAvailability({
       enabled: false,
       hasAvailableSubtitles: false,
       mode: 'disabled',
-      availableLanguages: [],
-      visibleLanguages: [],
-      resolvedTracks: {},
-      sourceByLanguage: {},
+      availableLanguages: EMPTY_ARRAY,
+      visibleLanguages: EMPTY_ARRAY,
+      resolvedTracks: EMPTY_OBJECT,
+      sourceByLanguage: EMPTY_OBJECT,
       primarySource: null,
       reason: 'Subtitles disabled by developer config (subtitles={false}).'
     };
@@ -127,10 +145,10 @@ export function resolveSubtitleAvailability({
       enabled: false,
       hasAvailableSubtitles: false,
       mode,
-      availableLanguages: [],
-      visibleLanguages: [],
-      resolvedTracks: {},
-      sourceByLanguage: {},
+      availableLanguages: EMPTY_ARRAY,
+      visibleLanguages: EMPTY_ARRAY,
+      resolvedTracks: EMPTY_OBJECT,
+      sourceByLanguage: EMPTY_OBJECT,
       primarySource: null,
       reason: 'No subtitle sources found (No generated, uploaded, developer, or embedded tracks).'
     };
@@ -150,6 +168,20 @@ export function resolveSubtitleAvailability({
         visibleLanguages.push(uploadLang);
       }
     });
+  }
+
+  if (visibleLanguages.length === 0 && !hasEmbedded) {
+    return {
+      enabled: false,
+      hasAvailableSubtitles,
+      mode,
+      availableLanguages: availableLanguages.length > 0 ? availableLanguages : EMPTY_ARRAY,
+      visibleLanguages: EMPTY_ARRAY,
+      resolvedTracks: EMPTY_OBJECT,
+      sourceByLanguage: EMPTY_OBJECT,
+      primarySource: null,
+      reason: 'No visible subtitle tracks matched filter.'
+    };
   }
 
   const resolvedTracks = {};
@@ -174,14 +206,16 @@ export function resolveSubtitleAvailability({
     primarySource = 'embedded';
   }
 
+  const finalTracksKeys = Object.keys(resolvedTracks);
+
   return {
     enabled: visibleLanguages.length > 0 || hasEmbedded,
     hasAvailableSubtitles,
     mode,
-    availableLanguages,
-    visibleLanguages,
-    resolvedTracks,
-    sourceByLanguage,
+    availableLanguages: availableLanguages.length > 0 ? availableLanguages : EMPTY_ARRAY,
+    visibleLanguages: visibleLanguages.length > 0 ? visibleLanguages : EMPTY_ARRAY,
+    resolvedTracks: finalTracksKeys.length > 0 ? resolvedTracks : EMPTY_OBJECT,
+    sourceByLanguage: finalTracksKeys.length > 0 ? sourceByLanguage : EMPTY_OBJECT,
     primarySource,
     reason: 'Active subtitle sources available.'
   };
@@ -192,4 +226,5 @@ export function resolveSubtitleVisibility(opts) {
 }
 
 export default resolveSubtitleAvailability;
+
 

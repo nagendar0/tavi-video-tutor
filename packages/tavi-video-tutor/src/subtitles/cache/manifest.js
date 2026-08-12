@@ -130,14 +130,18 @@ export class ManifestStore {
     this.cwd = cwd;
     this.internalDir = path.join(cwd, '.aitutor');
     this.internalSubDir = path.join(this.internalDir, 'subtitles');
+    this.internalAudioDir = path.join(this.internalDir, 'audio');
     this.internalManifestPath = path.join(this.internalDir, 'manifest.json');
 
     this.publicDir = path.join(cwd, 'public', 'aitutor');
     this.publicSubDir = path.join(this.publicDir, 'subtitles');
+    this.publicAudioDir = path.join(this.publicDir, 'audio');
     this.publicManifestPath = path.join(this.publicDir, 'manifest.json');
 
     fs.mkdirSync(this.internalSubDir, { recursive: true });
+    fs.mkdirSync(this.internalAudioDir, { recursive: true });
     fs.mkdirSync(this.publicSubDir, { recursive: true });
+    fs.mkdirSync(this.publicAudioDir, { recursive: true });
   }
 
   loadManifest() {
@@ -177,6 +181,23 @@ export class ManifestStore {
 
     try {
       const publicPath = normalizeSubtitlePath(subInfo.src, this.publicDir);
+      return fs.existsSync(publicPath);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  isAudioLanguageCached(videoId, langCode, fingerprint = null) {
+    const manifest = this.loadManifest();
+    const entry = manifest[videoId];
+    if (!entry) return false;
+    if (fingerprint && entry.fingerprint !== fingerprint) return false;
+
+    const audioInfo = entry.audioLanguages?.[langCode];
+    if (!audioInfo || !audioInfo.src) return false;
+
+    try {
+      const publicPath = normalizeSubtitlePath(audioInfo.src, this.publicDir);
       return fs.existsSync(publicPath);
     } catch (_) {
       return false;
@@ -233,6 +254,8 @@ export class ManifestStore {
       language: sourceLanguage || 'en',
       subtitle: subtitlesEntryMap['en']?.src || Object.values(subtitlesEntryMap)[0]?.src || '',
       subtitles: subtitlesEntryMap,
+      ...(existingEntry.qualities && Array.isArray(existingEntry.qualities) ? { qualities: existingEntry.qualities } : {}),
+      ...(existingEntry.audioLanguages ? { audioLanguages: existingEntry.audioLanguages } : {}),
       fingerprint: fingerprint,
       updatedAt: new Date().toISOString()
     };
@@ -241,5 +264,58 @@ export class ManifestStore {
     fs.writeFileSync(this.publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 
     return subtitlesEntryMap;
+  }
+
+  saveMultilingualAudio(videoEntry, sourceLanguage, audioMap, extraFingerprint = null) {
+    const manifest = this.loadManifest();
+    const videoSubDirName = videoEntry.id;
+
+    const internalAudioSubDir = path.join(this.internalAudioDir, videoSubDirName);
+    const publicAudioSubDir = path.join(this.publicAudioDir, videoSubDirName);
+
+    fs.mkdirSync(internalAudioSubDir, { recursive: true });
+    fs.mkdirSync(publicAudioSubDir, { recursive: true });
+
+    const fingerprint = extraFingerprint || computeMediaFingerprint(videoEntry, this.cwd);
+    const existingEntry = manifest[videoEntry.id] || {};
+    const audioLanguagesEntryMap = existingEntry.audioLanguages || {};
+
+    Object.entries(audioMap).forEach(([langCode, audioData]) => {
+      const srcFile = typeof audioData === 'string' ? audioData : audioData.filePath || audioData.src;
+      const filename = `${langCode}.m4a`;
+      const internalFilePath = path.join(internalAudioSubDir, filename);
+      const publicFilePath = path.join(publicAudioSubDir, filename);
+      const publicUrl = `/aitutor/audio/${videoSubDirName}/${filename}`;
+
+      if (srcFile && fs.existsSync(srcFile) && srcFile !== publicFilePath && srcFile !== internalFilePath) {
+        fs.copyFileSync(srcFile, internalFilePath);
+        fs.copyFileSync(srcFile, publicFilePath);
+      }
+
+      const langMeta = getLanguageByCode(langCode);
+      const label = langMeta ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) : langCode;
+
+      audioLanguagesEntryMap[langCode] = {
+        label: audioData.label || label,
+        src: publicUrl,
+        language: langCode,
+        ...(langCode === (sourceLanguage || 'en') ? { source: true } : {})
+      };
+    });
+
+    manifest[videoEntry.id] = {
+      ...existingEntry,
+      id: videoEntry.id,
+      src: videoEntry.src,
+      sourceLanguage: sourceLanguage || existingEntry.sourceLanguage || 'en',
+      audioLanguages: audioLanguagesEntryMap,
+      fingerprint: fingerprint,
+      updatedAt: new Date().toISOString()
+    };
+
+    fs.writeFileSync(this.internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    fs.writeFileSync(this.publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+    return audioLanguagesEntryMap;
   }
 }

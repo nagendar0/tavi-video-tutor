@@ -9,6 +9,15 @@ import { computeMediaFingerprint } from '../cache/manifest.js';
 export const processVideoQuality = async (videoEntry, manifestStore, options = {}, onProgress) => {
   const src = videoEntry.src;
 
+  // 0. Explicit quality generation opt-out
+  if (options.noQuality || options.quality === false || options.config?.qualities?.generate === false) {
+    onProgress?.({
+      type: 'quality-skipped',
+      message: 'VIDEO QUALITY GENERATION: SKIPPED (--no-quality flag active)'
+    });
+    return { status: 'skipped', reason: 'no-quality' };
+  }
+
   // 1. Remote HTTP/HTTPS video handling
   if (typeof src === 'string' && (src.startsWith('http://') || src.startsWith('https://'))) {
     onProgress?.({

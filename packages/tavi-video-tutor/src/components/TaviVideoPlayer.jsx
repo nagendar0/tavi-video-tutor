@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { parseWebVTT, SubtitleRenderer } from './SubtitleEngine.jsx';
 import { useAudioDubSync } from './AudioDubSync.jsx';
-import { transcribeVideoAudio } from '../services/AITranscriber.js';
 import { getCachedSubtitle, setCachedSubtitle } from '../services/SubtitleCache.js';
 import { SubtitleEditorModal } from './SubtitleEditorModal.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
@@ -531,10 +530,14 @@ export const TaviVideoPlayer = forwardRef(({
   src,
   id,
   subtitles = {},
+  audioLanguages,
   manifestSubtitles: manifestSubtitlesProp,
   manifestQualities: manifestQualitiesProp = [],
+  manifestAudioLanguages: manifestAudioLanguagesProp = {},
   demoSubtitles: demoSubtitlesProp,
   resolvedSubtitles: resolvedSubtitlesProp,
+  resolvedAudioTracks = {},
+  audioAvailability,
   tracks,
   config,
   audioDubs = {},
@@ -548,7 +551,10 @@ export const TaviVideoPlayer = forwardRef(({
   defaultAudioLanguage = 'original',
   playbackRates = [0.5, 1, 1.25, 1.5, 2],
   subtitleStyle,
+  autoTranscribe = false,
   onSubLanguageChange,
+  onAudioLanguageChange,
+  onQualityChange,
   onSubtitleGenerated,
   onUpdateSubtitles,
   onTracksChange
@@ -636,22 +642,27 @@ export const TaviVideoPlayer = forwardRef(({
 
   // Local state for user-uploaded subtitle files
   const [localSubtitles, setLocalSubtitles] = useState({});
-  const [manifestQualities, setManifestQualities] = useState([]);
+  const [internalManifestSubtitles, setInternalManifestSubtitles] = useState({});
+  const [internalManifestQualities, setInternalManifestQualities] = useState([]);
   const fileInputRef = useRef(null);
 
   // Manifest subtitles auto-loaded from build-time aitutor pipeline
   const playerManifestSeqRef = useRef(0);
 
   useEffect(() => {
-    const currentSeq = ++playerManifestSeqRef.current;
     setActiveSrc(src);
-    setPrimaryCues([]);
-    setSecondaryCues([]);
+    setPrimaryCues(prev => (prev.length === 0 ? prev : []));
+    setSecondaryCues(prev => (prev.length === 0 ? prev : []));
     originalTrackRef.current = null;
-    setManifestSubtitles({});
-    setManifestQualities([]);
 
     if (!src) return;
+
+    // If manifestSubtitlesProp was passed by parent component (<AITutor />), skip duplicate fetching
+    if (manifestSubtitlesProp !== undefined) return;
+
+    const currentSeq = ++playerManifestSeqRef.current;
+    setInternalManifestSubtitles(prev => (Object.keys(prev).length === 0 ? prev : {}));
+    setInternalManifestQualities(prev => (prev.length === 0 ? prev : []));
 
     let isMounted = true;
     const loadManifest = async () => {
@@ -661,35 +672,37 @@ export const TaviVideoPlayer = forwardRef(({
 
         if (matched) {
           if (Array.isArray(matched.qualities) && matched.qualities.length > 0) {
-            setManifestQualities(matched.qualities);
+            setInternalManifestQualities(prev => {
+              if (prev.length === matched.qualities.length && prev.every((q, i) => q === matched.qualities[i])) return prev;
+              return matched.qualities;
+            });
           }
 
           if (matched.subtitles && Object.keys(matched.subtitles).length > 0) {
             const map = {};
-            await Promise.all(
-              Object.entries(matched.subtitles).map(async ([lang, info]) => {
-                try {
-                  const subSrc = typeof info === 'string' ? info : (info && info.src);
-                  if (subSrc) {
-                    const res = await fetch(subSrc);
-                    if (res.ok) {
-                      const vttText = await res.text();
-                      map[lang] = vttText;
-                    }
-                  }
-                } catch (_) {}
-              })
-            );
+            Object.entries(matched.subtitles).forEach(([lang, info]) => {
+              const subSrc = typeof info === 'string' ? info : (info && info.src);
+              if (subSrc) {
+                map[lang] = subSrc;
+              }
+            });
             if (isMounted && playerManifestSeqRef.current === currentSeq && Object.keys(map).length > 0) {
-              setManifestSubtitles(map);
+              setInternalManifestSubtitles(prev => {
+                const pKeys = Object.keys(prev);
+                const mKeys = Object.keys(map);
+                if (pKeys.length === mKeys.length && pKeys.every(k => prev[k] === map[k])) return prev;
+                return map;
+              });
             }
           } else if (matched.subtitle) {
-            const res = await fetch(matched.subtitle);
-            if (res.ok) {
-              const vttText = await res.text();
-              if (isMounted && playerManifestSeqRef.current === currentSeq) {
-                setManifestSubtitles({ [matched.language || 'en']: vttText });
-              }
+            if (isMounted && playerManifestSeqRef.current === currentSeq) {
+              const singleSub = { [matched.language || 'en']: matched.subtitle };
+              setInternalManifestSubtitles(prev => {
+                const pKeys = Object.keys(prev);
+                const mKeys = Object.keys(singleSub);
+                if (pKeys.length === mKeys.length && pKeys.every(k => prev[k] === singleSub[k])) return prev;
+                return singleSub;
+              });
             }
           }
         }
@@ -697,14 +710,21 @@ export const TaviVideoPlayer = forwardRef(({
     };
     loadManifest();
     return () => { isMounted = false; };
-  }, [src, id]);
+  }, [src, id, manifestSubtitlesProp]);
 
   const effectiveManifestSubtitles = useMemo(() => {
-    return {
-      ...(manifestSubtitles || {}),
-      ...(manifestSubtitlesProp || {})
-    };
-  }, [manifestSubtitles, manifestSubtitlesProp]);
+    if (manifestSubtitlesProp !== undefined && manifestSubtitlesProp !== null) {
+      return manifestSubtitlesProp;
+    }
+    return internalManifestSubtitles || {};
+  }, [internalManifestSubtitles, manifestSubtitlesProp]);
+
+  const effectiveManifestQualities = useMemo(() => {
+    if (manifestQualitiesProp && manifestQualitiesProp.length > 0) {
+      return manifestQualitiesProp;
+    }
+    return internalManifestQualities || [];
+  }, [internalManifestQualities, manifestQualitiesProp]);
 
   // SINGLE SOURCE OF TRUTH: Subtitle Availability & Visibility
   const subtitleAvailability = useMemo(() => {
@@ -755,9 +775,14 @@ export const TaviVideoPlayer = forwardRef(({
   }, [combinedSubtitles, defaultSubLanguage]);
 
   // Trigger onTracksChange whenever tracks array updates
+  const lastTracksSignatureRef = useRef('');
   useEffect(() => {
     if (generatedTracks.length > 0) {
-      onTracksChange?.(generatedTracks);
+      const signature = generatedTracks.map(t => `${t.srcLang}:${t.src}`).join('|');
+      if (signature !== lastTracksSignatureRef.current) {
+        lastTracksSignatureRef.current = signature;
+        onTracksChange?.(generatedTracks);
+      }
     }
   }, [generatedTracks, onTracksChange]);
 
@@ -805,15 +830,14 @@ export const TaviVideoPlayer = forwardRef(({
     );
   }, [combinedSubtitles, hasAvailableSubtitles, isSubtitleEnabled, visibleSubLanguages, subtitles, subtitlesSearchQuery, localSubtitles]);
 
-  // Sync selected subtitle language state with prop updates from parent (subLanguage or defaultSubLanguage)
+  // Sync controlled subtitle language prop (subLanguage) when explicitly provided by developer
   useEffect(() => {
-    const targetLang = subLanguage !== undefined ? subLanguage : defaultSubLanguage;
-    if (targetLang !== undefined && targetLang !== null) {
-      setSelectedSubLanguage(targetLang);
+    if (subLanguage !== undefined && subLanguage !== null) {
+      setSelectedSubLanguage(prev => prev === subLanguage ? prev : subLanguage);
     }
-  }, [subLanguage, defaultSubLanguage]);
+  }, [subLanguage]);
 
-  const [selectedQuality, setSelectedQuality] = useState('Auto');
+  const [selectedQuality, setSelectedQuality] = useState(() => loadSavedPref('selectedQuality', 'Auto'));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAutoplay, setIsAutoplay] = useState(false);
   const hlsRef = useRef(null);
@@ -927,17 +951,32 @@ export const TaviVideoPlayer = forwardRef(({
       hlsQualities,
       qualities,
       config,
-      manifestQualities: manifestQualitiesProp.length > 0 ? manifestQualitiesProp : manifestQualities
+      manifestQualities: effectiveManifestQualities
     });
-  }, [hlsQualities, qualities, config, manifestQualitiesProp, manifestQualities]);
+  }, [hlsQualities, qualities, config, effectiveManifestQualities]);
 
+  // Synchronize selected quality when displayQualities becomes available
   useEffect(() => {
-    if (displayQualities.length > 0 && !hlsRef.current) {
-      if (selectedQuality === 'Auto' || !displayQualities.some(q => q.label === selectedQuality)) {
-        setSelectedQuality(displayQualities[0].label);
+    if (displayQualities.length > 0) {
+      if (selectedQuality === 'Auto' && !hlsRef.current) {
+        const saved = loadSavedPref('selectedQuality', null);
+        if (saved && displayQualities.some(q => q.label === saved)) {
+          const matched = displayQualities.find(q => q.label === saved);
+          setSelectedQuality(saved);
+          if (matched && matched.src && matched.src !== activeSrc) {
+            setActiveSrc(matched.src);
+          }
+        } else {
+          const defaultQ = displayQualities.find(q => q.source) || displayQualities[0];
+          if (defaultQ) {
+            setSelectedQuality(defaultQ.label);
+          }
+        }
       }
     }
   }, [displayQualities]);
+
+
 
   // Cues state loaded dynamically (supporting raw strings and URLs)
   const [primaryCues, setPrimaryCues] = useState([]);
@@ -1020,12 +1059,12 @@ export const TaviVideoPlayer = forwardRef(({
     const fetchPrimary = async () => {
       // Clear stale cues immediately upon language change
       if (active && currentSeq === fetchPrimarySeqRef.current) {
-        setPrimaryCues([]);
+        setPrimaryCues(prev => (prev.length === 0 ? prev : []));
       }
 
       if (!selectedSubLanguage || selectedSubLanguage === 'none' || subtitles === false || !isSubtitleEnabled || !hasAvailableSubtitles) {
         if (active && currentSeq === fetchPrimarySeqRef.current) {
-          setPrimaryCues([]);
+          setPrimaryCues(prev => (prev.length === 0 ? prev : []));
           setIsLoadingSubtitles(false);
         }
         return;
@@ -1050,13 +1089,13 @@ export const TaviVideoPlayer = forwardRef(({
         try {
           cues = await loadSubtitles(rawContent);
           if (active && currentSeq === fetchPrimarySeqRef.current) {
-            setPrimaryCues(cues);
+            setPrimaryCues(prev => (prev.length === 0 && cues.length === 0 ? prev : cues));
             requestAnimationFrame(() => paintSingleFrame());
           }
         } catch (err) {
           console.error('Failed to load subtitles:', err);
           if (active && currentSeq === fetchPrimarySeqRef.current) {
-            setPrimaryCues([]);
+            setPrimaryCues(prev => (prev.length === 0 ? prev : []));
           }
         } finally {
           if (active && currentSeq === fetchPrimarySeqRef.current) setIsLoadingSubtitles(false);
@@ -1076,14 +1115,14 @@ export const TaviVideoPlayer = forwardRef(({
           }
         } catch (err) {
           console.error('Translation failed:', err);
-          if (active && currentSeq === fetchPrimarySeqRef.current) setPrimaryCues([]);
+          if (active && currentSeq === fetchPrimarySeqRef.current) setPrimaryCues(prev => (prev.length === 0 ? prev : []));
         } finally {
           if (active && currentSeq === fetchPrimarySeqRef.current) setIsTranslating(false);
         }
       } else {
         // When no subtitle tracks exist across any source, do NOT run auto-transcription in production
         if (active && currentSeq === fetchPrimarySeqRef.current) {
-          setPrimaryCues([]);
+          setPrimaryCues(prev => (prev.length === 0 ? prev : []));
           setIsLoadingSubtitles(false);
         }
         return;
@@ -1091,7 +1130,7 @@ export const TaviVideoPlayer = forwardRef(({
     };
     fetchPrimary();
     return () => { active = false; };
-  }, [combinedSubtitles, selectedSubLanguage, subtitles, isSubtitleEnabled, hasAvailableSubtitles]);
+  }, [combinedSubtitles[selectedSubLanguage], selectedSubLanguage, subtitles, isSubtitleEnabled, hasAvailableSubtitles]);
 
 
 
@@ -1104,12 +1143,12 @@ export const TaviVideoPlayer = forwardRef(({
     let active = true;
     const fetchSecondary = async () => {
       if (!secondarySubLanguage || secondarySubLanguage === 'none') {
-        if (active) setSecondaryCues([]);
+        if (active) setSecondaryCues(prev => (prev.length === 0 ? prev : []));
         return;
       }
 
       if (secondarySubLanguage.startsWith('embedded-')) {
-        if (active) setSecondaryCues([]);
+        if (active) setSecondaryCues(prev => (prev.length === 0 ? prev : []));
         return;
       }
 
@@ -1118,7 +1157,7 @@ export const TaviVideoPlayer = forwardRef(({
       let cues = [];
       if (rawContent) {
         cues = await loadSubtitles(rawContent);
-        if (active) setSecondaryCues(cues);
+        if (active) setSecondaryCues(prev => (prev.length === 0 && cues.length === 0 ? prev : cues));
       } else if (originalTrackRef.current && originalTrackRef.current.vtt) {
         try {
           const baseCues = await loadSubtitles(originalTrackRef.current.vtt);
@@ -1126,15 +1165,15 @@ export const TaviVideoPlayer = forwardRef(({
           if (active) setSecondaryCues(translated);
         } catch (err) {
           console.error('Secondary translation failed:', err);
-          if (active) setSecondaryCues([]);
+          if (active) setSecondaryCues(prev => (prev.length === 0 ? prev : []));
         }
       } else {
-        if (active) setSecondaryCues([]);
+        if (active) setSecondaryCues(prev => (prev.length === 0 ? prev : []));
       }
     };
     fetchSecondary();
     return () => { active = false; };
-  }, [combinedSubtitles, secondarySubLanguage]);
+  }, [combinedSubtitles[secondarySubLanguage], secondarySubLanguage]);
 
   // Upload file handler
   const handleLocalSubtitleUpload = (e) => {
@@ -1204,14 +1243,48 @@ export const TaviVideoPlayer = forwardRef(({
   const speedMin = useMemo(() => Math.min(0.25, ...speedPresets), [speedPresets]);
   const speedMax = useMemo(() => Math.max(3, ...speedPresets), [speedPresets]);
 
-  // Audio Dub Track sync hook
-  const activeAudioUrl = audioDubs[selectedAudioLanguage] || null;
+  // Audio Dubbing Track resolution & sync
+  const isAudioEnabled = audioLanguages !== false &&
+    (audioAvailability
+      ? (audioAvailability.enabled && audioAvailability.hasAvailableAudio)
+      : (Object.keys(resolvedAudioTracks).length > 0 || Object.keys(audioDubs).length > 0));
+
+  const activeAudioTrackMap = useMemo(() => {
+    return Object.keys(resolvedAudioTracks).length > 0 ? resolvedAudioTracks : audioDubs;
+  }, [resolvedAudioTracks, audioDubs]);
+
+  const activeAudioTrack = (selectedAudioLanguage !== 'original' && isAudioEnabled)
+    ? activeAudioTrackMap[selectedAudioLanguage]
+    : null;
+  const activeAudioUrl = typeof activeAudioTrack === 'string' ? activeAudioTrack : (activeAudioTrack?.src || null);
+
+  const getAudioLanguageLabel = (lang) => {
+    if (lang === 'original') return 'Original';
+    const track = activeAudioTrackMap[lang];
+    if (track && typeof track === 'object' && track.label) return track.label;
+    const langMeta = getLanguageByCode(lang);
+    return langMeta ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) : (LANGUAGE_NAMES[lang] || (lang || '').toUpperCase());
+  };
+
+  const handleAudioLanguageChange = (lang) => {
+    const prev = selectedAudioLanguage;
+    setSelectedAudioLanguage(lang);
+    setActiveMenu('main');
+    if (onAudioLanguageChange) {
+      onAudioLanguageChange({
+        language: lang,
+        previousLanguage: prev,
+        source: 'generated'
+      });
+    }
+  };
+
   useAudioDubSync({
     isPlaying,
     currentTime,
     playbackRate,
     volume,
-    isMuted: isMuted || selectedAudioLanguage === 'original',
+    isMuted: isMuted,
     audioUrl: activeAudioUrl
   });
 
@@ -1477,6 +1550,8 @@ export const TaviVideoPlayer = forwardRef(({
   const handleQualityChange = (qualityOption) => {
     preservePlaybackState();
     setSelectedQuality(qualityOption.label);
+    savePref('selectedQuality', qualityOption.label);
+    onQualityChange?.(qualityOption.label);
     if (hlsRef.current && qualityOption.index !== undefined) {
       hlsRef.current.currentLevel = qualityOption.index;
       setActiveMenu('main');
@@ -1489,6 +1564,8 @@ export const TaviVideoPlayer = forwardRef(({
   const handleAutoQuality = () => {
     preservePlaybackState();
     setSelectedQuality('Auto');
+    savePref('selectedQuality', 'Auto');
+    onQualityChange?.('Auto');
     if (hlsRef.current) {
       hlsRef.current.currentLevel = -1;
       setActiveMenu('main');
@@ -1588,7 +1665,11 @@ export const TaviVideoPlayer = forwardRef(({
             index
           };
         });
-        setEmbeddedTracks(mapped);
+        setEmbeddedTracks(prev => {
+          if (prev.length === 0 && mapped.length === 0) return prev;
+          if (prev.length === mapped.length && prev.every((t, i) => t.id === mapped[i].id)) return prev;
+          return mapped;
+        });
       };
 
       syncTracks();
@@ -1820,7 +1901,7 @@ export const TaviVideoPlayer = forwardRef(({
 
   // Auto-transcribe video on source change
   useEffect(() => {
-    if (!activeSrc) return;
+    if (!activeSrc || !autoTranscribe) return;
 
     const isQualitySwitchSameVideo = videoIdentityRef.current === src;
     videoIdentityRef.current = src;
@@ -1838,15 +1919,16 @@ export const TaviVideoPlayer = forwardRef(({
     setAiTranscriptionProgress(0);
     setAiTranscriptionStatusText('');
     
-    // Clear any previous AI subtitles
+    // Clear any previous AI subtitles only if 'en' was present
     setLocalSubtitles((prev) => {
+      if (!prev || !prev['en']) return prev;
       const nextSubs = { ...prev };
       delete nextSubs['en'];
       return nextSubs;
     });
 
     let active = true;
-    const autoTranscribe = async () => {
+    const runAutoTranscription = async () => {
       if (hasAnySubtitles) return;
 
       // Small delay to allow the video metadata/decoders to settle
@@ -1920,6 +2002,7 @@ export const TaviVideoPlayer = forwardRef(({
       setAiTranscriptionStatusText('Initializing AI Subtitle Engine...');
 
       try {
+        const { transcribeVideoAudio } = await import('../services/AITranscriber.js');
         const vtt = await transcribeVideoAudio(activeSrc, (progress) => {
           if (!active) return;
           if (progress.status === 'downloading-model') {
@@ -1955,7 +2038,7 @@ export const TaviVideoPlayer = forwardRef(({
       }
     };
 
-    autoTranscribe();
+    runAutoTranscription();
     
     return () => {
       active = false;
@@ -2417,11 +2500,18 @@ export const TaviVideoPlayer = forwardRef(({
                   </span>
                 </div>
               )}
-              {Object.keys(audioDubs).length > 0 && (
-                <div className="settings-item" onClick={() => setActiveMenu('audio')}>
-                  <span>Audio Track</span>
+              {isAudioEnabled && (
+                <div 
+                  className="settings-item" 
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Audio language: ${getAudioLanguageLabel(selectedAudioLanguage)}`}
+                  onClick={() => setActiveMenu('audio')}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveMenu('audio')}
+                >
+                  <span>Audio Language</span>
                   <span className="value-label">
-                    {selectedAudioLanguage === 'original' ? 'Original' : (LANGUAGE_NAMES[selectedAudioLanguage] || selectedAudioLanguage.toUpperCase())} ›
+                    {getAudioLanguageLabel(selectedAudioLanguage)} ›
                   </span>
                 </div>
               )}
@@ -2796,34 +2886,43 @@ export const TaviVideoPlayer = forwardRef(({
           )}
 
           {activeMenu === 'audio' && (
-            <div className="settings-submenu">
-              <div className="submenu-header" onClick={() => setActiveMenu('main')}>
+            <div className="settings-submenu" role="menu" aria-label="Audio language settings">
+              <div
+                className="submenu-header"
+                role="button"
+                tabIndex={0}
+                aria-label="Back to settings"
+                onClick={() => setActiveMenu('main')}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveMenu('main')}
+              >
                 ‹ Back to Settings
               </div>
               <div
                 className={`submenu-item ${selectedAudioLanguage === 'original' ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedAudioLanguage('original');
-                  setActiveMenu('main');
-                }}
+                role="menuitemradio"
+                aria-checked={selectedAudioLanguage === 'original'}
+                tabIndex={0}
+                onClick={() => handleAudioLanguageChange('original')}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleAudioLanguageChange('original')}
               >
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   {selectedAudioLanguage === 'original' && <CheckIcon />}
                   <span>Original</span>
                 </div>
               </div>
-              {Object.keys(audioDubs).map((lang) => (
+              {Object.keys(activeAudioTrackMap).map((lang) => (
                 <div
                   key={lang}
                   className={`submenu-item ${selectedAudioLanguage === lang ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedAudioLanguage(lang);
-                    setActiveMenu('main');
-                  }}
+                  role="menuitemradio"
+                  aria-checked={selectedAudioLanguage === lang}
+                  tabIndex={0}
+                  onClick={() => handleAudioLanguageChange(lang)}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleAudioLanguageChange(lang)}
                 >
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     {selectedAudioLanguage === lang && <CheckIcon />}
-                    <span>{LANGUAGE_NAMES[lang] || lang.toUpperCase()} (Translation)</span>
+                    <span>{getAudioLanguageLabel(lang)}</span>
                   </div>
                 </div>
               ))}

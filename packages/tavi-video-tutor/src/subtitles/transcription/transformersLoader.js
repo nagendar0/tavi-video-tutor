@@ -9,15 +9,28 @@ if (typeof globalThis.self === 'undefined') {
 let cachedTransformers = null;
 
 /**
- * Robust, zero-native-dependency Transformers loader.
- * Prioritizes pre-bundled Vite build artifact (dist/bundled-transformers.js) where sharp is statically aliased to zero-native JS stub and React is completely omitted.
- * Falls back to direct @xenova/transformers import during local dev/testing.
+ * Robust Transformers loader for Node.js / CLI environments.
+ * Attempts to load @huggingface/transformers or @xenova/transformers dynamically.
  */
 export async function getTransformers() {
   if (cachedTransformers) {
     return cachedTransformers;
   }
-  const rawModule = await import('@huggingface/transformers');
+
+  let rawModule = null;
+  try {
+    rawModule = await import('@huggingface/transformers');
+  } catch (err1) {
+    try {
+      rawModule = await import('@xenova/transformers');
+    } catch (err2) {
+      throw new Error(
+        `AITutor CLI Speech-to-Text requires '@huggingface/transformers'. ` +
+        `Please install it with: npm install @huggingface/transformers`
+      );
+    }
+  }
+
   cachedTransformers = { pipeline: rawModule.pipeline, env: rawModule.env };
   return cachedTransformers;
 }

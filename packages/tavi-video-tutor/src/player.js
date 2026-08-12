@@ -16,5 +16,5 @@ export {
   resolveAudioSources,
   resolveAudioAvailability
 };
-export default AITutor;
 
+export default AITutor;
