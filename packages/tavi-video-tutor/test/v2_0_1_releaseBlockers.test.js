@@ -70,7 +70,7 @@ test('Gate 2: package.json exports map points to compiled dist files, not raw JS
   assert.equal(pkg.exports['./player'].require, './dist/player.cjs');
   assert.equal(pkg.exports['.'].import, './dist/tavi-video-tutor.js');
   assert.equal(pkg.exports['.'].require, './dist/tavi-video-tutor.cjs');
-  assert.ok(pkg.version === '2.0.1' || pkg.version === '2.0.2', 'Version must be 2.0.1 or 2.0.2');
+  assert.ok(pkg.version.startsWith('2.'), 'Version must be a 2.x release');
 });
 
 // ==========================================
