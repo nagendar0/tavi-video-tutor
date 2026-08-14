@@ -13,23 +13,34 @@ export const STANDARD_HEIGHTS = [2160, 1440, 1080, 720, 480, 360, 240, 144];
 
 export const makeEven = (num) => {
   const rounded = Math.round(num);
-  return rounded % 2 === 0 ? rounded : rounded - 1;
+  const even = rounded % 2 === 0 ? rounded : rounded - 1;
+  return Math.max(2, even);
 };
 
 export const planQualityLadder = (probeInfo, configOptions = {}) => {
-  if (!probeInfo || !probeInfo.height || !probeInfo.width) {
+  if (!probeInfo || (!probeInfo.height && !probeInfo.video?.height) || (!probeInfo.width && !probeInfo.video?.width)) {
     throw new Error('QualityPlanner Error: Invalid probeInfo provided');
   }
 
-  const { width: srcW, height: srcH } = probeInfo;
+  let srcW = probeInfo.video?.width || probeInfo.width;
+  let srcH = probeInfo.video?.height || probeInfo.height;
+  const rotation = probeInfo.video?.rotation || probeInfo.rotation || 0;
+
+  if (rotation === 90 || rotation === 270) {
+    const tmp = srcW;
+    srcW = srcH;
+    srcH = tmp;
+  }
+
   const isPortrait = srcH > srcW;
+  const isSquare = srcH === srcW;
 
   // Check if quality generation is explicitly disabled in config
   if (configOptions.generate === false || configOptions.qualities === false) {
     return {
       enabled: false,
       reason: 'Quality generation disabled via configuration',
-      source: { label: `${srcH}p`, width: srcW, height: srcH },
+      source: { label: `${srcH}p`, width: srcW, height: srcH, rotation, isPortrait, isSquare },
       renditions: []
     };
   }
@@ -49,6 +60,12 @@ export const planQualityLadder = (probeInfo, configOptions = {}) => {
 
   // Deduplicate and sort descending
   const uniqueSortedHeights = Array.from(new Set(validHeights)).sort((a, b) => b - a);
+
+  // If source height is not in standard ladder (e.g. 800p, 540p), ensure source height is included
+  if (!uniqueSortedHeights.includes(srcH)) {
+    uniqueSortedHeights.unshift(srcH);
+    uniqueSortedHeights.sort((a, b) => b - a);
+  }
 
   const aspectRatio = srcW / srcH;
 
@@ -76,11 +93,14 @@ export const planQualityLadder = (probeInfo, configOptions = {}) => {
       width: srcW,
       height: srcH,
       aspectRatio: aspectRatio.toFixed(2),
-      isPortrait
+      rotation,
+      isPortrait,
+      isSquare
     },
     renditions,
-    skippedUpscalesCount: 0
+    skippedUpscalesCount: targetHeights.filter(h => h > srcH).length
   };
 };
 
 export default planQualityLadder;
+

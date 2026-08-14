@@ -111,7 +111,7 @@ test('6. Audio Manifest Generation & Preserving Qualities / Subtitles', () => {
     assert.ok(entry.audioLanguages.hi);
     assert.equal(entry.audioLanguages.hi.src, '/aitutor/audio/test_vid_1/hi.m4a');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -125,7 +125,7 @@ test('7. TTS Provider Interface & NodeTTSProvider', async () => {
     assert.ok(fs.existsSync(result.audioPath));
     assert.ok(result.duration > 0);
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -140,7 +140,7 @@ test('8. Segment Audio Alignment & Duration Fitting', async () => {
     assert.ok(alignedPath);
     assert.ok(fs.existsSync(alignedPath));
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -160,7 +160,7 @@ test('9. Audio Stitching & Full M4A Generation', async () => {
     assert.ok(fs.existsSync(outM4a));
     assert.ok(fs.statSync(outM4a).size > 0);
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -206,7 +206,7 @@ test('10. ProcessSingleVideo Audio Dubbing Pipeline & Cache Hits', async () => {
 
     assert.equal(res2.status, 'cached');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -248,7 +248,7 @@ test('11. Fault Isolation — Partial TTS Failure Does Not Abort Successful Lang
     assert.ok(manifest['lesson_fault_test'].audioLanguages.en);
     assert.equal(manifest['lesson_fault_test'].audioLanguages.fail_lang, undefined);
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

@@ -18,13 +18,13 @@ export const AITutor = forwardRef(({
   onProgress,
   subtitles,
   audioLanguages,
+  sourceLanguage,
   tracks,
   config,
   audioDubs = {},
   qualities = [],
   subLanguage,
   defaultSubLanguage = 'en',
-  defaultAudioLanguage = 'original',
   playbackRates = [0.5, 1, 1.25, 1.5, 2],
   subtitleStyle,
   autoTranscribe = false,
@@ -38,6 +38,7 @@ export const AITutor = forwardRef(({
   const [manifestSubtitles, setManifestSubtitles] = useState({});
   const [manifestQualities, setManifestQualities] = useState([]);
   const [manifestAudioLanguages, setManifestAudioLanguages] = useState({});
+  const [manifestSourceLanguage, setManifestSourceLanguage] = useState(null);
   const seqRef = useRef(0);
 
   // Dynamic src switching: detach old track & fetch manifest subtitle/audio for new src
@@ -46,6 +47,7 @@ export const AITutor = forwardRef(({
     setManifestSubtitles(prev => (Object.keys(prev).length === 0 ? prev : {}));
     setManifestQualities(prev => (prev.length === 0 ? prev : []));
     setManifestAudioLanguages(prev => (Object.keys(prev).length === 0 ? prev : {}));
+    setManifestSourceLanguage(null);
 
     if (!src) return;
 
@@ -57,6 +59,10 @@ export const AITutor = forwardRef(({
         if (!isSubscribed || seqRef.current !== currentSeq) return;
 
         if (manifestEntry) {
+          if (manifestEntry.sourceLanguage || manifestEntry.language) {
+            setManifestSourceLanguage(manifestEntry.sourceLanguage || manifestEntry.language);
+          }
+
           if (Array.isArray(manifestEntry.qualities) && manifestEntry.qualities.length > 0) {
             setManifestQualities(prev => {
               if (prev.length === manifestEntry.qualities.length && prev.every((q, i) => q === manifestEntry.qualities[i])) return prev;
@@ -107,14 +113,16 @@ export const AITutor = forwardRef(({
     });
   }, [subtitles, manifestSubtitles]);
 
+  const effectiveSourceLanguage = sourceLanguage || manifestSourceLanguage || null;
+
   const audioAvailabilityResult = useMemo(() => {
     return resolveAudioAvailability({
       audioLanguagesConfig: audioLanguages,
       manifestAudio: manifestAudioLanguages,
       developerAudio: audioDubs,
-      selectedLanguage: defaultAudioLanguage
+      sourceLanguage: effectiveSourceLanguage
     });
-  }, [audioLanguages, manifestAudioLanguages, audioDubs, defaultAudioLanguage]);
+  }, [audioLanguages, manifestAudioLanguages, audioDubs, effectiveSourceLanguage]);
 
   return (
     <div 
@@ -140,6 +148,8 @@ export const AITutor = forwardRef(({
         manifestSubtitles={manifestSubtitles}
         manifestQualities={manifestQualities}
         manifestAudioLanguages={manifestAudioLanguages}
+        manifestSourceLanguage={manifestSourceLanguage}
+        sourceLanguage={sourceLanguage}
         resolvedSubtitles={availabilityResult.resolvedTracks}
         resolvedAudioTracks={audioAvailabilityResult.resolvedTracks}
         audioAvailability={audioAvailabilityResult}
@@ -149,7 +159,6 @@ export const AITutor = forwardRef(({
         qualities={qualities}
         subLanguage={subLanguage}
         defaultSubLanguage={defaultSubLanguage}
-        defaultAudioLanguage={defaultAudioLanguage}
         playbackRates={playbackRates}
         subtitleStyle={subtitleStyle}
         autoTranscribe={autoTranscribe}

@@ -84,9 +84,12 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
   let cachedCount = 0;
 
   for (const rendition of plan.renditions) {
-    // If this rendition represents the original source resolution and the source is already browser-compatible MP4,
-    // do NOT re-encode the source file unnecessarily. Point directly to the source video!
-    if (rendition.isSource && (resolved.filePath.endsWith('.mp4') || probeInfo.videoCodec === 'h264')) {
+    // If this rendition represents the original source resolution and the source is ALREADY browser-native H.264 MP4,
+    // point directly to the source video. Otherwise (e.g. .avi, .mkv, .mov, .webm, non-h264), generate a browser MP4 rendition!
+    const isBrowserNativeMp4 = (resolved.filePath.endsWith('.mp4') || resolved.filePath.endsWith('.m4v')) && 
+      (probeInfo.video?.codec === 'h264' || probeInfo.videoCodec === 'h264');
+
+    if (rendition.isSource && isBrowserNativeMp4) {
       const sourceUrl = videoEntry.src.replace(/^\.\/public\//, '/').replace(/^public\//, '/');
       qualitiesMeta.push({
         label: rendition.label,
@@ -156,23 +159,29 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
     });
   }
 
-  // 7. Register qualities in manifest
+  // 7. Register qualities and canonical structure in manifest
   const manifest = manifestStore.loadManifest();
-  if (!manifest[videoEntry.id]) {
-    manifest[videoEntry.id] = {
-      id: videoEntry.id,
-      src: videoEntry.src,
-      sourceLanguage: 'en',
-      language: 'en',
-      subtitles: {},
-      fingerprint: currentFingerprint,
-      updatedAt: new Date().toISOString()
-    };
-  }
+  const currentEntry = manifest[videoEntry.id] || existingEntry;
 
-  manifest[videoEntry.id].qualities = qualitiesMeta;
-  manifest[videoEntry.id].fingerprint = currentFingerprint;
-  manifest[videoEntry.id].updatedAt = new Date().toISOString();
+  manifest[videoEntry.id] = {
+    ...currentEntry,
+    id: videoEntry.id,
+    src: videoEntry.src,
+    source: {
+      src: videoEntry.src,
+      container: probeInfo.container || 'mp4',
+      sourceLanguage: currentEntry.sourceLanguage || 'en'
+    },
+    playback: {
+      qualities: qualitiesMeta
+    },
+    sourceLanguage: currentEntry.sourceLanguage || 'en',
+    qualities: qualitiesMeta,
+    subtitles: currentEntry.subtitles || {},
+    audioLanguages: currentEntry.audioLanguages || {},
+    fingerprint: currentFingerprint,
+    updatedAt: new Date().toISOString()
+  };
 
   fs.writeFileSync(manifestStore.internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
   fs.writeFileSync(manifestStore.publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');

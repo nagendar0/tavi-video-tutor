@@ -36,12 +36,22 @@ export type AudioLanguages = 'all' | false | string[] | AudioLanguageMap;
 export interface AudioAvailability {
   enabled: boolean;
   hasAvailableAudio: boolean;
+  sourceLanguage: string;
+  originalTrack: AudioTrack | null;
+  translatedTracks: Record<string, AudioTrack>;
   availableLanguages: string[];
   visibleLanguages: string[];
   resolvedTracks: Record<string, AudioTrack>;
   sourceByLanguage: Record<string, string>;
   selectedLanguage: string;
   reason: string;
+}
+
+export interface AudioLanguageChangeEvent {
+  language: string;
+  previousLanguage?: string;
+  source?: string;
+  [key: string]: any;
 }
 
 export interface AITutorProps {
@@ -53,13 +63,13 @@ export interface AITutorProps {
   className?: string;
   subtitles?: 'all' | false | string[] | Record<string, string>;
   audioLanguages?: AudioLanguages;
+  sourceLanguage?: string;
   tracks?: any[];
   config?: any;
   audioDubs?: Record<string, string | AudioTrack>;
   qualities?: VideoQuality[];
   subLanguage?: string;
   defaultSubLanguage?: string;
-  defaultAudioLanguage?: string;
   playbackRates?: number[];
   subtitleStyle?: SubtitleStyle;
   onPlay?: () => void;
@@ -67,7 +77,7 @@ export interface AITutorProps {
   onEnded?: () => void;
   onProgress?: (progress: { playedSeconds: number }) => void;
   onSubLanguageChange?: (lang: string) => void;
-  onAudioLanguageChange?: (event: { language: string; previousLanguage?: string; source?: string }) => void;
+  onAudioLanguageChange?: (event: AudioLanguageChangeEvent) => void;
   onQualityChange?: (quality: VideoQuality | string) => void;
   onSubtitleGenerated?: (vttText: string, videoSrc: string) => void;
   onUpdateSubtitles?: (updatedSubtitles: any) => void;
@@ -78,6 +88,7 @@ export interface TaviVideoPlayerProps extends AITutorProps {
   manifestSubtitles?: Record<string, string>;
   manifestQualities?: VideoQuality[];
   manifestAudioLanguages?: Record<string, AudioTrack>;
+  manifestSourceLanguage?: string;
   resolvedSubtitles?: Record<string, string>;
   resolvedAudioTracks?: Record<string, AudioTrack>;
   audioAvailability?: AudioAvailability;

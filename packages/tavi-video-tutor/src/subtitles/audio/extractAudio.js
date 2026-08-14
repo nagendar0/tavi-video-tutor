@@ -39,7 +39,7 @@ export const checkFFmpegAvailable = () => {
   });
 };
 
-export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace) => {
+export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace, options = {}) => {
   const isFFmpegInstalled = await checkFFmpegAvailable();
   if (!isFFmpegInstalled) {
     const installGuide = process.platform === 'win32'
@@ -55,12 +55,21 @@ export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace) => {
 
   const isRemoteUrl = /^https?:\/\//i.test(mediaSourceUrlOrPath);
 
+  // Stream mapping argument
+  let streamMapArgs = ['-vn'];
+  if (options.audioStreamIndex !== undefined && options.audioStreamIndex !== null) {
+    const streamIdx = typeof options.audioStreamIndex === 'number' ? options.audioStreamIndex : parseInt(options.audioStreamIndex, 10);
+    streamMapArgs = ['-map', `0:${streamIdx}`];
+  } else if (options.audioStreamNumber !== undefined && options.audioStreamNumber !== null) {
+    streamMapArgs = ['-map', `0:a:${options.audioStreamNumber}`];
+  }
+
   // Safe process argument array with user-agent for remote URLs
   const args = [
     '-y',
     ...(isRemoteUrl ? ['-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'] : []),
     '-i', mediaSourceUrlOrPath,
-    '-vn',
+    ...streamMapArgs,
     '-ac', '1',
     '-ar', '16000',
     '-c:a', 'pcm_s16le',
@@ -110,6 +119,11 @@ export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace) => {
           return;
         }
 
+        if (stderrData.includes('Output file does not contain any stream') || stderrData.includes('does not contain any stream') || stderrData.includes('Stream map') && stderrData.includes('matches no streams')) {
+          reject(new Error(`AudioExtraction Error: No audio stream found in '${mediaSourceUrlOrPath}'`));
+          return;
+        }
+
         reject(new Error(`FFmpeg exited with code ${code}: ${stderrData.slice(-300)}`));
       } else {
         if (!fs.existsSync(outputWavPath)) {
@@ -133,3 +147,6 @@ export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace) => {
     });
   });
 };
+
+export default extractAudio;
+

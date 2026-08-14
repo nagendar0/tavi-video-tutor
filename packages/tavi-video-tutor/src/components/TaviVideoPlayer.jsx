@@ -534,6 +534,8 @@ export const TaviVideoPlayer = forwardRef(({
   manifestSubtitles: manifestSubtitlesProp,
   manifestQualities: manifestQualitiesProp = [],
   manifestAudioLanguages: manifestAudioLanguagesProp = {},
+  manifestSourceLanguage: manifestSourceLanguageProp,
+  sourceLanguage: sourceLanguageProp,
   demoSubtitles: demoSubtitlesProp,
   resolvedSubtitles: resolvedSubtitlesProp,
   resolvedAudioTracks = {},
@@ -548,7 +550,6 @@ export const TaviVideoPlayer = forwardRef(({
   onProgress,
   subLanguage,
   defaultSubLanguage = 'en',
-  defaultAudioLanguage = 'original',
   playbackRates = [0.5, 1, 1.25, 1.5, 2],
   subtitleStyle,
   autoTranscribe = false,
@@ -598,6 +599,8 @@ export const TaviVideoPlayer = forwardRef(({
     } catch (_) {}
   };
 
+  const effectiveSourceLang = sourceLanguageProp || manifestSourceLanguageProp || audioAvailability?.sourceLanguage || 'en';
+
   // Playback Control States (Restored from LocalStorage when available)
   const [activeSrc, setActiveSrc] = useState(src);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -622,7 +625,11 @@ export const TaviVideoPlayer = forwardRef(({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState('main');
   const [selectedSubLanguage, setSelectedSubLanguage] = useState(defaultSubLanguage);
-  const [selectedAudioLanguage, setSelectedAudioLanguage] = useState(defaultAudioLanguage);
+  const [selectedAudioLanguage, setSelectedAudioLanguage] = useState(() => {
+    const saved = loadSavedPref('selectedAudioLanguage', null);
+    if (saved) return saved;
+    return 'original';
+  });
   const [isDualSubtitles, setIsDualSubtitles] = useState(false);
   const [embeddedTracks, setEmbeddedTracks] = useState([]);
   const originalTrackRef = useRef(null);
@@ -1253,28 +1260,43 @@ export const TaviVideoPlayer = forwardRef(({
     return Object.keys(resolvedAudioTracks).length > 0 ? resolvedAudioTracks : audioDubs;
   }, [resolvedAudioTracks, audioDubs]);
 
-  const activeAudioTrack = (selectedAudioLanguage !== 'original' && isAudioEnabled)
+  const activeAudioTrack = (selectedAudioLanguage !== 'original' && selectedAudioLanguage !== effectiveSourceLang && isAudioEnabled)
     ? activeAudioTrackMap[selectedAudioLanguage]
     : null;
   const activeAudioUrl = typeof activeAudioTrack === 'string' ? activeAudioTrack : (activeAudioTrack?.src || null);
 
   const getAudioLanguageLabel = (lang) => {
-    if (lang === 'original') return 'Original';
+    if (lang === 'original') {
+      const langMeta = getLanguageByCode(effectiveSourceLang);
+      const langName = langMeta 
+        ? (langMeta.nativeName && langMeta.nativeName !== langMeta.name ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name)
+        : (LANGUAGE_NAMES[effectiveSourceLang] || (effectiveSourceLang || '').toUpperCase());
+      return `${langName} (Original)`;
+    }
     const track = activeAudioTrackMap[lang];
-    if (track && typeof track === 'object' && track.label) return track.label;
+    if (track && typeof track === 'object' && track.label) {
+      if (track.source || lang === effectiveSourceLang) {
+        return track.label.includes('(Original)') ? track.label : `${track.label} (Original)`;
+      }
+      return track.label;
+    }
     const langMeta = getLanguageByCode(lang);
-    return langMeta ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) : (LANGUAGE_NAMES[lang] || (lang || '').toUpperCase());
+    const defaultName = langMeta 
+      ? (langMeta.nativeName && langMeta.nativeName !== langMeta.name ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) 
+      : (LANGUAGE_NAMES[lang] || (lang || '').toUpperCase());
+    return (track?.source || lang === effectiveSourceLang) ? `${defaultName} (Original)` : defaultName;
   };
 
   const handleAudioLanguageChange = (lang) => {
     const prev = selectedAudioLanguage;
     setSelectedAudioLanguage(lang);
+    savePref('selectedAudioLanguage', lang);
     setActiveMenu('main');
     if (onAudioLanguageChange) {
       onAudioLanguageChange({
         language: lang,
         previousLanguage: prev,
-        source: 'generated'
+        source: (lang === 'original' || lang === effectiveSourceLang || activeAudioTrackMap[lang]?.source) ? 'original' : 'generated'
       });
     }
   };
@@ -2898,19 +2920,19 @@ export const TaviVideoPlayer = forwardRef(({
                 ‹ Back to Settings
               </div>
               <div
-                className={`submenu-item ${selectedAudioLanguage === 'original' ? 'active' : ''}`}
+                className={`submenu-item ${(selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang) ? 'active' : ''}`}
                 role="menuitemradio"
-                aria-checked={selectedAudioLanguage === 'original'}
+                aria-checked={selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang}
                 tabIndex={0}
                 onClick={() => handleAudioLanguageChange('original')}
                 onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleAudioLanguageChange('original')}
               >
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  {selectedAudioLanguage === 'original' && <CheckIcon />}
-                  <span>Original</span>
+                  {(selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang) && <CheckIcon />}
+                  <span>{getAudioLanguageLabel('original')}</span>
                 </div>
               </div>
-              {Object.keys(activeAudioTrackMap).map((lang) => (
+              {Object.keys(activeAudioTrackMap).filter(lang => lang !== effectiveSourceLang && !activeAudioTrackMap[lang]?.source).map((lang) => (
                 <div
                   key={lang}
                   className={`submenu-item ${selectedAudioLanguage === lang ? 'active' : ''}`}

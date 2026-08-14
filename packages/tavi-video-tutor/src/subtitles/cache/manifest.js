@@ -247,11 +247,20 @@ export class ManifestStore {
       };
     });
 
+    const container = existingEntry.source?.container || path.extname(videoEntry.src || '').replace('.', '') || 'mp4';
+
     manifest[videoEntry.id] = {
+      ...existingEntry,
       id: videoEntry.id,
       src: videoEntry.src,
-      sourceLanguage: sourceLanguage || 'en',
-      language: sourceLanguage || 'en',
+      source: existingEntry.source || {
+        src: videoEntry.src,
+        container: container,
+        sourceLanguage: sourceLanguage || 'en'
+      },
+      playback: existingEntry.playback || (existingEntry.qualities ? { qualities: existingEntry.qualities } : {}),
+      sourceLanguage: sourceLanguage || existingEntry.sourceLanguage || 'en',
+      language: sourceLanguage || existingEntry.sourceLanguage || 'en',
       subtitle: subtitlesEntryMap['en']?.src || Object.values(subtitlesEntryMap)[0]?.src || '',
       subtitles: subtitlesEntryMap,
       ...(existingEntry.qualities && Array.isArray(existingEntry.qualities) ? { qualities: existingEntry.qualities } : {}),
@@ -279,6 +288,7 @@ export class ManifestStore {
     const fingerprint = extraFingerprint || computeMediaFingerprint(videoEntry, this.cwd);
     const existingEntry = manifest[videoEntry.id] || {};
     const audioLanguagesEntryMap = existingEntry.audioLanguages || {};
+    const container = existingEntry.source?.container || path.extname(videoEntry.src || '').replace('.', '') || 'mp4';
 
     Object.entries(audioMap).forEach(([langCode, audioData]) => {
       const srcFile = typeof audioData === 'string' ? audioData : audioData.filePath || audioData.src;
@@ -299,7 +309,7 @@ export class ManifestStore {
         label: audioData.label || label,
         src: publicUrl,
         language: langCode,
-        ...(langCode === (sourceLanguage || 'en') ? { source: true } : {})
+        source: langCode === (sourceLanguage || existingEntry.sourceLanguage || 'en')
       };
     });
 
@@ -307,6 +317,12 @@ export class ManifestStore {
       ...existingEntry,
       id: videoEntry.id,
       src: videoEntry.src,
+      source: existingEntry.source || {
+        src: videoEntry.src,
+        container: container,
+        sourceLanguage: sourceLanguage || existingEntry.sourceLanguage || 'en'
+      },
+      playback: existingEntry.playback || (existingEntry.qualities ? { qualities: existingEntry.qualities } : {}),
       sourceLanguage: sourceLanguage || existingEntry.sourceLanguage || 'en',
       audioLanguages: audioLanguagesEntryMap,
       fingerprint: fingerprint,

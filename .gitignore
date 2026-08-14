@@ -9,6 +9,7 @@ build/
 .ag-kit-backups/
 scratch/
 *.log
+examples/react-demo/public/aitutor/
 
 # Heavy binaries & media assets
 bin/*.exe

@@ -88,6 +88,7 @@ export function resolveAudioSources({
  * SINGLE SOURCE OF TRUTH: Audio Availability & Visibility Resolver
  * 
  * Inspects all audio sources and configuration options (`audioLanguages={false}`, `["en", "hi"]`, etc.).
+ * Automatically discovers and respects the video's source/original language.
  * Returns a unified availability contract.
  */
 export function resolveAudioAvailability({
@@ -95,13 +96,17 @@ export function resolveAudioAvailability({
   manifestAudio = {},
   developerAudio = {},
   demoAudio = {},
-  selectedLanguage = 'original'
+  sourceLanguage = null,
+  selectedLanguage = undefined
 } = {}) {
   // Mode: false -> completely disabled mode
   if (audioLanguagesConfig === false) {
     return {
       enabled: false,
       hasAvailableAudio: false,
+      sourceLanguage: sourceLanguage || 'en',
+      originalTrack: null,
+      translatedTracks: EMPTY_OBJECT,
       availableLanguages: EMPTY_ARRAY,
       visibleLanguages: EMPTY_ARRAY,
       resolvedTracks: EMPTY_OBJECT,
@@ -134,10 +139,26 @@ export function resolveAudioAvailability({
   const availableLanguages = Object.keys(rawResolved).filter(lang => Boolean(rawResolved[lang]));
   const hasAvailableAudio = availableLanguages.length > 0;
 
+  // Detect source language from passed prop or from track metadata (source: true)
+  let detectedSourceLang = sourceLanguage || null;
+  if (!detectedSourceLang) {
+    for (const [lang, track] of Object.entries(rawResolved)) {
+      if (track && track.source) {
+        detectedSourceLang = lang;
+        break;
+      }
+    }
+  }
+
+  const finalSourceLang = detectedSourceLang || sourceLanguage || 'en';
+
   if (!hasAvailableAudio) {
     return {
       enabled: false,
       hasAvailableAudio: false,
+      sourceLanguage: finalSourceLang,
+      originalTrack: null,
+      translatedTracks: EMPTY_OBJECT,
       availableLanguages: EMPTY_ARRAY,
       visibleLanguages: EMPTY_ARRAY,
       resolvedTracks: EMPTY_OBJECT,
@@ -152,6 +173,10 @@ export function resolveAudioAvailability({
     visibleLanguages = [...availableLanguages];
   } else if (mode === 'filter') {
     const allowedSet = new Set(visibilityFilter);
+    // The original/source language remains visible and selectable in the UI when filtering
+    if (finalSourceLang && availableLanguages.includes(finalSourceLang)) {
+      allowedSet.add(finalSourceLang);
+    }
     visibleLanguages = availableLanguages.filter(lang => allowedSet.has(lang));
   }
 
@@ -159,6 +184,9 @@ export function resolveAudioAvailability({
     return {
       enabled: false,
       hasAvailableAudio,
+      sourceLanguage: finalSourceLang,
+      originalTrack: null,
+      translatedTracks: EMPTY_OBJECT,
       availableLanguages,
       visibleLanguages: EMPTY_ARRAY,
       resolvedTracks: EMPTY_OBJECT,
@@ -170,19 +198,44 @@ export function resolveAudioAvailability({
 
   const resolvedTracks = {};
   const sourceByLanguage = {};
+  const translatedTracks = {};
 
   for (const lang of visibleLanguages) {
     resolvedTracks[lang] = rawResolved[lang];
     sourceByLanguage[lang] = rawSourceByLang[lang];
+    if (lang !== finalSourceLang && (!rawResolved[lang] || !rawResolved[lang].source)) {
+      translatedTracks[lang] = rawResolved[lang];
+    }
   }
 
-  const activeSelected = (selectedLanguage && (selectedLanguage === 'original' || resolvedTracks[selectedLanguage]))
-    ? selectedLanguage
-    : 'original';
+  const originalTrack = (rawResolved[finalSourceLang])
+    ? {
+        ...rawResolved[finalSourceLang],
+        source: true
+      }
+    : null;
+
+  // Determine active selected language:
+  // 1. Explicitly requested / user-saved selectedLanguage (if available in resolvedTracks or 'original')
+  // 2. Detected sourceLanguage (if available in resolvedTracks)
+  // 3. 'original'
+  let activeSelected = 'original';
+  if (selectedLanguage !== undefined && selectedLanguage !== null) {
+    if (selectedLanguage === 'original' || resolvedTracks[selectedLanguage]) {
+      activeSelected = selectedLanguage;
+    }
+  } else if (finalSourceLang && (resolvedTracks[finalSourceLang] || finalSourceLang === 'original')) {
+    activeSelected = finalSourceLang;
+  } else if (visibleLanguages.length > 0) {
+    activeSelected = visibleLanguages[0];
+  }
 
   return {
     enabled: true,
     hasAvailableAudio: true,
+    sourceLanguage: finalSourceLang,
+    originalTrack,
+    translatedTracks,
     availableLanguages,
     visibleLanguages,
     resolvedTracks,
@@ -193,3 +246,5 @@ export function resolveAudioAvailability({
 }
 
 export default resolveAudioAvailability;
+
+

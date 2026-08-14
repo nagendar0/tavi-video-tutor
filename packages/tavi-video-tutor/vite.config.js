@@ -17,7 +17,24 @@ export default defineConfig({
       formats: ['es', 'cjs']
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        '@huggingface/transformers',
+        '@xenova/transformers',
+        'fs',
+        'path',
+        'url',
+        'child_process',
+        'os',
+        'stream',
+        'util',
+        'events',
+        'crypto',
+        'http',
+        'https'
+      ],
       output: {
         exports: 'named',
         globals: {

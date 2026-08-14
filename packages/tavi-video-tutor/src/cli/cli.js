@@ -33,11 +33,17 @@ export default {
     quality: 'balanced',
     glossary: ['React', 'AITutor']
   },
+  audio: {
+    languages: ['en', 'hi', 'te']
+  },
   videos: [
     {
       id: 'lesson_1',
       src: './public/lesson.mp4',
-      languages: ['en', 'es', 'hi', 'te']
+      languages: ['en', 'es', 'hi', 'te'],
+      audio: {
+        languages: ['en', 'hi', 'te']
+      }
     }
   ]
 };
@@ -53,7 +59,7 @@ export default {
   }
 
   console.log(`✓ Created starter configuration at:\n  ${targetPath}\n`);
-  console.log(`Next Steps:\n1. Place your video files in public/ (e.g. public/lesson.mp4)\n2. Update video entries in aitutor.config.mjs\n3. Run subtitle generation:\n   npx aitutor generate\n`);
+  console.log(`Next Steps:\n1. Place your video files in public/ (e.g. public/lesson.mp4)\n2. Update video entries in aitutor.config.mjs\n3. Run generation:\n   npx aitutor\n`);
 
   return { created: true, path: targetPath };
 };
@@ -65,7 +71,7 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
   const publicDir = path.join(cwd, 'public', 'aitutor');
 
   if (targetVideoId) {
-    console.log(`\nAITutor Subtitle Engine — Cleaning Video: ${targetVideoId}\n`);
+    console.log(`\nAITutor Engine — Cleaning Video: ${targetVideoId}\n`);
     let removedCount = 0;
 
     const internalManifestPath = path.join(internalDir, 'manifest.json');
@@ -98,6 +104,22 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
             } catch (_) {}
           }
 
+          // Clean specific audio files
+          if (entry.audioLanguages && typeof entry.audioLanguages === 'object') {
+            Object.values(entry.audioLanguages).forEach(audioInfo => {
+              const audioSrc = typeof audioInfo === 'string' ? audioInfo : (audioInfo && audioInfo.src);
+              if (audioSrc) {
+                try {
+                  const fullAudioPath = normalizeSubtitlePath(audioSrc, publicDir);
+                  if (fs.existsSync(fullAudioPath)) {
+                    fs.unlinkSync(fullAudioPath);
+                    removedCount++;
+                  }
+                } catch (_) {}
+              }
+            });
+          }
+
           delete manifest[targetVideoId];
           fs.writeFileSync(internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
         }
@@ -125,21 +147,35 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
       } catch (_) {}
     }
 
-    // 3. Clean public quality videos
+    // 3. Clean public audio folder for target video
+    const publicVideoAudioDir = path.join(publicDir, 'audio', targetVideoId);
+    if (fs.existsSync(publicVideoAudioDir)) {
+      fs.rmSync(publicVideoAudioDir, { recursive: true, force: true });
+      removedCount++;
+    }
+
+    // 4. Clean internal audio folder for target video
+    const internalVideoAudioDir = path.join(internalDir, 'audio', targetVideoId);
+    if (fs.existsSync(internalVideoAudioDir)) {
+      fs.rmSync(internalVideoAudioDir, { recursive: true, force: true });
+      removedCount++;
+    }
+
+    // 5. Clean public quality videos
     const publicVideoQualitiesDir = path.join(publicDir, 'videos', targetVideoId);
     if (fs.existsSync(publicVideoQualitiesDir)) {
       fs.rmSync(publicVideoQualitiesDir, { recursive: true, force: true });
       removedCount++;
     }
 
-    // 4. Clean internal cache videos
+    // 6. Clean internal cache videos
     const internalVideoDir = path.join(internalDir, 'videos', targetVideoId);
     if (fs.existsSync(internalVideoDir)) {
       fs.rmSync(internalVideoDir, { recursive: true, force: true });
       removedCount++;
     }
 
-    // 5. Clean master transcript cache
+    // 7. Clean master transcript cache
     const transcriptsDir = path.join(internalDir, 'transcripts');
     if (fs.existsSync(transcriptsDir)) {
       try {
@@ -153,7 +189,7 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
       } catch (_) {}
     }
 
-    // 6. Clean temporary workspace
+    // 8. Clean temporary workspace
     const tmpDir = path.join(internalDir, 'tmp');
     if (fs.existsSync(tmpDir)) {
       try {
@@ -167,17 +203,17 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
       } catch (_) {}
     }
 
-    // 7. Sync updated manifest to public
+    // 9. Sync updated manifest to public
     const publicManifestPath = path.join(publicDir, 'manifest.json');
     if (fs.existsSync(internalManifestPath) && fs.existsSync(publicDir)) {
       fs.copyFileSync(internalManifestPath, publicManifestPath);
     }
 
-    console.log(`✓ Cleaned generated subtitles & video qualities for "${targetVideoId}" (${removedCount} items removed)\n`);
+    console.log(`✓ Cleaned generated subtitles, audio tracks & video qualities for "${targetVideoId}" (${removedCount} items removed)\n`);
     return { cleaned: true, videoId: targetVideoId, removedCount };
   }
 
-  console.log(`\nAITutor Engine — Cleaning All Generated Subtitles & Video Qualities\n`);
+  console.log(`\nAITutor Engine — Cleaning All Generated Subtitles, Audio Tracks & Video Qualities\n`);
   
   if (fs.existsSync(internalDir)) {
     fs.rmSync(internalDir, { recursive: true, force: true });
@@ -187,7 +223,7 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
     fs.rmSync(publicDir, { recursive: true, force: true });
   }
 
-  console.log(`✓ All generated AITutor subtitles, video qualities, and manifests cleaned successfully.\n`);
+  console.log(`✓ All generated AITutor subtitles, audio tracks, video qualities, and manifests cleaned successfully.\n`);
   return { cleaned: true, all: true };
 };
 

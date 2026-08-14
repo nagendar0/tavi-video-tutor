@@ -4,6 +4,7 @@ import { stitchAudioSegments } from '../audio/stitchAudioSegments.js';
 import { TempWorkspace } from '../storage/tempWorkspace.js';
 import { resolveDirectMediaSource, resolveVideoSource } from '../video/resolveVideo.js';
 import { extractAudio } from '../audio/extractAudio.js';
+import { probeMedia } from '../video/MediaProbe.js';
 import { WhisperProvider } from '../transcription/WhisperProvider.js';
 import { TranslationRouter } from '../translation/TranslationRouter.js';
 import { TranscriptCache } from '../transcript/transcriptCache.js';
@@ -56,53 +57,86 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
     try {
       const audioStart = Date.now();
       const resolvedVideo = resolveDirectMediaSource(videoEntry, workspace);
-      let extractedAudio = null;
+      let probeInfo = null;
 
       try {
-        onProgress?.({ type: 'ffmpeg-read', message: '→ Reading video URL with FFmpeg' });
-        onProgress?.({ type: 'ffmpeg-extract', message: '→ Extracting audio stream' });
-        extractedAudio = await extractAudio(resolvedVideo.filePath, workspace);
-      } catch (directErr) {
-        onProgress?.({ type: 'ffmpeg-fallback', message: '→ Fallback to media download stream...' });
-        const fallbackVideo = await resolveVideoSource(videoEntry, workspace);
-        extractedAudio = await extractAudio(fallbackVideo.filePath, workspace);
-      }
-      metrics.recordTiming('audioExtractionTime', Date.now() - audioStart);
+        probeInfo = await probeMedia(resolvedVideo.filePath, { cwd: manifestStore.cwd });
+        const containerLabel = (probeInfo.container || path.extname(resolvedVideo.filePath).replace('.', '') || 'mp4').toUpperCase();
+        const videoDesc = probeInfo.video ? `${probeInfo.video.codec.toUpperCase()} ${probeInfo.video.width}x${probeInfo.video.height} (${probeInfo.video.fps} fps)` : 'N/A';
+        const audioDesc = probeInfo.hasAudio 
+          ? `${probeInfo.audio.codec.toUpperCase()} ${probeInfo.audio.sampleRate}Hz ${probeInfo.audio.channelLayout}${probeInfo.audioStreams.length > 1 ? ` (${probeInfo.audioStreams.length} audio streams detected)` : ''}`
+          : 'No audio stream detected';
 
-      onProgress?.({
-        type: 'audio-ready',
-        message: `✓ Audio extracted\n  Path: ${extractedAudio.audioPath}\n  Size: ${extractedAudio.sizeMB} MB (${extractedAudio.sizeBytes} bytes)`
-      });
-
-      onProgress?.({ type: 'transcribing', message: '→ Running Whisper Speech-to-Text' });
-      const asrStart = Date.now();
-      const rawTranscript = await transcriber.transcribe(extractedAudio, videoEntry);
-      metrics.recordTiming('asrTime', Date.now() - asrStart);
-
-      const srcLangName = rawTranscript.language === 'en' ? 'English' : (rawTranscript.language || 'English');
-      onProgress?.({ type: 'source-language', message: `✓ Detected source language: ${srcLangName}` });
-      onProgress?.({ type: 'segments-count', message: `✓ Segments count: ${rawTranscript.segments.length}` });
-
-      // Post-ASR Normalization & Segmentation
-      const normalizedTranscript = normalizer.normalizeTranscript(rawTranscript);
-      const masterCues = segmenter.segmentTranscript(normalizedTranscript.segments);
-      metrics.analyzeQuality(masterCues);
-
-      if (masterCues.length > 0) {
-        const previewLines = masterCues.slice(0, 2).map((s, idx) => 
-          `  ${idx + 1}. [${secondsToVttTimestamp(s.start)} --> ${secondsToVttTimestamp(s.end)}] ${s.text.replace(/\n/g, ' ')}`
-        ).join('\n');
-        onProgress?.({ type: 'transcript-preview', message: `Transcript preview:\n${previewLines}` });
+        onProgress?.({
+          type: 'media-probe-summary',
+          message: `\nInput:\n  ${path.basename(resolvedVideo.filePath || videoEntry.src)}\nContainer:\n  ${containerLabel}\nVideo:\n  ${videoDesc}\nAudio:\n  ${audioDesc}\n`
+        });
+      } catch (_) {
+        // Continue if probe fails on non-standard mock
       }
 
-      masterTranscript = transcriptCache.saveMasterTranscript(
-        videoEntry.id,
-        rawTranscript.language || 'en',
-        rawTranscript.segments,
-        masterCues,
-        currentFingerprint
-      );
-      onProgress?.({ type: 'master-created', message: '✓ Master transcript created & saved' });
+      let extractedAudio = null;
+
+      if (probeInfo && probeInfo.hasAudio === false) {
+        onProgress?.({ type: 'no-audio-stream', message: 'ℹ No audio stream present in source media. Skipping speech-to-text.' });
+        masterTranscript = {
+          sourceLanguage: videoEntry.sourceLanguage || videoEntry.language || 'en',
+          segments: [],
+          normalized: { segments: [] }
+        };
+      } else {
+        const selectedAudioStreamIndex = videoEntry.audioStreamIndex !== undefined ? videoEntry.audioStreamIndex : options.audioStreamIndex;
+
+        try {
+          onProgress?.({ type: 'ffmpeg-read', message: '→ Reading video URL with FFmpeg' });
+          onProgress?.({ type: 'ffmpeg-extract', message: '→ Extracting audio stream' });
+          extractedAudio = await extractAudio(resolvedVideo.filePath, workspace, {
+            audioStreamIndex: selectedAudioStreamIndex
+          });
+        } catch (directErr) {
+          onProgress?.({ type: 'ffmpeg-fallback', message: '→ Fallback to media download stream...' });
+          const fallbackVideo = await resolveVideoSource(videoEntry, workspace);
+          extractedAudio = await extractAudio(fallbackVideo.filePath, workspace, {
+            audioStreamIndex: selectedAudioStreamIndex
+          });
+        }
+        metrics.recordTiming('audioExtractionTime', Date.now() - audioStart);
+
+        onProgress?.({
+          type: 'audio-ready',
+          message: `✓ Audio extracted\n  Path: ${extractedAudio.audioPath}\n  Size: ${extractedAudio.sizeMB} MB (${extractedAudio.sizeBytes} bytes)`
+        });
+
+        onProgress?.({ type: 'transcribing', message: '→ Running Whisper Speech-to-Text' });
+        const asrStart = Date.now();
+        const rawTranscript = await transcriber.transcribe(extractedAudio, videoEntry);
+        metrics.recordTiming('asrTime', Date.now() - asrStart);
+
+        const srcLangName = rawTranscript.language === 'en' ? 'English' : (rawTranscript.language || 'English');
+        onProgress?.({ type: 'source-language', message: `✓ Detected source language: ${srcLangName}` });
+        onProgress?.({ type: 'segments-count', message: `✓ Segments count: ${rawTranscript.segments.length}` });
+
+        // Post-ASR Normalization & Segmentation
+        const normalizedTranscript = normalizer.normalizeTranscript(rawTranscript);
+        const masterCues = segmenter.segmentTranscript(normalizedTranscript.segments);
+        metrics.analyzeQuality(masterCues);
+
+        if (masterCues.length > 0) {
+          const previewLines = masterCues.slice(0, 2).map((s, idx) => 
+            `  ${idx + 1}. [${secondsToVttTimestamp(s.start)} --> ${secondsToVttTimestamp(s.end)}] ${s.text.replace(/\n/g, ' ')}`
+          ).join('\n');
+          onProgress?.({ type: 'transcript-preview', message: `Transcript preview:\n${previewLines}` });
+        }
+
+        masterTranscript = transcriptCache.saveMasterTranscript(
+          videoEntry.id,
+          rawTranscript.language || 'en',
+          rawTranscript.segments,
+          masterCues,
+          currentFingerprint
+        );
+        onProgress?.({ type: 'master-created', message: '✓ Master transcript created & saved' });
+      }
     } finally {
       if (!options.keepTemp) {
         onProgress?.({ type: 'cleaning-audio', message: '→ Cleaning temporary audio' });
