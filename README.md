@@ -938,6 +938,8 @@ npx aitutor audio clear [languages] [--video <id>]
 | `npx aitutor generate --audio-languages all` | Global / Build | Generate AI-dubbed audio for all 109 registry languages | `npx aitutor generate --audio-languages all` |
 | `npx aitutor generate --audio-languages <langs>` | Targeted / Build | Generate audio dubs only for specified comma-separated languages | `npx aitutor generate --audio-languages en,hi,te` |
 | `npx aitutor generate --audio-languages <lang> --force` | Targeted / Rebuild | Force re-transcription and re-synthesis, ignoring existing cache | `npx aitutor generate --audio-languages hi --force` |
+| `npx aitutor generate --video <id> --audio-languages <langs>` | Video Targeted | Generate audio dubs exclusively for a designated video ID | `npx aitutor generate --video lesson_1 --audio-languages hi,te` |
+| `npx aitutor generate --no-quality --audio-languages <langs>` | Fast Audio Build | Skip video quality transcoding and process only audio dubbing | `npx aitutor generate --no-quality --audio-languages hi,te` |
 | `npx aitutor audio status` | Inspection | Display generated audio tracks, cache status, and missing configured languages | `npx aitutor audio status` |
 | `npx aitutor audio status --video <id>` | Targeted Inspection | Inspect audio status for a specific video ID | `npx aitutor audio status --video lesson_1` |
 | `npx aitutor audio clear <lang>` | Language Removal | Delete generated audio file and manifest entry for a single language | `npx aitutor audio clear hi` |
@@ -948,7 +950,137 @@ npx aitutor audio clear [languages] [--video <id>]
 
 ---
 
-### ⚙️ 4. RUNTIME AUDIO USAGE & REACT PROPS
+### 💡 4. STEP-BY-STEP EXAMPLES FOR EVERY AUDIO COMMAND
+
+#### Example 1: Generate AI Audio Dubs for All 109 Languages
+```bash
+npx aitutor generate --audio-languages all
+```
+- **When to use**: When you want full worldwide localization across all 109 supported languages.
+- **What happens**: Transcribes the video speech once using Whisper, translates the cues into all 109 languages, synthesizes neural TTS speech, aligns segment timestamps, and outputs synchronized `.m4a` files into `public/aitutor/audio/<videoId>/<lang>.m4a`.
+- **Manifest**: Populates `public/aitutor/manifest.json` with all 109 languages.
+
+---
+
+#### Example 2: Generate Specific Target Languages
+```bash
+npx aitutor generate --audio-languages en,hi,te,es
+```
+- **When to use**: When your course targets specific regions (e.g., English, Hindi, Telugu, and Spanish) to save build time and storage.
+- **Resulting Files**:
+  ```text
+  public/aitutor/audio/lesson_1/
+  ├── en.m4a
+  ├── hi.m4a
+  ├── te.m4a
+  └── es.m4a
+  ```
+
+---
+
+#### Example 3: Generate Audio for a Single Video Module
+```bash
+npx aitutor generate --video lesson_1 --audio-languages hi,te
+```
+- **When to use**: When you added a new video `lesson_1` and only want to process dubbing for that specific lesson without touching existing videos.
+
+---
+
+#### Example 4: Force Re-Generation (Bypassing Cache)
+```bash
+npx aitutor generate --audio-languages hi --force
+```
+- **When to use**: When you updated your glossary or terminology in `aitutor.config.mjs` and want to overwrite existing Hindi audio with fresh translations and synthesis.
+
+---
+
+#### Example 5: Fast Audio Build (Skip Video Transcoding)
+```bash
+npx aitutor generate --no-quality --audio-languages en,hi,te
+```
+- **When to use**: When video quality ladders (1080p, 720p, etc.) are already generated, and you only want to quickly build or update audio dubs.
+
+---
+
+#### Example 6: Inspect Audio Track Status Across the Project
+```bash
+npx aitutor audio status
+```
+- **Terminal Output Example**:
+  ```text
+  AITutor Audio Status
+  ─────────────────────────────
+  lesson_1
+  Video:               ✓
+  Source Language:     en (Original)
+  Generated Tracks:    3 track(s)
+
+  Audio Languages:
+    en       English (Source) [Cached] -> /aitutor/audio/lesson_1/en.m4a
+    hi       हिन्दी           [Cached] -> /aitutor/audio/lesson_1/hi.m4a
+    te       తెలుగు           [Cached] -> /aitutor/audio/lesson_1/te.m4a
+
+  Registry Capacity:   109 supported languages available for dubbing
+  ─────────────────────────────
+  ```
+
+---
+
+#### Example 7: Inspect Audio Status for a Specific Video
+```bash
+npx aitutor audio status --video lesson_1
+```
+- **When to use**: To quickly verify track presence, file paths, and cache status for a single module.
+
+---
+
+#### Example 8: Remove a Single Language Audio Dub
+```bash
+npx aitutor audio clear hi
+```
+- **When to use**: When you want to remove the Hindi dub across all videos to re-generate or free storage.
+- **Behind the Scenes**:
+  - Deletes `public/aitutor/audio/<videoId>/hi.m4a`.
+  - Removes `"hi"` from `audioLanguages` in `public/aitutor/manifest.json`.
+  - Source video and subtitles remain 100% untouched.
+
+---
+
+#### Example 9: Remove Multiple Specific Language Audio Dubs
+```bash
+npx aitutor audio clear hi,te
+```
+- **When to use**: To selectively remove Hindi and Telugu audio tracks while keeping other languages (e.g. Spanish, French) completely active.
+
+---
+
+#### Example 10: Remove Specific Language for a Designated Video
+```bash
+npx aitutor audio clear hi --video lesson_1
+```
+- **When to use**: When you want to delete the Hindi dub specifically for `lesson_1` without affecting `lesson_2` or `lesson_3`.
+
+---
+
+#### Example 11: Clear All Generated Audio for a Single Video
+```bash
+npx aitutor audio clear --video lesson_1
+```
+- **When to use**: To reset all audio tracks for `lesson_1` back to original source audio.
+- **Behind the Scenes**: Deletes `public/aitutor/audio/lesson_1/` and empties `audioLanguages` for `lesson_1` in `manifest.json`.
+
+---
+
+#### Example 12: Global Clean (Clear All Audio Dubs in Project)
+```bash
+npx aitutor audio clear
+```
+- **When to use**: When you want to clear all generated audio dubs across the entire project.
+- **Behind the Scenes**: Empties `public/aitutor/audio/` and resets all `audioLanguages` entries in `manifest.json`. The player automatically reverts to native video audio.
+
+---
+
+### ⚙️ 5. RUNTIME AUDIO USAGE & REACT PROPS
 
 #### Automatic Original Language Detection (Zero Config):
 When the player mounts, it inspects `sourceLanguage` in the manifest and automatically exposes generated dubs while setting the source audio as `(Original)`:
