@@ -871,103 +871,130 @@ export default function App() {
 
 ---
 
-## 33. MULTILINGUAL AUDIO DUBBING (`audioLanguages`) — STEP-BY-STEP GUIDE
+## 33. MULTILINGUAL AUDIO DUBBING (`audioLanguages`) — ARCHITECTURE, GENERATION & CLI GUIDE
 
-AITutor introduces a decoupled, clean multilingual audio architecture where build-time generation and runtime player visibility are separated.
-
----
-
-### Core Audio Availability Rules:
-1. **No Audio Tracks**: When neither generated audio nor developer audio tracks exist, the Audio Language UI is **automatically hidden**. No network requests are made, and native video audio plays normally.
-2. **Generated Audio**: When AI-dubbed audio tracks exist in `public/aitutor/manifest.json`, the Audio Language UI **automatically appears** with the original source audio marked as `(Original)` and set as default.
-3. **Developer Audio**: Developer-provided audio tracks (`audioDubs`) automatically populate the UI and **override generated AI audio** for the same language (`developer` > `generated` > `demo`).
-4. **Runtime Filter**: Passing `audioLanguages={["hi", "te"]}` acts as a runtime visibility filter only. It never triggers Whisper, translation, TTS, or file generation in the browser.
-5. **Disable Audio**: `audioLanguages={false}` explicitly disables the audio selector UI without affecting subtitles or video quality.
-6. **Smart DX Warning**: If `audioLanguages={["hi", "te"]}` requests languages that are not yet available, AITutor emits a single development console warning with the exact command to generate them (`npx aitutor generate --audio-languages all`) and hides the UI without crashing.
+AITutor introduces a decoupled, clean multilingual audio dubbing architecture where build-time generation, audio lifecycle management, and runtime player visibility are completely separated.
 
 ---
 
-### Step 1: Generate Audio Dubs at Build Time
-Generate all supported languages dynamically or selectively via the CLI:
-```bash
-# Generate all supported languages from dynamic registry
-npx aitutor generate --audio-languages all
+### 🎙️ 1. HOW AUDIO DUBS ARE GENERATED (PIPELINE DEEP DIVE)
 
-# Or generate specific selective languages
-npx aitutor generate --audio-languages en,hi,te
-```
-This produces synchronized audio tracks in `public/aitutor/audio/<id>/<lang>.m4a` and records them in `public/aitutor/manifest.json`.
+Audio generation in AITutor runs at build time via the CLI and follows an automated 7-step neural synchronization pipeline:
 
----
-
-### Step 2: Audio Management Commands (`status` and `clear`)
-Inspect or clean generated audio tracks without affecting source video, subtitles, or quality renditions:
-```bash
-# Check status of generated & available audio tracks
-npx aitutor audio status
-
-# Clear ONLY Hindi generated audio
-npx aitutor audio clear hi
-
-# Clear multiple specific languages
-npx aitutor audio clear hi,te
-
-# Clear ALL generated audio tracks across all videos
-npx aitutor audio clear
+```text
+SOURCE VIDEO (MP4/MKV/AVI/MOV/WebM)
+        ↓  [1. FFmpeg Stream Extraction]
+ORIGINAL PCM WAV AUDIO (16kHz Mono)
+        ↓  [2. Whisper Neural Speech-to-Text]
+TIMESTAMPED CUE TRANSCRIPT (start, end, text)
+        ↓  [3. Neural Multilingual Translation + Glossary]
+TARGET LANGUAGE CUES (Localized text)
+        ↓  [4. Neural Text-To-Speech (TTS) Synthesis]
+RAW AUDIO SEGMENTS (per cue)
+        ↓  [5. Time Alignment & Tempo Normalization (0.8x - 1.2x)]
+SYNCED AUDIO TRACKS
+        ↓  [6. Stitching & AAC / M4A Encoding]
+public/aitutor/audio/<videoId>/<lang>.m4a
+        ↓  [7. Manifest Registration]
+public/aitutor/manifest.json (audioLanguages map)
 ```
 
+#### Step-by-Step Generation Details:
+1. **Audio Extraction**: FFmpeg extracts the primary audio stream from local or remote video files without re-encoding video tracks.
+2. **Speech-to-Text & Cue Alignment**: Whisper ASR models segment the speech into millisecond-accurate cue blocks with timestamps.
+3. **Multilingual Translation**: Neural translation converts speech cues into target languages while preserving technical keywords defined in `aitutor.config.mjs` glossaries.
+4. **Neural TTS Synthesis**: Local or cloud neural TTS engines synthesize natural spoken audio for each segment.
+5. **Pitch-Preserving Time Alignment (`alignAudioSegment`)**: If a translated spoken segment is longer or shorter than the original video cue duration, AITutor dynamically adjusts playback tempo (clamped safely between `0.8x` and `1.2x`) while preserving natural voice pitch. This guarantees **zero drift** over long 60+ minute lectures.
+6. **AAC Encoding & Assembly**: Segment audio buffers are stitched with precise silence gaps into a synchronized `.m4a` (AAC) or `.mp3` track stored in `public/aitutor/audio/<videoId>/<lang>.m4a`.
+7. **Manifest Update**: The track is registered in `public/aitutor/manifest.json` under `audioLanguages[lang]` with its native label, source URL, and duration.
+
 ---
 
-### Step 3: Automatic Original Language Default (Zero Config)
-When the player mounts, it inspects `sourceLanguage` in the manifest and **automatically defaults to the video's original language**:
-- If the original video is English (`sourceLanguage: "en"`), the player defaults to English.
-- If the original video is Hindi (`sourceLanguage: "hi"`), the player defaults to Hindi.
-- If the original video is Telugu (`sourceLanguage: "te"`), the player defaults to Telugu.
+### 🗑️ 2. HOW AUDIO DUBS ARE REMOVED & CLEARED
+
+AITutor provides granular, non-destructive CLI commands to clear or remove generated audio tracks without affecting other media systems:
+
+```text
+npx aitutor audio clear [languages] [--video <id>]
+```
+
+#### Removal Scope & Mechanics:
+1. **Single Language Removal** (`npx aitutor audio clear hi`):
+   - Deletes `public/aitutor/audio/<videoId>/hi.m4a` from disk.
+   - Removes the `hi` key from `audioLanguages` in `public/aitutor/manifest.json` and `.aitutor/manifest.json`.
+2. **Multi-Language Removal** (`npx aitutor audio clear hi,te`):
+   - Deletes all specified language audio files across videos.
+   - Cleans corresponding keys in the manifests simultaneously.
+3. **Video-Scoped Removal** (`npx aitutor audio clear --video lesson_1`):
+   - Deletes the entire directory `public/aitutor/audio/lesson_1/`.
+   - Clears `audioLanguages` for `lesson_1` while leaving other videos untouched.
+4. **Global Audio Clean** (`npx aitutor audio clear`):
+   - Deletes all generated audio files across all videos in `public/aitutor/audio/`.
+   - Resets `audioLanguages` in manifests to empty objects `{}`.
+
+#### 🛡️ Audio Clean Safety Invariants:
+- **Source Video Preservation**: Original source videos are **never modified or deleted**. The SHA-256 binary hash remains byte-identical.
+- **Subtitle & Quality Independence**: WebVTT subtitles (`.vtt`) and video quality renditions (`.mp4`) are **100% preserved**.
+- **Instant UI Synchronization**: Cleared audio tracks immediately disappear from the player UI selector on next page load without throwing 404 errors.
+
+---
+
+### 📋 3. AUDIO CLI COMMAND REFERENCE TABLE
+
+| Command | Scope | Description | Practical Example |
+| :--- | :--- | :--- | :--- |
+| `npx aitutor generate --audio-languages all` | Global / Build | Generate AI-dubbed audio for all 109 registry languages | `npx aitutor generate --audio-languages all` |
+| `npx aitutor generate --audio-languages <langs>` | Targeted / Build | Generate audio dubs only for specified comma-separated languages | `npx aitutor generate --audio-languages en,hi,te` |
+| `npx aitutor generate --audio-languages <lang> --force` | Targeted / Rebuild | Force re-transcription and re-synthesis, ignoring existing cache | `npx aitutor generate --audio-languages hi --force` |
+| `npx aitutor audio status` | Inspection | Display generated audio tracks, cache status, and missing configured languages | `npx aitutor audio status` |
+| `npx aitutor audio status --video <id>` | Targeted Inspection | Inspect audio status for a specific video ID | `npx aitutor audio status --video lesson_1` |
+| `npx aitutor audio clear <lang>` | Language Removal | Delete generated audio file and manifest entry for a single language | `npx aitutor audio clear hi` |
+| `npx aitutor audio clear <lang1>,<lang2>` | Multi-Language Removal | Delete generated audio for multiple languages across all videos | `npx aitutor audio clear hi,te` |
+| `npx aitutor audio clear <lang> --video <id>` | Targeted Video Removal | Delete specific language audio only for a designated video ID | `npx aitutor audio clear hi --video lesson_1` |
+| `npx aitutor audio clear --video <id>` | Video-Scoped Clear | Delete all generated audio tracks for a designated video ID | `npx aitutor audio clear --video lesson_1` |
+| `npx aitutor audio clear` | Global Clear | Delete all generated audio tracks across all videos in the project | `npx aitutor audio clear` |
+
+---
+
+### ⚙️ 4. RUNTIME AUDIO USAGE & REACT PROPS
+
+#### Automatic Original Language Detection (Zero Config):
+When the player mounts, it inspects `sourceLanguage` in the manifest and automatically exposes generated dubs while setting the source audio as `(Original)`:
 
 ```jsx
-// No props needed! Automatically detects source language & exposes all generated dubs
+// Zero configuration: automatically defaults to video's original language (e.g. English)
 <AITutor src="/lesson.mp4" />
 ```
 
----
-
-### Step 4: Runtime Audio Filtering (`audioLanguages` Prop)
-The `audioLanguages` prop acts as a **runtime visibility filter** over generated tracks (just like the `subtitles` prop):
+#### Runtime Audio Filtering (`audioLanguages` Prop):
+Filter the options visible to the student in the player menu:
 ```jsx
-// Expose only Hindi and Telugu dubs to the student in the player menu
+// Shows only Hindi and Telugu dubs in the player menu (original audio is always protected)
 <AITutor 
   src="/lesson.mp4" 
   audioLanguages={["hi", "te"]} 
 />
 ```
-> **Note:** The original source audio is immutable and remains protected. Passing `audioLanguages={["hi", "te"]}` filters the menu options but never overwrites the underlying `sourceLanguage`.
 
----
-
-### Step 5: Custom Developer Audio Tracks (`audioDubs`)
-You can provide custom audio dub tracks directly via React props. Developer audio has highest priority and overrides generated tracks:
+#### Custom Developer Audio Tracks (`audioDubs`):
+Provide your own studio-recorded dubbing tracks to override AI generated audio:
 ```jsx
 <AITutor
   src="/lesson.mp4"
   audioDubs={{
     hi: "/custom-audio/lesson_hi.mp3",
-    te: { label: "Telugu Dub", src: "/custom-audio/lesson_te.mp3", language: "te" }
+    te: { label: "Telugu Studio Dub", src: "/custom-audio/lesson_te.mp3", language: "te" }
   }}
 />
 ```
 
----
-
-### Step 6: Disabling Audio Dubbing Completely
-If you want to hide the Audio Language menu and play only the original video audio:
+#### Disabling Audio Dubbing:
 ```jsx
+// Completely disables audio selector UI and plays native video audio
 <AITutor src="/lesson.mp4" audioLanguages={false} />
 ```
 
----
-
-### Step 7: Handling Audio Language Change Events
-Listen to user audio language switches via `onAudioLanguageChange`:
+#### Audio Language Change Events:
 ```jsx
 <AITutor
   src="/lesson.mp4"
@@ -979,17 +1006,14 @@ Listen to user audio language switches via `onAudioLanguageChange`:
 />
 ```
 
----
-
-### Step 8: Subpath Import & Utility Functions
-Import audio resolution utilities directly via subpath:
+#### Subpath Import for Audio Utilities:
 ```javascript
 import { resolveAudioAvailability, emitAudioDXWarning } from 'tavi-video-tutor/audio';
 ```
 
 ---
 
-### Audio Architecture Guarantees:
+### 🛡️ Audio Architecture Guarantees:
 - **Audio + Subtitle Independence**: Switching subtitle languages does not change the spoken audio track, and changing audio language does not modify subtitle display.
 - **Audio + Video Quality Independence**: Changing video resolution quality preserves active spoken audio dubbing track and playback synchronization seamlessly.
 
