@@ -26,20 +26,11 @@ export async function getTransformers() {
     try {
       rawModule = await import('@xenova/transformers');
     } catch (err2) {
-      console.log('--> Auto-installing @huggingface/transformers for AITutor CLI generator runtime...');
-      try {
-        execSync('npm install --no-save @huggingface/transformers@^4.2.0', {
-          stdio: 'inherit',
-          cwd: process.cwd()
-        });
-        rawModule = await import('@huggingface/transformers');
-      } catch (installErr) {
-        throw new Error(
-          `AITutor CLI Speech-to-Text requires '@huggingface/transformers'. ` +
-          `Failed to auto-install: ${installErr.message}. ` +
-          `Please install it manually with: npm install @huggingface/transformers`
-        );
-      }
+      throw new Error(
+        `AITutor CLI Speech-to-Text requires '@huggingface/transformers'. ` +
+        `Please install it with: npm install @huggingface/transformers ` +
+        `or run "npx aitutor setup" to configure your environment automatically.`
+      );
     }
   }
 

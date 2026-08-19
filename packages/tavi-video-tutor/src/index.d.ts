@@ -20,6 +20,10 @@ export interface VideoQuality {
   label: string;
   src: string;
   index?: number;
+  height?: number;
+  width?: number;
+  bitrate?: number;
+  [key: string]: any;
 }
 
 export interface AudioTrack {
@@ -33,17 +37,70 @@ export type AudioLanguage = string;
 export type AudioLanguageMap = Record<string, string | AudioTrack>;
 export type AudioLanguages = 'all' | false | string[] | AudioLanguageMap;
 
+export interface SubtitleAvailability {
+  enabled: boolean;
+  hasAvailableItems: boolean;
+  hasAvailableSubtitles: boolean;
+  mode: string;
+  requestedItems: string[] | null | 'all' | false;
+  requestedLanguages: string[] | null | 'all' | false;
+  availableItems: string[];
+  availableLanguages: string[];
+  visibleItems: string[];
+  visibleLanguages: string[];
+  resolvedItems: Record<string, string>;
+  resolvedTracks: Record<string, string>;
+  sourceByItem: Record<string, string>;
+  sourceByLanguage: Record<string, string>;
+  missingItems?: string[];
+  missingLanguages?: string[];
+  primarySource: string | null;
+  reason: string;
+}
+
 export interface AudioAvailability {
   enabled: boolean;
+  hasAvailableItems: boolean;
   hasAvailableAudio: boolean;
+  requestedItems?: string[] | null | 'all' | false;
+  requestedLanguages?: string[] | null | 'all' | false;
+  availableItems: string[];
+  availableLanguages: string[];
+  visibleItems: string[];
+  visibleLanguages: string[];
+  resolvedItems: Record<string, AudioTrack>;
+  resolvedTracks: Record<string, AudioTrack>;
+  sourceByItem: Record<string, string>;
+  sourceByLanguage: Record<string, string>;
   sourceLanguage: string;
   originalTrack: AudioTrack | null;
   translatedTracks: Record<string, AudioTrack>;
-  availableLanguages: string[];
-  visibleLanguages: string[];
-  resolvedTracks: Record<string, AudioTrack>;
-  sourceByLanguage: Record<string, string>;
   selectedLanguage: string;
+  missingItems?: string[];
+  missingLanguages?: string[];
+  reason: string;
+}
+
+export interface QualityAvailability {
+  enabled: boolean;
+  hasAvailableItems: boolean;
+  hasAvailableQualities: boolean;
+  mode: string;
+  requestedItems: string[] | VideoQuality[] | null | 'all' | false;
+  requestedQualities: string[] | VideoQuality[] | null | 'all' | false;
+  availableItems: string[];
+  availableQualities: string[];
+  visibleItems: string[];
+  visibleQualities: string[];
+  resolvedItems: VideoQuality[];
+  resolvedQualities: VideoQuality[];
+  qualities: VideoQuality[];
+  sourceByItem: Record<string, string>;
+  sourceByQuality: Record<string, string>;
+  source: string;
+  primarySource: string;
+  missingItems?: string[];
+  missingQualities?: string[];
   reason: string;
 }
 
@@ -67,7 +124,7 @@ export interface AITutorProps {
   tracks?: any[];
   config?: any;
   audioDubs?: Record<string, string | AudioTrack>;
-  qualities?: VideoQuality[];
+  qualities?: 'all' | false | string[] | VideoQuality[];
   subLanguage?: string;
   defaultSubLanguage?: string;
   playbackRates?: number[];
@@ -91,17 +148,29 @@ export interface TaviVideoPlayerProps extends AITutorProps {
   manifestSourceLanguage?: string;
   resolvedSubtitles?: Record<string, string>;
   resolvedAudioTracks?: Record<string, AudioTrack>;
+  subtitleAvailability?: SubtitleAvailability;
   audioAvailability?: AudioAvailability;
+  qualityAvailability?: QualityAvailability;
   demoSubtitles?: Record<string, string>;
 }
 
 export declare const AITutor: React.ForwardRefExoticComponent<AITutorProps & React.RefAttributes<any>>;
 export declare const TaviVideoPlayer: React.ForwardRefExoticComponent<TaviVideoPlayerProps & React.RefAttributes<any>>;
 
-export declare function resolveSubtitleVisibility(params: any): any;
-export declare function resolveSubtitleSources(params: any): any;
-export declare function resolveQualitySources(params: any): any;
-export declare function resolveAudioSources(params: any): any;
-export declare function resolveAudioAvailability(params: any): AudioAvailability;
+export declare function resolveSubtitleVisibility(params?: any): any;
+export declare function resolveSubtitleSources(params?: any): any;
+export declare function resolveSubtitleAvailability(params?: any): SubtitleAvailability;
+export declare function emitSubtitleDXWarning(missingList: string[], availableList: string[], videoKey?: string): void;
+export declare function clearWarnedSubtitleCache(): void;
+
+export declare function resolveQualitySources(params?: any): any;
+export declare function resolveQualityAvailability(params?: any): QualityAvailability;
+export declare function emitQualityDXWarning(missingList: string[], availableList: string[], videoKey?: string): void;
+export declare function clearWarnedQualityCache(): void;
+
+export declare function resolveAudioSources(params?: any): any;
+export declare function resolveAudioAvailability(params?: any): AudioAvailability;
+export declare function emitAudioDXWarning(missingList: string[], availableList: string[], videoKey?: string): void;
+export declare function clearWarnedAudioCache(): void;
 
 export default AITutor;

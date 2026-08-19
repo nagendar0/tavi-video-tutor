@@ -42,6 +42,11 @@
       "import": "./src/subtitles/resolver/audioResolver.js",
       "default": "./src/subtitles/resolver/audioResolver.js"
     },
+    "./quality": {
+      "types": "./src/subtitles/resolver/qualityResolver.d.ts",
+      "import": "./src/subtitles/resolver/qualityResolver.js",
+      "default": "./src/subtitles/resolver/qualityResolver.js"
+    },
     "./dist/style.css": "./dist/tavi-video-tutor.css",
     "./style.css": "./dist/tavi-video-tutor.css",
     "./package.json": "./package.json"

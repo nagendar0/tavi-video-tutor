@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 export const getFFmpegBinaryPath = () => {
-  if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+  if (process.env.FFMPEG_PATH) {
     return process.env.FFMPEG_PATH;
   }
   
@@ -32,10 +32,14 @@ export const getFFmpegBinaryPath = () => {
 
 export const checkFFmpegAvailable = () => {
   return new Promise((resolve) => {
-    const binPath = getFFmpegBinaryPath();
-    const proc = spawn(binPath, ['-version']);
-    proc.on('error', () => resolve(false));
-    proc.on('close', (code) => resolve(code === 0));
+    try {
+      const binPath = getFFmpegBinaryPath();
+      const proc = spawn(binPath, ['-version']);
+      proc.on('error', () => resolve(false));
+      proc.on('close', (code) => resolve(code === 0));
+    } catch (_) {
+      resolve(false);
+    }
   });
 };
 
@@ -77,7 +81,13 @@ export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace, options 
   ];
 
   return new Promise((resolve, reject) => {
-    const ffmpegProc = spawn(binPath, args);
+    let ffmpegProc;
+    try {
+      ffmpegProc = spawn(binPath, args);
+    } catch (err) {
+      reject(new Error(`Failed to start FFmpeg process: ${err.message}`));
+      return;
+    }
     let stderrData = '';
 
     ffmpegProc.stderr.on('data', (chunk) => {

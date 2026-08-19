@@ -18,7 +18,11 @@ npx aitutor
 
 ---
 
-## 1. NEW IN v2.0.1 — ENTERPRISE PLAYER SDK & RELEASE REMEDIATION
+## 1. WHAT'S NEW IN v2.1.1 — PREFLIGHT ENVIRONMENT SETUP & MULTILINGUAL AUDIO ARCHITECTURE
+
+### 🚀 CLI Preflight Environment Setup (`npx aitutor doctor`, `setup`, `generate`)
+- **Automated Environment Verification**: Checks Node.js, FFmpeg, FFprobe, Whisper provider (@huggingface/transformers), Whisper neural models, Translation router, TTS provider, cache directories, and free disk space before media processing.
+- **Controlled Process Execution**: Eliminates unhandled ENOENT crashes and provides actionable remediation guidance or automatic installation via Windows Package Manager (`winget`).
 
 ### ⚡ Pure Lightweight Browser Player (`tavi-video-tutor/player`)
 - **Zero AI Runtime Bloat**: Normal player imports (`import { AITutor } from "tavi-video-tutor/player"`) bundle only the vector-sharp React video player, canvas subtitle renderer, and resolution hooks with **0 ONNX WASM runtime files** and **0 Transformers overhead**.
@@ -40,6 +44,7 @@ npx aitutor
   - `import { AITutor } from "tavi-video-tutor";` (Main bundle)
   - `import { AITutor } from "tavi-video-tutor/player";` (Pure React Player - Zero CLI bloat)
   - `import { resolveSubtitleAvailability } from "tavi-video-tutor/subtitles";` (Resolver logic)
+  - `import { resolveAudioAvailability } from "tavi-video-tutor/audio";` (Audio Resolver logic)
   - `import "tavi-video-tutor/style.css";` (CSS styling)
 
 ### 🚀 Next.js & Server-Side Rendering (SSR) Integration
@@ -668,7 +673,9 @@ Execute the CLI using `npx aitutor`:
 
 | Command | Description | Example |
 | :--- | :--- | :--- |
-| `npx aitutor` / `npx aitutor generate` | Generate subtitles and manifest for configured videos | `npx aitutor --force` |
+| `npx aitutor` / `npx aitutor generate` | Run preflight check and generate subtitles/qualities for configured videos | `npx aitutor --force` |
+| `npx aitutor doctor` | Run environment preflight checks without starting media processing | `npx aitutor doctor` |
+| `npx aitutor setup` | Interactive environment setup wizard to install missing dependencies/models | `npx aitutor setup` |
 | `npx aitutor status` | Display cache status, transcripts, and generated tracks | `npx aitutor status` |
 | `npx aitutor validate` | Audit generated WebVTT headers and manifest integrity | `npx aitutor validate` |
 | `npx aitutor clean` | Clean all generated public/internal subtitles and manifests | `npx aitutor clean --video lesson_1` |
@@ -678,6 +685,8 @@ Execute the CLI using `npx aitutor`:
 - `--force`: Ignore existing cache and force full re-transcription & translation.
 - `--keep-temp`: Retain temporary audio extraction workspace for debugging.
 - `--video <id>`: Target specific video ID for cleanup.
+- `--audio-languages <langs>`: Filter or specify target audio dubbing languages (e.g. `--audio-languages en,hi,te`).
+- `--yes`, `-y`: Automatically confirm prompts in preflight remediation / setup.
 
 ---
 
@@ -866,16 +875,50 @@ export default function App() {
 
 AITutor introduces a decoupled, clean multilingual audio architecture where build-time generation and runtime player visibility are separated.
 
+---
+
+### Core Audio Availability Rules:
+1. **No Audio Tracks**: When neither generated audio nor developer audio tracks exist, the Audio Language UI is **automatically hidden**. No network requests are made, and native video audio plays normally.
+2. **Generated Audio**: When AI-dubbed audio tracks exist in `public/aitutor/manifest.json`, the Audio Language UI **automatically appears** with the original source audio marked as `(Original)` and set as default.
+3. **Developer Audio**: Developer-provided audio tracks (`audioDubs`) automatically populate the UI and **override generated AI audio** for the same language (`developer` > `generated` > `demo`).
+4. **Runtime Filter**: Passing `audioLanguages={["hi", "te"]}` acts as a runtime visibility filter only. It never triggers Whisper, translation, TTS, or file generation in the browser.
+5. **Disable Audio**: `audioLanguages={false}` explicitly disables the audio selector UI without affecting subtitles or video quality.
+6. **Smart DX Warning**: If `audioLanguages={["hi", "te"]}` requests languages that are not yet available, AITutor emits a single development console warning with the exact command to generate them (`npx aitutor generate --audio-languages all`) and hides the UI without crashing.
+
+---
+
 ### Step 1: Generate Audio Dubs at Build Time
-Configure the languages you want to generate in `aitutor.config.mjs` or pass them via CLI:
+Generate all supported languages dynamically or selectively via the CLI:
 ```bash
+# Generate all supported languages from dynamic registry
+npx aitutor generate --audio-languages all
+
+# Or generate specific selective languages
 npx aitutor generate --audio-languages en,hi,te
 ```
 This produces synchronized audio tracks in `public/aitutor/audio/<id>/<lang>.m4a` and records them in `public/aitutor/manifest.json`.
 
 ---
 
-### Step 2: Automatic Original Language Default (Zero Config)
+### Step 2: Audio Management Commands (`status` and `clear`)
+Inspect or clean generated audio tracks without affecting source video, subtitles, or quality renditions:
+```bash
+# Check status of generated & available audio tracks
+npx aitutor audio status
+
+# Clear ONLY Hindi generated audio
+npx aitutor audio clear hi
+
+# Clear multiple specific languages
+npx aitutor audio clear hi,te
+
+# Clear ALL generated audio tracks across all videos
+npx aitutor audio clear
+```
+
+---
+
+### Step 3: Automatic Original Language Default (Zero Config)
 When the player mounts, it inspects `sourceLanguage` in the manifest and **automatically defaults to the video's original language**:
 - If the original video is English (`sourceLanguage: "en"`), the player defaults to English.
 - If the original video is Hindi (`sourceLanguage: "hi"`), the player defaults to Hindi.
@@ -888,7 +931,7 @@ When the player mounts, it inspects `sourceLanguage` in the manifest and **autom
 
 ---
 
-### Step 3: Runtime Audio Filtering (`audioLanguages` Prop)
+### Step 4: Runtime Audio Filtering (`audioLanguages` Prop)
 The `audioLanguages` prop acts as a **runtime visibility filter** over generated tracks (just like the `subtitles` prop):
 ```jsx
 // Expose only Hindi and Telugu dubs to the student in the player menu
@@ -901,21 +944,21 @@ The `audioLanguages` prop acts as a **runtime visibility filter** over generated
 
 ---
 
-### Step 4: Custom Developer Audio Tracks
-You can also provide custom audio dub tracks directly via React props:
+### Step 5: Custom Developer Audio Tracks (`audioDubs`)
+You can provide custom audio dub tracks directly via React props. Developer audio has highest priority and overrides generated tracks:
 ```jsx
 <AITutor
   src="/lesson.mp4"
-  audioLanguages={{
-    en: "/custom-audio/lesson_en.mp3",
-    hi: { label: "Hindi Audio", src: "/custom-audio/lesson_hi.mp3", language: "hi" }
+  audioDubs={{
+    hi: "/custom-audio/lesson_hi.mp3",
+    te: { label: "Telugu Dub", src: "/custom-audio/lesson_te.mp3", language: "te" }
   }}
 />
 ```
 
 ---
 
-### Step 5: Disabling Audio Dubbing Completely
+### Step 6: Disabling Audio Dubbing Completely
 If you want to hide the Audio Language menu and play only the original video audio:
 ```jsx
 <AITutor src="/lesson.mp4" audioLanguages={false} />
@@ -923,7 +966,7 @@ If you want to hide the Audio Language menu and play only the original video aud
 
 ---
 
-### Step 6: Handling Audio Language Change Events
+### Step 7: Handling Audio Language Change Events
 Listen to user audio language switches via `onAudioLanguageChange`:
 ```jsx
 <AITutor
@@ -935,6 +978,20 @@ Listen to user audio language switches via `onAudioLanguageChange`:
   }}
 />
 ```
+
+---
+
+### Step 8: Subpath Import & Utility Functions
+Import audio resolution utilities directly via subpath:
+```javascript
+import { resolveAudioAvailability, emitAudioDXWarning } from 'tavi-video-tutor/audio';
+```
+
+---
+
+### Audio Architecture Guarantees:
+- **Audio + Subtitle Independence**: Switching subtitle languages does not change the spoken audio track, and changing audio language does not modify subtitle display.
+- **Audio + Video Quality Independence**: Changing video resolution quality preserves active spoken audio dubbing track and playback synchronization seamlessly.
 
 ---
 
@@ -960,6 +1017,123 @@ AITutor accepts multiple media container formats as input:
 
 ---
 
-## 35. LICENSE
+## 35. UNIFIED MEDIA AVAILABILITY ARCHITECTURE
+
+AITutor standardizes Subtitles, Audio Languages, and Video Quality renditions under a unified, availability-first architectural flow:
+
+```text
+BUILD / GENERATED ASSETS
+        ↓
+MANIFEST / ACTUAL MEDIA DISCOVERY
+        ↓
+AVAILABILITY RESOLVER
+        ↓
+RUNTIME FILTER / OVERRIDE
+        ↓
+VISIBLE VALID OPTIONS
+        ↓
+PLAYER UI
+```
+
+### Core Architecture Invariant:
+> **The player MUST NEVER show an option merely because a developer requested it. An option is visible ONLY when a corresponding valid media asset actually exists.**
+
+---
+
+### 1. Unified Resolver Contract
+
+All three media domains expose standardized availability resolvers returning a uniform contract shape:
+
+```typescript
+interface MediaAvailabilityResult<T = any> {
+  enabled: boolean;                      // True if system is active and has visible options
+  hasAvailableItems: boolean;            // True if media assets exist before filtering
+  requestedItems: string[] | boolean | 'all'; // Requested developer filter configuration
+  availableItems: string[];              // All discovered media assets
+  visibleItems: string[];                // Valid intersection exposed to student UI
+  resolvedItems: T;                      // Domain-specific resolved metadata / tracks
+  sourceByItem: Record<string, string>;  // Priority source attribution per item
+  missingItems: string[];                // Requested items that do not exist on disk/manifest
+  reason: string;                        // Human-readable resolution status
+}
+```
+
+---
+
+### 2. The Three Unified Resolvers
+
+```javascript
+import {
+  resolveSubtitleAvailability,
+  resolveAudioAvailability,
+  resolveQualityAvailability
+} from 'tavi-video-tutor';
+
+// Or via dedicated subpath exports:
+import { resolveSubtitleAvailability } from 'tavi-video-tutor/subtitles';
+import { resolveAudioAvailability } from 'tavi-video-tutor/audio';
+import { resolveQualityAvailability } from 'tavi-video-tutor/quality';
+```
+
+---
+
+### 3. Domain Source Priority Rules
+
+Each media domain preserves its own domain-appropriate priority hierarchy:
+
+| Media Domain | Source Priority (Highest to Lowest) |
+| :--- | :--- |
+| **Subtitles** | `uploadedSubtitles` > `developerSubtitles` > `generatedSubtitles` (`manifest.json`) > `demoSubtitles` |
+| **Audio Languages** | `developerAudio` (`audioDubs`) > `generatedAudio` (`manifest.json`) > `originalTrack` (`sourceLanguage`) |
+| **Video Quality** | `hlsQualities` > `developerQualities` > `config.qualities` > `config.file.qualities` > `manifestQualities` > source stream |
+
+---
+
+### 4. Deduplicated Developer Experience (DX) Warnings
+
+When a developer requests media options (e.g. `subtitles={["en", "te"]}`, `audioLanguages={["hi", "fr"]}`, or `qualities={["1080p", "4K"]}`) that do not exist in the manifest or storage, AITutor emits a deduplicated console warning in development mode (`process.env.NODE_ENV !== 'production'`) with the exact remediation command:
+
+```text
+[AITutor DX Warning]
+Requested video quality "4K" is not available.
+
+Available video qualities:
+"1080p", "720p", "480p"
+
+Generate video qualities using:
+
+npx aitutor generate --qualities all
+```
+
+---
+
+### 5. Explicit Disabling Modes
+
+Each media system can be completely disabled without affecting media playback or other subsystems:
+
+```jsx
+// Disable subtitles UI and WebVTT network fetching
+<AITutor src="/lesson.mp4" subtitles={false} />
+
+// Disable audio language dubbing UI and play original video audio
+<AITutor src="/lesson.mp4" audioLanguages={false} />
+
+// Disable quality selector UI and play source video stream
+<AITutor src="/lesson.mp4" qualities={false} />
+```
+
+---
+
+### 6. Three-Way Playback State Independence
+
+Switching between subtitles, audio languages, and video quality renditions is fully decoupled and maintains 100% state continuity:
+- **`currentTime`**: Preserved to exact floating-point second without rewind.
+- **`paused` / `playing`**: Playback state remains unchanged during rendition switches.
+- **`volume` & `muted`**: Synchronized across audio dub elements and main video canvas.
+- **`playbackRate`**: Playback rate (`0.5x` - `2.0x`) is preserved and re-applied immediately.
+
+---
+
+## 36. LICENSE
 
 MIT License © 2026 AITutor Maintainers

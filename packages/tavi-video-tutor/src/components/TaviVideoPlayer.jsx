@@ -5,7 +5,8 @@ import { getCachedSubtitle, setCachedSubtitle } from '../services/SubtitleCache.
 import { SubtitleEditorModal } from './SubtitleEditorModal.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
 import { resolveSubtitleSources, resolveSubtitleVisibility, resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
-import { resolveQualitySources } from '../subtitles/resolver/qualityResolver.js';
+import { resolveQualitySources, resolveQualityAvailability } from '../subtitles/resolver/qualityResolver.js';
+import { resolveAudioAvailability } from '../subtitles/resolver/audioResolver.js';
 import { getLanguageByCode } from '../subtitles/languages/registry.js';
 
 const LANGUAGE_NAMES = {
@@ -539,7 +540,9 @@ export const TaviVideoPlayer = forwardRef(({
   demoSubtitles: demoSubtitlesProp,
   resolvedSubtitles: resolvedSubtitlesProp,
   resolvedAudioTracks = {},
+  subtitleAvailability: subtitleAvailabilityProp,
   audioAvailability,
+  qualityAvailability: qualityAvailabilityProp,
   tracks,
   config,
   audioDubs = {},
@@ -735,14 +738,16 @@ export const TaviVideoPlayer = forwardRef(({
 
   // SINGLE SOURCE OF TRUTH: Subtitle Availability & Visibility
   const subtitleAvailability = useMemo(() => {
+    if (subtitleAvailabilityProp) return subtitleAvailabilityProp;
     return resolveSubtitleAvailability({
       subtitlesConfig: subtitles,
       demoSubtitles: demoSubtitlesProp,
       generatedSubtitles: effectiveManifestSubtitles,
       uploadedSubtitles: localSubtitles,
-      embeddedTracks
+      embeddedTracks,
+      videoKey: id || src || 'default'
     });
-  }, [subtitles, demoSubtitlesProp, effectiveManifestSubtitles, localSubtitles, embeddedTracks]);
+  }, [subtitleAvailabilityProp, subtitles, demoSubtitlesProp, effectiveManifestSubtitles, localSubtitles, embeddedTracks, id, src]);
 
   const hasAvailableSubtitles = subtitleAvailability.hasAvailableSubtitles;
   const isSubtitleEnabled = subtitleAvailability.enabled;
@@ -953,14 +958,19 @@ export const TaviVideoPlayer = forwardRef(({
     });
   };
 
-  const { qualities: displayQualities } = useMemo(() => {
-    return resolveQualitySources({
+  const effectiveQualityAvailability = useMemo(() => {
+    if (qualityAvailabilityProp) return qualityAvailabilityProp;
+    return resolveQualityAvailability({
+      qualitiesConfig: qualities,
       hlsQualities,
-      qualities,
       config,
-      manifestQualities: effectiveManifestQualities
+      manifestQualities: effectiveManifestQualities,
+      videoKey: id || src || 'default'
     });
-  }, [hlsQualities, qualities, config, effectiveManifestQualities]);
+  }, [qualityAvailabilityProp, qualities, hlsQualities, config, effectiveManifestQualities, id, src]);
+
+  const displayQualities = effectiveQualityAvailability.resolvedQualities || effectiveQualityAvailability.qualities || [];
+  const isQualityEnabled = effectiveQualityAvailability.enabled && displayQualities.length > 0;
 
   // Synchronize selected quality when displayQualities becomes available
   useEffect(() => {
@@ -1251,14 +1261,29 @@ export const TaviVideoPlayer = forwardRef(({
   const speedMax = useMemo(() => Math.max(3, ...speedPresets), [speedPresets]);
 
   // Audio Dubbing Track resolution & sync
+  const effectiveAudioAvailability = useMemo(() => {
+    if (audioAvailability) return audioAvailability;
+    return resolveAudioAvailability({
+      audioLanguagesConfig: audioLanguages,
+      manifestAudio: manifestAudioLanguagesProp,
+      developerAudio: audioDubs,
+      sourceLanguage: effectiveSourceLang,
+      videoKey: id || src || 'default'
+    });
+  }, [audioAvailability, audioLanguages, manifestAudioLanguagesProp, audioDubs, effectiveSourceLang, id, src]);
+
   const isAudioEnabled = audioLanguages !== false &&
-    (audioAvailability
-      ? (audioAvailability.enabled && audioAvailability.hasAvailableAudio)
-      : (Object.keys(resolvedAudioTracks).length > 0 || Object.keys(audioDubs).length > 0));
+    effectiveAudioAvailability.enabled === true &&
+    effectiveAudioAvailability.hasAvailableAudio === true &&
+    Array.isArray(effectiveAudioAvailability.visibleLanguages) &&
+    effectiveAudioAvailability.visibleLanguages.length > 0;
 
   const activeAudioTrackMap = useMemo(() => {
+    if (effectiveAudioAvailability && effectiveAudioAvailability.resolvedTracks && Object.keys(effectiveAudioAvailability.resolvedTracks).length > 0) {
+      return effectiveAudioAvailability.resolvedTracks;
+    }
     return Object.keys(resolvedAudioTracks).length > 0 ? resolvedAudioTracks : audioDubs;
-  }, [resolvedAudioTracks, audioDubs]);
+  }, [effectiveAudioAvailability, resolvedAudioTracks, audioDubs]);
 
   const activeAudioTrack = (selectedAudioLanguage !== 'original' && selectedAudioLanguage !== effectiveSourceLang && isAudioEnabled)
     ? activeAudioTrackMap[selectedAudioLanguage]
@@ -2537,7 +2562,7 @@ export const TaviVideoPlayer = forwardRef(({
                   </span>
                 </div>
               )}
-              {displayQualities.length > 0 && (
+              {isQualityEnabled && (
                 <div className="settings-item" onClick={() => setActiveMenu('quality')}>
                   <span>Quality</span>
                   <span className="value-label">{selectedQuality} ›</span>

@@ -1,11 +1,12 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { getFFmpegBinaryPath } from '../audio/extractAudio.js';
 import { computeMediaFingerprint } from '../cache/manifest.js';
 
 export const getFFprobeBinaryPath = () => {
-  if (process.env.FFPROBE_PATH && fs.existsSync(process.env.FFPROBE_PATH)) {
+  if (process.env.FFPROBE_PATH) {
     return process.env.FFPROBE_PATH;
   }
 
@@ -26,6 +27,15 @@ export const getFFprobeBinaryPath = () => {
   if (fs.existsSync(localBin)) {
     return localBin;
   }
+
+  // 3. Package bin fallback using cross-platform fileURLToPath
+  try {
+    const currentFilePath = fileURLToPath(import.meta.url);
+    const pkgBin = path.resolve(path.dirname(currentFilePath), '../../../bin', exeName);
+    if (fs.existsSync(pkgBin)) {
+      return pkgBin;
+    }
+  } catch (_) {}
 
   return 'ffprobe';
 };
@@ -78,13 +88,19 @@ export const probeMedia = async (filePath, options = {}) => {
         filePath
       ];
 
-      const proc = spawn(ffprobePath, args);
+      let proc;
+      try {
+        proc = spawn(ffprobePath, args);
+      } catch (err) {
+        reject(new Error(`MediaProbe Error: Failed to spawn FFprobe binary at '${ffprobePath}': ${err.message}`));
+        return;
+      }
       let stdout = '';
       let stderr = '';
       proc.stdout.on('data', chunk => { stdout += chunk.toString(); });
       proc.stderr.on('data', chunk => { stderr += chunk.toString(); });
 
-      proc.on('error', err => reject(err));
+      proc.on('error', err => reject(new Error(`MediaProbe Error: FFprobe process error at '${ffprobePath}': ${err.message}`)));
       proc.on('close', code => {
         if (code === 0 && stdout.trim()) {
           try {
@@ -216,9 +232,16 @@ export const probeMedia = async (filePath, options = {}) => {
   // Fallback parsing via ffmpeg -i
   const ffmpegPath = getFFmpegBinaryPath();
   return new Promise((resolve, reject) => {
-    const proc = spawn(ffmpegPath, ['-i', filePath]);
+    let proc;
+    try {
+      proc = spawn(ffmpegPath, ['-i', filePath]);
+    } catch (err) {
+      reject(new Error(`MediaProbe Error: Failed to spawn FFmpeg binary at '${ffmpegPath}': ${err.message}`));
+      return;
+    }
     let stderr = '';
     proc.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    proc.on('error', err => reject(new Error(`MediaProbe Error: FFmpeg process error at '${ffmpegPath}': ${err.message}`)));
     proc.on('close', () => {
       // 1. Check if media contains a valid video stream
       const hasVideoStream = /Stream #0:\d+.*?: Video:/i.test(stderr);

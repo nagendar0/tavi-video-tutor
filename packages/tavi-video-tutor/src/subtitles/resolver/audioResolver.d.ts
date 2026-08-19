@@ -7,15 +7,24 @@ export interface AudioTrack {
 
 export interface AudioAvailability {
   enabled: boolean;
+  hasAvailableItems: boolean;
   hasAvailableAudio: boolean;
+  requestedItems?: string[] | null | 'all' | false;
+  requestedLanguages?: string[] | null | 'all' | false;
+  availableItems: string[];
+  availableLanguages: string[];
+  visibleItems: string[];
+  visibleLanguages: string[];
+  resolvedItems: Record<string, AudioTrack>;
+  resolvedTracks: Record<string, AudioTrack>;
+  sourceByItem: Record<string, string>;
+  sourceByLanguage: Record<string, string>;
   sourceLanguage: string;
   originalTrack: AudioTrack | null;
   translatedTracks: Record<string, AudioTrack>;
-  availableLanguages: string[];
-  visibleLanguages: string[];
-  resolvedTracks: Record<string, AudioTrack>;
-  sourceByLanguage: Record<string, string>;
   selectedLanguage: string;
+  missingItems?: string[];
+  missingLanguages?: string[];
   reason: string;
 }
 
@@ -39,9 +48,11 @@ export interface ResolveAudioAvailabilityOptions {
   demoAudio?: Record<string, any>;
   sourceLanguage?: string | null;
   selectedLanguage?: string;
+  videoKey?: string;
 }
 
 export function resolveAudioAvailability(options?: ResolveAudioAvailabilityOptions): AudioAvailability;
+export function emitAudioDXWarning(missingList: string[], availableList?: string[], requestedList?: string[] | string, videoKey?: string): void;
+export function clearWarnedAudioCache(): void;
 
 export default resolveAudioAvailability;
-

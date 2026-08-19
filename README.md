@@ -40,6 +40,7 @@ npx aitutor
   - `import { AITutor } from "tavi-video-tutor";` (Main bundle)
   - `import { AITutor } from "tavi-video-tutor/player";` (Pure React Player - Zero CLI bloat)
   - `import { resolveSubtitleAvailability } from "tavi-video-tutor/subtitles";` (Resolver logic)
+  - `import { resolveAudioAvailability } from "tavi-video-tutor/audio";` (Audio Resolver logic)
   - `import "tavi-video-tutor/style.css";` (CSS styling)
 
 ### 🚀 Next.js & Server-Side Rendering (SSR) Integration
@@ -866,16 +867,54 @@ export default function App() {
 
 AITutor introduces a decoupled, clean multilingual audio architecture where build-time generation and runtime player visibility are separated.
 
+## 33. MULTILINGUAL AUDIO DUBBING (`audioLanguages`) — STEP-BY-STEP GUIDE
+
+AITutor introduces a decoupled, clean multilingual audio architecture where build-time generation and runtime player visibility are separated.
+
+---
+
+### Core Audio Availability Rules:
+1. **No Audio Tracks**: When neither generated audio nor developer audio tracks exist, the Audio Language UI is **automatically hidden**. No network requests are made, and native video audio plays normally.
+2. **Generated Audio**: When AI-dubbed audio tracks exist in `public/aitutor/manifest.json`, the Audio Language UI **automatically appears** with the original source audio marked as `(Original)` and set as default.
+3. **Developer Audio**: Developer-provided audio tracks (`audioDubs`) automatically populate the UI and **override generated AI audio** for the same language (`developer` > `generated` > `demo`).
+4. **Runtime Filter**: Passing `audioLanguages={["hi", "te"]}` acts as a runtime visibility filter only. It never triggers Whisper, translation, TTS, or file generation in the browser.
+5. **Disable Audio**: `audioLanguages={false}` explicitly disables the audio selector UI without affecting subtitles or video quality.
+6. **Smart DX Warning**: If `audioLanguages={["hi", "te"]}` requests languages that are not yet available, AITutor emits a single development console warning with the exact command to generate them (`npx aitutor generate --audio-languages all`) and hides the UI without crashing.
+
+---
+
 ### Step 1: Generate Audio Dubs at Build Time
-Configure the languages you want to generate in `aitutor.config.mjs` or pass them via CLI:
+Generate all supported languages dynamically or selectively via the CLI:
 ```bash
+# Generate all supported languages from dynamic registry
+npx aitutor generate --audio-languages all
+
+# Or generate specific selective languages
 npx aitutor generate --audio-languages en,hi,te
 ```
 This produces synchronized audio tracks in `public/aitutor/audio/<id>/<lang>.m4a` and records them in `public/aitutor/manifest.json`.
 
 ---
 
-### Step 2: Automatic Original Language Default (Zero Config)
+### Step 2: Audio Management Commands (`status` and `clear`)
+Inspect or clean generated audio tracks without affecting source video, subtitles, or quality renditions:
+```bash
+# Check status of generated & available audio tracks
+npx aitutor audio status
+
+# Clear ONLY Hindi generated audio
+npx aitutor audio clear hi
+
+# Clear multiple specific languages
+npx aitutor audio clear hi,te
+
+# Clear ALL generated audio tracks across all videos
+npx aitutor audio clear
+```
+
+---
+
+### Step 3: Automatic Original Language Default (Zero Config)
 When the player mounts, it inspects `sourceLanguage` in the manifest and **automatically defaults to the video's original language**:
 - If the original video is English (`sourceLanguage: "en"`), the player defaults to English.
 - If the original video is Hindi (`sourceLanguage: "hi"`), the player defaults to Hindi.
@@ -888,7 +927,7 @@ When the player mounts, it inspects `sourceLanguage` in the manifest and **autom
 
 ---
 
-### Step 3: Runtime Audio Filtering (`audioLanguages` Prop)
+### Step 4: Runtime Audio Filtering (`audioLanguages` Prop)
 The `audioLanguages` prop acts as a **runtime visibility filter** over generated tracks (just like the `subtitles` prop):
 ```jsx
 // Expose only Hindi and Telugu dubs to the student in the player menu
@@ -901,21 +940,21 @@ The `audioLanguages` prop acts as a **runtime visibility filter** over generated
 
 ---
 
-### Step 4: Custom Developer Audio Tracks
-You can also provide custom audio dub tracks directly via React props:
+### Step 5: Custom Developer Audio Tracks (`audioDubs`)
+You can provide custom audio dub tracks directly via React props. Developer audio has highest priority and overrides generated tracks:
 ```jsx
 <AITutor
   src="/lesson.mp4"
-  audioLanguages={{
-    en: "/custom-audio/lesson_en.mp3",
-    hi: { label: "Hindi Audio", src: "/custom-audio/lesson_hi.mp3", language: "hi" }
+  audioDubs={{
+    hi: "/custom-audio/lesson_hi.mp3",
+    te: { label: "Telugu Dub", src: "/custom-audio/lesson_te.mp3", language: "te" }
   }}
 />
 ```
 
 ---
 
-### Step 5: Disabling Audio Dubbing Completely
+### Step 6: Disabling Audio Dubbing Completely
 If you want to hide the Audio Language menu and play only the original video audio:
 ```jsx
 <AITutor src="/lesson.mp4" audioLanguages={false} />
@@ -923,7 +962,7 @@ If you want to hide the Audio Language menu and play only the original video aud
 
 ---
 
-### Step 6: Handling Audio Language Change Events
+### Step 7: Handling Audio Language Change Events
 Listen to user audio language switches via `onAudioLanguageChange`:
 ```jsx
 <AITutor
@@ -935,6 +974,20 @@ Listen to user audio language switches via `onAudioLanguageChange`:
   }}
 />
 ```
+
+---
+
+### Step 8: Subpath Import & Utility Functions
+Import audio resolution utilities directly via subpath:
+```javascript
+import { resolveAudioAvailability, emitAudioDXWarning } from 'tavi-video-tutor/audio';
+```
+
+---
+
+### Audio Architecture Guarantees:
+- **Audio + Subtitle Independence**: Switching subtitle languages does not change the spoken audio track, and changing audio language does not modify subtitle display.
+- **Audio + Video Quality Independence**: Changing video resolution quality preserves active spoken audio dubbing track and playback synchronization seamlessly.
 
 ---
 

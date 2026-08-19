@@ -53,7 +53,16 @@ export const transcodeRendition = async ({
   args.push(tempOutputPath);
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(ffmpegPath, args);
+    let proc;
+    try {
+      proc = spawn(ffmpegPath, args);
+    } catch (err) {
+      if (fs.existsSync(tempOutputPath)) {
+        try { fs.unlinkSync(tempOutputPath); } catch (_) {}
+      }
+      reject(new Error(`Failed to start FFmpeg process: ${err.message}`));
+      return;
+    }
     let stderrData = '';
 
     proc.stderr.on('data', chunk => {

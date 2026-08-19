@@ -4,8 +4,11 @@ import { processAllVideos } from '../subtitles/pipeline/processVideos.js';
 import { loadConfig } from '../subtitles/config/loadConfig.js';
 import { ManifestStore, computeFingerprint, normalizeSubtitlePath } from '../subtitles/cache/manifest.js';
 import { TranscriptCache } from '../subtitles/transcript/transcriptCache.js';
+import { runPreflight, formatPreflightTable, formatDoctorReport } from '../subtitles/env/preflight.js';
+import { remediateMissing } from '../subtitles/env/remediator.js';
+import { AITUTOR_LANGUAGES } from '../subtitles/languages/registry.js';
 
-export { computeFingerprint as computeHash, loadConfig };
+export { computeFingerprint as computeHash, loadConfig, runPreflight, formatPreflightTable, formatDoctorReport };
 
 export const runInit = async (options = {}, cwd = process.cwd()) => {
   console.log(`\nAITutor — Initializing Starter Configuration\n─────────────────────────────\n`);
@@ -227,6 +230,252 @@ export const runClean = async (options = {}, cwd = process.cwd()) => {
   return { cleaned: true, all: true };
 };
 
+export const runAudioClear = async (options = {}, cwd = process.cwd()) => {
+  const targetVideoId = options.video || options.v;
+  const rawLangs = options.languages || options.lang || options.l;
+
+  let targetLanguages = null;
+  if (rawLangs) {
+    if (typeof rawLangs === 'string') {
+      targetLanguages = rawLangs.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    } else if (Array.isArray(rawLangs)) {
+      targetLanguages = rawLangs.map(s => String(s).trim().toLowerCase()).filter(Boolean);
+    }
+  }
+
+  const internalDir = path.join(cwd, '.aitutor');
+  const publicDir = path.join(cwd, 'public', 'aitutor');
+  const internalManifestPath = path.join(internalDir, 'manifest.json');
+  const publicManifestPath = path.join(publicDir, 'manifest.json');
+
+  let removedCount = 0;
+  const cleanedLanguages = new Set();
+
+  let manifest = {};
+  if (fs.existsSync(internalManifestPath)) {
+    try {
+      manifest = JSON.parse(fs.readFileSync(internalManifestPath, 'utf8'));
+    } catch (_) {}
+  }
+
+  console.log(`\nAITutor Audio — Clearing Generated Audio Tracks\n─────────────────────────────\n`);
+
+  const videoIdsToProcess = targetVideoId
+    ? (manifest[targetVideoId] ? [targetVideoId] : [targetVideoId])
+    : Object.keys(manifest);
+
+  if (targetLanguages && targetLanguages.length > 0) {
+    // Selective language audio clear
+    for (const vid of videoIdsToProcess) {
+      const entry = manifest[vid];
+      if (entry && entry.audioLanguages && typeof entry.audioLanguages === 'object') {
+        for (const lang of targetLanguages) {
+          if (entry.audioLanguages[lang]) {
+            const audioInfo = entry.audioLanguages[lang];
+            const audioSrc = typeof audioInfo === 'string' ? audioInfo : (audioInfo && audioInfo.src);
+            if (audioSrc) {
+              try {
+                const fullAudioPath = normalizeSubtitlePath(audioSrc, publicDir);
+                if (fs.existsSync(fullAudioPath)) {
+                  fs.unlinkSync(fullAudioPath);
+                  removedCount++;
+                }
+              } catch (_) {}
+            }
+
+            // Also check internal audio dir
+            const internalAudioFile = path.join(internalDir, 'audio', vid, `${lang}.m4a`);
+            if (fs.existsSync(internalAudioFile)) {
+              try {
+                fs.unlinkSync(internalAudioFile);
+                removedCount++;
+              } catch (_) {}
+            }
+
+            delete entry.audioLanguages[lang];
+            cleanedLanguages.add(lang);
+          }
+        }
+      }
+
+      // Check public/internal video audio dirs directly for target languages
+      for (const lang of targetLanguages) {
+        const pubFile = path.join(publicDir, 'audio', vid, `${lang}.m4a`);
+        if (fs.existsSync(pubFile)) {
+          try {
+            fs.unlinkSync(pubFile);
+            removedCount++;
+          } catch (_) {}
+        }
+        const intFile = path.join(internalDir, 'audio', vid, `${lang}.m4a`);
+        if (fs.existsSync(intFile)) {
+          try {
+            fs.unlinkSync(intFile);
+            removedCount++;
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (fs.existsSync(internalManifestPath)) {
+      fs.writeFileSync(internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+      if (fs.existsSync(publicDir)) {
+        fs.writeFileSync(publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+      }
+    }
+
+    const langsDisplay = Array.from(cleanedLanguages).length > 0 ? Array.from(cleanedLanguages).join(', ') : targetLanguages.join(', ');
+    console.log(`✓ Cleared audio languages [${langsDisplay}] (${removedCount} files removed)`);
+    console.log(`✓ Preserved original source video, WebVTT subtitles, and video quality renditions.\n`);
+    return { cleaned: true, languages: targetLanguages, removedCount };
+  }
+
+  // Clear all audio for specific video or all videos
+  if (targetVideoId) {
+    if (manifest[targetVideoId]) {
+      const entry = manifest[targetVideoId];
+      if (entry.audioLanguages && typeof entry.audioLanguages === 'object') {
+        Object.values(entry.audioLanguages).forEach(audioInfo => {
+          const audioSrc = typeof audioInfo === 'string' ? audioInfo : (audioInfo && audioInfo.src);
+          if (audioSrc) {
+            try {
+              const fullAudioPath = normalizeSubtitlePath(audioSrc, publicDir);
+              if (fs.existsSync(fullAudioPath)) {
+                fs.unlinkSync(fullAudioPath);
+                removedCount++;
+              }
+            } catch (_) {}
+          }
+        });
+        entry.audioLanguages = {};
+      }
+    }
+
+    const publicVideoAudioDir = path.join(publicDir, 'audio', targetVideoId);
+    if (fs.existsSync(publicVideoAudioDir)) {
+      fs.rmSync(publicVideoAudioDir, { recursive: true, force: true });
+      removedCount++;
+    }
+
+    const internalVideoAudioDir = path.join(internalDir, 'audio', targetVideoId);
+    if (fs.existsSync(internalVideoAudioDir)) {
+      fs.rmSync(internalVideoAudioDir, { recursive: true, force: true });
+      removedCount++;
+    }
+
+    if (fs.existsSync(internalManifestPath)) {
+      fs.writeFileSync(internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+      if (fs.existsSync(publicDir)) {
+        fs.writeFileSync(publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+      }
+    }
+
+    console.log(`✓ Cleared all generated audio for video "${targetVideoId}" (${removedCount} items removed)`);
+    console.log(`✓ Preserved original source video, WebVTT subtitles, and video quality renditions.\n`);
+    return { cleaned: true, videoId: targetVideoId, allAudio: true, removedCount };
+  }
+
+  // Clear all audio across all videos
+  for (const vid of Object.keys(manifest)) {
+    if (manifest[vid] && manifest[vid].audioLanguages) {
+      manifest[vid].audioLanguages = {};
+    }
+  }
+
+  const publicAudioDir = path.join(publicDir, 'audio');
+  if (fs.existsSync(publicAudioDir)) {
+    fs.rmSync(publicAudioDir, { recursive: true, force: true });
+    removedCount++;
+  }
+
+  const internalAudioDir = path.join(internalDir, 'audio');
+  if (fs.existsSync(internalAudioDir)) {
+    fs.rmSync(internalAudioDir, { recursive: true, force: true });
+    removedCount++;
+  }
+
+  if (fs.existsSync(internalManifestPath)) {
+    fs.writeFileSync(internalManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    if (fs.existsSync(publicDir)) {
+      fs.writeFileSync(publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    }
+  }
+
+  console.log(`✓ All generated AITutor audio tracks and audio manifests cleared successfully.`);
+  console.log(`✓ Preserved original source video, WebVTT subtitles, and video quality renditions.\n`);
+  return { cleaned: true, allAudio: true, removedCount };
+};
+
+export const runAudioStatus = async (options = {}, cwd = process.cwd()) => {
+  console.log(`\nAITutor Audio Status\n─────────────────────────────\n`);
+  const manifestStore = new ManifestStore(cwd);
+  const manifest = manifestStore.loadManifest();
+
+  let config = { videos: [] };
+  try {
+    config = await loadConfig(cwd);
+  } catch (err) {
+    if (err.code === 'CONFIG_NOT_FOUND') {
+      console.log(`ℹ No configuration file found in ${cwd}.\nRun "npx aitutor init" to create aitutor.config.mjs.\n`);
+    } else {
+      console.error(`❌ Configuration Error:\n${err.message}\n`);
+      process.exitCode = 1;
+      return { videosCount: 0, error: err };
+    }
+  }
+
+  const targetVideoId = options.video || options.v;
+  let videos = config.videos.length > 0 ? config.videos : Object.values(manifest);
+  if (targetVideoId) {
+    videos = videos.filter(v => v.id === targetVideoId);
+  }
+
+  if (videos.length === 0) {
+    console.log(`No videos configured or processed yet.\n`);
+    return { videosCount: 0, totalGeneratedTracks: 0 };
+  }
+
+  let totalGeneratedTracks = 0;
+
+  for (const v of videos) {
+    const entry = manifest[v.id] || {};
+    const audioMap = entry.audioLanguages || {};
+    const sourceLang = entry.sourceLanguage || v.sourceLanguage || 'en';
+    const audioKeys = Object.keys(audioMap);
+    totalGeneratedTracks += audioKeys.length;
+
+    console.log(`${v.id}`);
+    console.log(`Video:               ${v.src ? '✓' : '⚠ Missing src'}`);
+    console.log(`Source Language:     ${sourceLang} (Original)`);
+    console.log(`Generated Tracks:    ${audioKeys.length} track(s)`);
+
+    if (audioKeys.length > 0) {
+      console.log(`\nAudio Languages:`);
+      for (const lang of audioKeys) {
+        const info = audioMap[lang];
+        const isSource = info.source ? ' (Source)' : '';
+        const isCached = manifestStore.isAudioLanguageCached(v.id, lang);
+        console.log(`  ${lang.padEnd(8)} ${(info.label || lang)}${isSource.padEnd(10)} [${isCached ? 'Cached' : 'Active'}] -> ${info.src}`);
+      }
+    } else {
+      console.log(`\nAudio Languages:     None generated yet`);
+    }
+
+    const configuredLangs = v.audioLanguages || config.globalAudioLanguages || [];
+    if (Array.isArray(configuredLangs) && configuredLangs.length > 0) {
+      const missing = configuredLangs.filter(l => !audioMap[l]);
+      if (missing.length > 0) {
+        console.log(`Missing Configured:  ${missing.join(', ')}`);
+      }
+    }
+
+    console.log(`\nRegistry Capacity:   ${AITUTOR_LANGUAGES.length} supported languages available for dubbing`);
+    console.log(`Last updated:        ${entry?.updatedAt || 'Not generated yet'}\n─────────────────────────────\n`);
+  }
+
+  return { videosCount: videos.length, totalGeneratedTracks };
+};
+
 export const runStatus = async (options = {}, cwd = process.cwd()) => {
   console.log(`\nAITutor Subtitle Status\n─────────────────────────────\n`);
   const manifestStore = new ManifestStore(cwd);
@@ -325,7 +574,104 @@ export const runValidate = async (options = {}, cwd = process.cwd()) => {
   return { valid, issuesCount };
 };
 
+export const runDoctor = async (options = {}, cwd = process.cwd()) => {
+  let config = {};
+  try {
+    config = await loadConfig(cwd);
+  } catch (_) {}
+
+  const preflightRes = await runPreflight({ ...options, config }, cwd);
+  const report = formatDoctorReport(preflightRes);
+  console.log(`\n${report}`);
+
+  if (!preflightRes.passed) {
+    console.log(`Issues detected:`);
+    preflightRes.missing.forEach((item, idx) => {
+      console.log(`\n${idx + 1}. Missing: ${item.name}`);
+      console.log(`   Reason:   ${item.reason}`);
+      console.log(`   Action:   ${item.manualInstructions}`);
+    });
+    console.log(`\nRun "npx aitutor setup" to automatically configure missing dependencies.\n`);
+    return { ready: false, preflight: preflightRes };
+  }
+
+  return { ready: true, preflight: preflightRes };
+};
+
+export const runSetup = async (options = {}, cwd = process.cwd()) => {
+  console.log(`\nAITutor Environment Setup Wizard\n────────────────────────────────\n`);
+  let config = {};
+  try {
+    config = await loadConfig(cwd);
+  } catch (_) {}
+
+  const initialPreflight = await runPreflight({ ...options, config }, cwd);
+  console.log(formatPreflightTable(initialPreflight));
+
+  if (initialPreflight.passed) {
+    console.log(`✓ All required AITutor dependencies and models are installed and ready.\n`);
+    return { ready: true, preflight: initialPreflight };
+  }
+
+  const remediated = await remediateMissing(initialPreflight, options, cwd);
+  console.log(`\n${formatDoctorReport(remediated.preflightResult)}`);
+
+  if (!remediated.success) {
+    console.log(`⚠ Some requirements could not be automatically installed.`);
+    remediated.remainingMissing.forEach(item => {
+      console.log(`  - ${item.name}: ${item.manualInstructions}`);
+    });
+    console.log('');
+    return { ready: false, preflight: remediated.preflightResult };
+  }
+
+  console.log(`✓ Setup complete! You can now run "npx aitutor generate".\n`);
+  return { ready: true, preflight: remediated.preflightResult };
+};
+
 export const runGenerate = async (options = {}, cwd = process.cwd()) => {
+  let loadedConfig = { videos: [] };
+  try {
+    loadedConfig = await loadConfig(cwd);
+  } catch (err) {
+    if (err.code === 'CONFIG_NOT_FOUND') {
+      console.log(`ℹ No configuration file found in ${cwd}.\nRun "npx aitutor init" to create aitutor.config.mjs.\n`);
+      return { failed: 1, error: err };
+    }
+    throw err;
+  }
+
+  // 1. Run Preflight First
+  let preflightRes = await runPreflight({ ...options, config: loadedConfig }, cwd);
+  console.log(formatPreflightTable(preflightRes));
+
+  if (!preflightRes.passed) {
+    // Attempt remediation / user prompt
+    const remediationRes = await remediateMissing(preflightRes, options, cwd);
+    preflightRes = remediationRes.preflightResult;
+
+    if (!preflightRes.passed) {
+      console.error(`\nAITutor generation cannot continue.\n`);
+      preflightRes.missing.forEach(item => {
+        console.error(`Missing:`);
+        console.error(`${item.name}\n`);
+        console.error(`Reason:`);
+        console.error(`${item.reason}\n`);
+        console.error(`Next step:`);
+        console.error(`${item.manualInstructions}\n`);
+      });
+      return {
+        failed: 1,
+        preflightBlocked: true,
+        missing: preflightRes.missing
+      };
+    }
+
+    // Print preflight table again if remediated
+    console.log(formatPreflightTable(preflightRes));
+  }
+
+  // 2. Start generation only when preflight has passed
   return processAllVideos(options, cwd);
 };
 
@@ -333,6 +679,8 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
   const force = args.includes('--force');
   const keepTemp = args.includes('--keep-temp') || args.includes('--keepTemp');
   const noQuality = args.includes('--no-quality') || args.includes('--noQuality');
+  const yes = args.includes('--yes') || args.includes('-y');
+  const nonInteractive = args.includes('--non-interactive') || args.includes('--ci');
 
   let videoVal = null;
   const videoIdx = args.indexOf('--video');
@@ -368,13 +716,46 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
     await runInit({ force }, cwd);
   } else if (command === 'clean') {
     await runClean({ video: videoVal }, cwd);
+  } else if (command === 'audio') {
+    const sub = args[1];
+    if (sub === 'clear') {
+      const targetLangs = args[2] && !args[2].startsWith('-') ? args[2] : undefined;
+      await runAudioClear({ video: videoVal, languages: targetLangs }, cwd);
+    } else if (sub === 'status') {
+      await runAudioStatus({ video: videoVal }, cwd);
+    } else {
+      console.log(`Usage: aitutor audio [clear|status] [languages] [--video <id>]`);
+    }
+  } else if (command === 'audio:clear' || command === 'audio-clear') {
+    const targetLangs = args[1] && !args[1].startsWith('-') ? args[1] : undefined;
+    await runAudioClear({ video: videoVal, languages: targetLangs }, cwd);
+  } else if (command === 'audio:status' || command === 'audio-status') {
+    await runAudioStatus({ video: videoVal }, cwd);
   } else if (command === 'status') {
     await runStatus({}, cwd);
   } else if (command === 'validate') {
     await runValidate({}, cwd);
+  } else if (command === 'doctor') {
+    const docRes = await runDoctor({ yes, nonInteractive }, cwd);
+    if (!docRes.ready) {
+      process.exitCode = 1;
+    }
+  } else if (command === 'setup') {
+    const setupRes = await runSetup({ yes, nonInteractive }, cwd);
+    if (!setupRes.ready) {
+      process.exitCode = 1;
+    }
   } else if (command === 'generate' || command === 'build') {
     try {
-      const result = await runGenerate({ force, keepTemp, noQuality, quality: !noQuality, audioLanguages: audioLanguagesVal }, cwd);
+      const result = await runGenerate({
+        force,
+        keepTemp,
+        noQuality,
+        quality: !noQuality,
+        audioLanguages: audioLanguagesVal,
+        yes,
+        nonInteractive
+      }, cwd);
       if (result && result.failed > 0) {
         process.exitCode = 1;
       }
@@ -383,6 +764,6 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
       process.exitCode = 1;
     }
   } else {
-    console.log(`Usage: aitutor [init|generate|status|validate|clean] [--video <id>] [--audio-languages en,hi,te] [--force] [--no-quality] [--keep-temp]`);
+    console.log(`Usage: aitutor [init|generate|doctor|setup|status|audio|validate|clean] [--video <id>] [--audio-languages en,hi,te|all] [--force] [--no-quality] [--keep-temp] [--yes]`);
   }
 };

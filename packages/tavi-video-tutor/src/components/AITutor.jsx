@@ -3,6 +3,7 @@ import TaviVideoPlayer from './TaviVideoPlayer.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
 import { resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
 import { resolveAudioAvailability } from '../subtitles/resolver/audioResolver.js';
+import { resolveQualityAvailability } from '../subtitles/resolver/qualityResolver.js';
 import '../styles/ai-tutor.css';
 
 export const AITutor = forwardRef(({
@@ -109,9 +110,10 @@ export const AITutor = forwardRef(({
   const availabilityResult = useMemo(() => {
     return resolveSubtitleAvailability({
       subtitlesConfig: subtitles,
-      generatedSubtitles: manifestSubtitles
+      generatedSubtitles: manifestSubtitles,
+      videoKey: id || src || 'default'
     });
-  }, [subtitles, manifestSubtitles]);
+  }, [subtitles, manifestSubtitles, id, src]);
 
   const effectiveSourceLanguage = sourceLanguage || manifestSourceLanguage || null;
 
@@ -120,9 +122,19 @@ export const AITutor = forwardRef(({
       audioLanguagesConfig: audioLanguages,
       manifestAudio: manifestAudioLanguages,
       developerAudio: audioDubs,
-      sourceLanguage: effectiveSourceLanguage
+      sourceLanguage: effectiveSourceLanguage,
+      videoKey: id || src || 'default'
     });
-  }, [audioLanguages, manifestAudioLanguages, audioDubs, effectiveSourceLanguage]);
+  }, [audioLanguages, manifestAudioLanguages, audioDubs, effectiveSourceLanguage, id, src]);
+
+  const qualityAvailabilityResult = useMemo(() => {
+    return resolveQualityAvailability({
+      qualitiesConfig: qualities,
+      manifestQualities,
+      config,
+      videoKey: id || src || 'default'
+    });
+  }, [qualities, manifestQualities, config, id, src]);
 
   return (
     <div 
@@ -152,7 +164,9 @@ export const AITutor = forwardRef(({
         sourceLanguage={sourceLanguage}
         resolvedSubtitles={availabilityResult.resolvedTracks}
         resolvedAudioTracks={audioAvailabilityResult.resolvedTracks}
+        subtitleAvailability={availabilityResult}
         audioAvailability={audioAvailabilityResult}
+        qualityAvailability={qualityAvailabilityResult}
         tracks={tracks}
         config={config}
         audioDubs={audioDubs}

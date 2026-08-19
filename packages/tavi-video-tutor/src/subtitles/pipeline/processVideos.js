@@ -23,6 +23,10 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
   let transcriptCacheHits = 0;
   let totalSubtitlesGenerated = 0;
   let totalSubtitlesCached = 0;
+  let totalAudioGenerated = 0;
+  let totalAudioCached = 0;
+  let totalAudioUnavailable = 0;
+  let hasAudioRequested = false;
   let totalQualitiesGenerated = 0;
   let totalQualitiesCached = 0;
   let totalFailed = 0;
@@ -74,6 +78,15 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
 
       totalSubtitlesGenerated += (res.generatedCount || 0);
       totalSubtitlesCached += (res.cachedCount || 0);
+
+      if (res.audioStats) {
+        if (res.audioStats.requested && res.audioStats.requested.length > 0) {
+          hasAudioRequested = true;
+        }
+        totalAudioGenerated += (res.audioStats.generated?.length || 0);
+        totalAudioCached += (res.audioStats.cached?.length || 0);
+        totalAudioUnavailable += (res.audioStats.unavailable?.length || 0);
+      }
     } catch (err) {
       console.error(`\n❌ Subtitle pipeline failed for ${video.id}: ${err.message}\n`);
       totalFailed++;
@@ -104,6 +117,15 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
 
   const durationSec = Math.round((Date.now() - startTime) / 1000);
 
+  if (hasAudioRequested) {
+    console.log(`\nAITutor Audio Generation`);
+    console.log(`─────────────────────────`);
+    console.log(`Language Registry:        ${AITUTOR_LANGUAGES.length}`);
+    console.log(`Audio tracks generated:   ${totalAudioGenerated}`);
+    console.log(`Audio tracks cached:      ${totalAudioCached}`);
+    console.log(`Audio tracks unavailable: ${totalAudioUnavailable}\n`);
+  }
+
   console.log(`─────────────────────────────────────\n`);
   console.log(`AITutor processing complete\n`);
   console.log(`Videos:                 ${videos.length}`);
@@ -111,6 +133,10 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
   console.log(`Transcript cache hits:    ${transcriptCacheHits}`);
   console.log(`Subtitle files generated: ${totalSubtitlesGenerated}`);
   console.log(`Subtitle cache hits:      ${totalSubtitlesCached}`);
+  if (hasAudioRequested) {
+    console.log(`Audio files generated:    ${totalAudioGenerated}`);
+    console.log(`Audio cache hits:         ${totalAudioCached}`);
+  }
   console.log(`Quality renditions gen:   ${totalQualitiesGenerated}`);
   console.log(`Quality renditions cached:${totalQualitiesCached}`);
   console.log(`Failed videos:            ${totalFailed}`);
@@ -130,6 +156,9 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
     transcriptCacheHits,
     generatedSubtitles: totalSubtitlesGenerated,
     cachedSubtitles: totalSubtitlesCached,
+    generatedAudio: totalAudioGenerated,
+    cachedAudio: totalAudioCached,
+    unavailableAudio: totalAudioUnavailable,
     generatedQualities: totalQualitiesGenerated,
     cachedQualities: totalQualitiesCached,
     failed: totalFailed

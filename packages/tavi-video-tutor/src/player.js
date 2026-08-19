@@ -1,9 +1,9 @@
 import AITutor from './components/AITutor.jsx';
 import TaviVideoPlayer from './components/TaviVideoPlayer.jsx';
 import { SubtitleEditorModal } from './components/SubtitleEditorModal.jsx';
-import { resolveSubtitleSources, resolveSubtitleVisibility, resolveSubtitleAvailability } from './subtitles/resolver/subtitleResolver.js';
-import { resolveQualitySources } from './subtitles/resolver/qualityResolver.js';
-import { resolveAudioSources, resolveAudioAvailability } from './subtitles/resolver/audioResolver.js';
+import { resolveSubtitleSources, resolveSubtitleVisibility, resolveSubtitleAvailability, emitSubtitleDXWarning, clearWarnedSubtitleCache } from './subtitles/resolver/subtitleResolver.js';
+import { resolveQualitySources, resolveQualityAvailability, emitQualityDXWarning, clearWarnedQualityCache } from './subtitles/resolver/qualityResolver.js';
+import { resolveAudioSources, resolveAudioAvailability, emitAudioDXWarning, clearWarnedAudioCache } from './subtitles/resolver/audioResolver.js';
 
 export {
   AITutor,
@@ -12,9 +12,16 @@ export {
   resolveSubtitleSources,
   resolveSubtitleVisibility,
   resolveSubtitleAvailability,
+  emitSubtitleDXWarning,
+  clearWarnedSubtitleCache,
   resolveQualitySources,
+  resolveQualityAvailability,
+  emitQualityDXWarning,
+  clearWarnedQualityCache,
   resolveAudioSources,
-  resolveAudioAvailability
+  resolveAudioAvailability,
+  emitAudioDXWarning,
+  clearWarnedAudioCache
 };
 
 export default AITutor;

@@ -1,15 +1,20 @@
 import { checkFFmpegAvailable } from '../audio/extractAudio.js';
 import { AITUTOR_LANGUAGES } from '../languages/registry.js';
+import { runPreflight, formatPreflightTable, formatDoctorReport } from './preflight.js';
 
-export const checkEnvironment = async () => {
-  const isFFmpegOk = await checkFFmpegAvailable();
+export { runPreflight, formatPreflightTable, formatDoctorReport };
+
+export const checkEnvironment = async (options = {}, cwd = process.cwd()) => {
+  const preflightRes = await runPreflight(options, cwd);
+  const isFFmpegOk = preflightRes.checks.ffmpeg?.pass === true;
   
   const envStatus = {
     nodeVersion: process.version,
     ffmpegInstalled: isFFmpegOk,
     languageRegistryCount: AITUTOR_LANGUAGES.length,
-    transcriptionProviderReady: true,
-    translationRouterReady: true
+    transcriptionProviderReady: preflightRes.checks.whisperProvider?.pass === true,
+    translationRouterReady: preflightRes.checks.translation?.pass === true,
+    preflight: preflightRes
   };
 
   return envStatus;

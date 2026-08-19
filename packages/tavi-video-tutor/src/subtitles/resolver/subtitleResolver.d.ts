@@ -14,12 +14,22 @@ export function resolveSubtitleSources(options?: ResolveSubtitleSourcesOptions):
 
 export interface SubtitleAvailability {
   enabled: boolean;
+  hasAvailableItems: boolean;
   hasAvailableSubtitles: boolean;
+  mode: string;
+  requestedItems: string[] | null | 'all' | false;
+  requestedLanguages: string[] | null | 'all' | false;
+  availableItems: string[];
   availableLanguages: string[];
+  visibleItems: string[];
   visibleLanguages: string[];
+  resolvedItems: Record<string, string>;
   resolvedTracks: Record<string, string>;
+  sourceByItem: Record<string, string>;
   sourceByLanguage: Record<string, string>;
-  selectedLanguage: string;
+  missingItems?: string[];
+  missingLanguages?: string[];
+  primarySource: string | null;
   reason: string;
 }
 
@@ -29,11 +39,14 @@ export interface ResolveSubtitleAvailabilityOptions {
   developerSubtitles?: Record<string, string>;
   uploadedSubtitles?: Record<string, string>;
   demoSubtitles?: Record<string, string>;
+  embeddedTracks?: any[];
   selectedLanguage?: string;
+  videoKey?: string;
 }
 
 export function resolveSubtitleAvailability(options?: ResolveSubtitleAvailabilityOptions): SubtitleAvailability;
-
 export function resolveSubtitleVisibility(options?: any): any;
+export function emitSubtitleDXWarning(missingList: string[], availableList?: string[], requestedList?: string[] | string, videoKey?: string): void;
+export function clearWarnedSubtitleCache(): void;
 
 export default resolveSubtitleAvailability;

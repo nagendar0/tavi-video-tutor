@@ -14,6 +14,8 @@ examples/react-demo/public/aitutor/
 # Heavy binaries & media assets
 bin/*.exe
 bin/*.dll
+**/bin/*.exe
+**/bin/*.dll
 *.mp4
 *.tgz
 

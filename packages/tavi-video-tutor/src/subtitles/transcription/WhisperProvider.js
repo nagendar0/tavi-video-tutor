@@ -1,6 +1,9 @@
 import fs from 'fs';
 import { getTransformers } from './transformersLoader.js';
 
+import path from 'path';
+import os from 'os';
+
 // Global in-memory cache for downloaded/loaded transformers pipelines
 const PIPELINE_MODEL_CACHE = new Map();
 
@@ -8,6 +11,58 @@ export const QUALITY_MODEL_MAP = {
   fast: 'Xenova/whisper-tiny',
   balanced: 'Xenova/whisper-base',
   accurate: 'Xenova/whisper-small'
+};
+
+export const WHISPER_MODEL_SIZES = {
+  'Xenova/whisper-tiny': '75 MB',
+  'Xenova/whisper-base': '145 MB',
+  'Xenova/whisper-small': '480 MB',
+  'Xenova/whisper-medium': '1.5 GB',
+  'Xenova/whisper-large-v3': '3.1 GB'
+};
+
+export const isWhisperModelCached = async (modelName = 'Xenova/whisper-base') => {
+  if (PIPELINE_MODEL_CACHE.has(modelName)) {
+    return { cached: true, inMemory: true, path: 'memory' };
+  }
+
+  try {
+    const { env } = await getTransformers();
+    const candidateDirs = [];
+
+    if (env?.cacheDir) {
+      candidateDirs.push(path.join(env.cacheDir, ...modelName.split('/')));
+      candidateDirs.push(path.join(env.cacheDir, modelName));
+    }
+    if (env?.localModelPath) {
+      candidateDirs.push(path.join(env.localModelPath, ...modelName.split('/')));
+      candidateDirs.push(path.join(env.localModelPath, modelName));
+    }
+
+    // Default node_modules / OS hub directories
+    const homeDir = os.homedir();
+    candidateDirs.push(path.join(homeDir, '.cache', 'huggingface', 'hub', `models--${modelName.replace('/', '--')}`));
+    candidateDirs.push(path.join(process.cwd(), '.cache', ...modelName.split('/')));
+    candidateDirs.push(path.join(process.cwd(), 'models', ...modelName.split('/')));
+
+    for (const dir of candidateDirs) {
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir);
+        if (files.includes('config.json') || files.includes('tokenizer.json') || files.includes('onnx') || files.length > 0) {
+          return { cached: true, inMemory: false, path: dir };
+        }
+      }
+    }
+  } catch (_) {
+    // If transformers cannot be loaded yet
+  }
+
+  return { cached: false, inMemory: false, path: null };
+};
+
+export const downloadWhisperModel = async (modelName = 'Xenova/whisper-base', options = {}) => {
+  const provider = new WhisperProvider({ model: modelName, ...options });
+  return await provider.getTranscriberPipeline(modelName);
 };
 
 export class TranscriptionProvider {

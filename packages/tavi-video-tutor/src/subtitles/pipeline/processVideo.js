@@ -212,6 +212,8 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
 
   // --- AUDIO DUBBING PIPELINE ---
   const generatedAudioMap = {};
+  const cachedAudioLangs = [];
+  const unavailableAudioLangs = [];
   let newAudioCount = 0;
 
   if (requestedAudioLanguages.length > 0) {
@@ -227,6 +229,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       const isAudioCached = manifestStore.isAudioLanguageCached(videoEntry.id, targetLang, currentFingerprint);
 
       if (isAudioCached && !options.force) {
+        cachedAudioLangs.push(targetLang);
         onProgress?.({ type: 'audio-cached', lang: targetLang, message: `✓ ${targetLang} audio (cached)` });
         return;
       }
@@ -276,7 +279,8 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
         }
       } catch (err) {
         // Isolation: A failure for one audio language must NOT destroy other languages
-        onProgress?.({ type: 'audio-failed', lang: targetLang, message: `⚠ ${targetLang} audio generation failed: ${err.message}` });
+        unavailableAudioLangs.push({ lang: targetLang, reason: err.message });
+        onProgress?.({ type: 'audio-failed', lang: targetLang, message: `⚠ ${targetLang} audio generation unavailable: ${err.message}` });
       }
     };
 
@@ -297,6 +301,12 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
     cachedCount: subCachedCount,
     generatedAudioCount: newAudioCount,
     sourceLanguage: sourceLang,
+    audioStats: {
+      requested: requestedAudioLanguages,
+      generated: Object.keys(generatedAudioMap),
+      cached: cachedAudioLangs,
+      unavailable: unavailableAudioLangs
+    },
     metrics: metrics.getSummaryReport(videoEntry.id)
   };
 };
