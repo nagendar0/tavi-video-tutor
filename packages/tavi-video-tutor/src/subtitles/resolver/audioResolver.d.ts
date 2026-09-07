@@ -51,8 +51,32 @@ export interface ResolveAudioAvailabilityOptions {
   videoKey?: string;
 }
 
+export interface ResolvedActiveAudioTrack {
+  mode: 'original' | 'dub';
+  language: string;
+  url: string | null;
+  normalizedUrl: string | null;
+  source: 'original' | 'generated' | 'developer';
+  trackId: string;
+  playable: boolean;
+  label: string;
+}
+
+export interface ResolveActiveAudioTrackOptions {
+  availability?: AudioAvailability;
+  selectedLanguage?: string;
+  sourceLanguage?: string | null;
+  developerAudio?: Record<string, any>;
+  manifestAudio?: Record<string, any>;
+  demoAudio?: Record<string, any>;
+  videoKey?: string;
+}
+
 export function resolveAudioAvailability(options?: ResolveAudioAvailabilityOptions): AudioAvailability;
+export function resolveActiveAudioTrack(options?: ResolveActiveAudioTrackOptions): ResolvedActiveAudioTrack;
+export function normalizeAudioUrl(url: string): string | null;
 export function emitAudioDXWarning(missingList: string[], availableList?: string[], requestedList?: string[] | string, videoKey?: string): void;
 export function clearWarnedAudioCache(): void;
 
 export default resolveAudioAvailability;
+

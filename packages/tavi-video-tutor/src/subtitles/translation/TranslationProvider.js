@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { AITUTOR_LANGUAGES, getLanguageByCode } from '../languages/registry.js';
+import { AITUTOR_LANGUAGES, getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
 import { mapAITutorCodeToProvider } from '../languages/providerMappings.js';
 
 // Text-level persistent & in-memory translation cache
@@ -112,8 +112,8 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
   }
 
   async translateSegments(segments, sourceLanguage = 'en', targetLanguage) {
-    const srcClean = String(sourceLanguage).toLowerCase();
-    const tgtClean = String(targetLanguage).toLowerCase();
+    const srcClean = normalizeLanguageCode(sourceLanguage) || String(sourceLanguage).toLowerCase().trim();
+    const tgtClean = normalizeLanguageCode(targetLanguage) || String(targetLanguage).toLowerCase().trim();
 
     if (srcClean === tgtClean) {
       return segments.map(s => ({ ...s }));

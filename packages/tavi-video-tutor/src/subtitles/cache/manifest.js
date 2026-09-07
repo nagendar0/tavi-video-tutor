@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { getLanguageByCode } from '../languages/registry.js';
+import { getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
 
 export const computeMediaFingerprint = (srcOrEntry, cwd = process.cwd(), extra = null, remoteMetadata = null) => {
   const src = typeof srcOrEntry === 'string' ? srcOrEntry : (srcOrEntry && srcOrEntry.src ? srcOrEntry.src : '');
@@ -176,7 +176,8 @@ export class ManifestStore {
     if (!entry) return false;
     if (fingerprint && entry.fingerprint !== fingerprint) return false;
 
-    const subInfo = entry.subtitles?.[langCode] || (entry.language === langCode ? { src: entry.subtitle } : null);
+    const normLang = normalizeLanguageCode(langCode) || langCode;
+    const subInfo = entry.subtitles?.[normLang] || entry.subtitles?.[langCode] || (entry.language === normLang || entry.language === langCode ? { src: entry.subtitle } : null);
     if (!subInfo || !subInfo.src) return false;
 
     try {
@@ -193,7 +194,8 @@ export class ManifestStore {
     if (!entry) return false;
     if (fingerprint && entry.fingerprint !== fingerprint) return false;
 
-    const audioInfo = entry.audioLanguages?.[langCode];
+    const normLang = normalizeLanguageCode(langCode) || langCode;
+    const audioInfo = entry.audioLanguages?.[normLang] || entry.audioLanguages?.[langCode];
     if (!audioInfo || !audioInfo.src) return false;
 
     try {
@@ -309,7 +311,8 @@ export class ManifestStore {
         label: audioData.label || label,
         src: publicUrl,
         language: langCode,
-        source: langCode === (sourceLanguage || existingEntry.sourceLanguage || 'en')
+        source: langCode === (sourceLanguage || existingEntry.sourceLanguage || 'en'),
+        speakerAware: Boolean(audioData && (audioData.speakerAware !== undefined ? audioData.speakerAware : true))
       };
     });
 
@@ -333,5 +336,23 @@ export class ManifestStore {
     fs.writeFileSync(this.publicManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 
     return audioLanguagesEntryMap;
+  }
+
+  saveSpeakerMetadata(videoId, metadata) {
+    const metaDir = path.join(this.internalDir, 'metadata');
+    fs.mkdirSync(metaDir, { recursive: true });
+    const metaFile = path.join(metaDir, `${videoId}-speakers.json`);
+    fs.writeFileSync(metaFile, JSON.stringify(metadata, null, 2), 'utf8');
+    return metaFile;
+  }
+
+  loadSpeakerMetadata(videoId) {
+    const metaFile = path.join(this.internalDir, 'metadata', `${videoId}-speakers.json`);
+    if (fs.existsSync(metaFile)) {
+      try {
+        return JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+      } catch (_) {}
+    }
+    return null;
   }
 }

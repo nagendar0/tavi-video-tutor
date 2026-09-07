@@ -205,15 +205,19 @@ export function resolveQualityAvailability({
   let isStringFilter = false;
   let filterList = null;
 
-  if (Array.isArray(effectiveConfig)) {
-    if (effectiveConfig.every(item => typeof item === 'string')) {
-      if (qualitiesConfig !== undefined || hasManifestOrConfigOrHls) {
-        mode = 'filter';
-        isStringFilter = true;
-        filterList = effectiveConfig;
-      } else {
-        mode = 'all';
-      }
+  if (effectiveConfig === undefined || effectiveConfig === 'all') {
+    mode = 'all';
+  } else if (Array.isArray(effectiveConfig)) {
+    if (effectiveConfig.length === 0) {
+      mode = 'filter';
+      isStringFilter = true;
+      filterList = [];
+    } else if (effectiveConfig.every(item => typeof item === 'string')) {
+      mode = 'filter';
+      isStringFilter = true;
+      filterList = effectiveConfig;
+    } else {
+      mode = 'all';
     }
   }
 
@@ -359,6 +363,13 @@ export function resolveQualityAvailability({
  * Backward compatibility alias for existing callers
  */
 export function resolveQualitySources(params = {}) {
+  const raw = resolveRawQualitySources(params);
+  if (raw.source !== 'none') {
+    return {
+      ...raw,
+      qualities: raw.rawQualities
+    };
+  }
   return resolveQualityAvailability(params);
 }
 

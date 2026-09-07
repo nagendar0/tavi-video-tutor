@@ -1,4 +1,4 @@
-import { getLanguageByCode } from '../languages/registry.js';
+import { getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
 
 const EMPTY_OBJECT = Object.freeze({});
 const EMPTY_ARRAY = Object.freeze([]);
@@ -24,8 +24,9 @@ export function resolveAudioSources({
 
   const isVal = (val) => val !== null && val !== undefined && val !== '';
 
-  const normalizeTrackObj = (lang, val) => {
+  const normalizeTrackObj = (rawLang, val) => {
     if (!isVal(val)) return null;
+    const lang = normalizeLanguageCode(rawLang) || rawLang;
     const langMeta = getLanguageByCode(lang);
     const defaultLabel = langMeta
       ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name)
@@ -42,17 +43,18 @@ export function resolveAudioSources({
       return {
         label: val.label || defaultLabel,
         src: val.src,
-        language: val.language || lang,
-        source: Boolean(val.source)
+        language: normalizeLanguageCode(val.language) || lang,
+        source: Boolean(val.source),
+        speakerAware: Boolean(val.speakerAware)
       };
     }
     return null;
   };
 
   const allLangs = new Set([
-    ...Object.keys(demo),
-    ...Object.keys(manifest),
-    ...Object.keys(developer)
+    ...Object.keys(demo).map(k => normalizeLanguageCode(k) || k),
+    ...Object.keys(manifest).map(k => normalizeLanguageCode(k) || k),
+    ...Object.keys(developer).map(k => normalizeLanguageCode(k) || k)
   ]);
 
   if (allLangs.size === 0) {
@@ -62,18 +64,32 @@ export function resolveAudioSources({
     };
   }
 
+  const findInObj = (obj, targetLang) => {
+    if (isVal(obj[targetLang])) return obj[targetLang];
+    for (const key of Object.keys(obj)) {
+      if ((normalizeLanguageCode(key) || key) === targetLang && isVal(obj[key])) {
+        return obj[key];
+      }
+    }
+    return undefined;
+  };
+
   const resolvedTracks = {};
   const sourceByLanguage = {};
 
   for (const lang of allLangs) {
-    if (isVal(developer[lang])) {
-      resolvedTracks[lang] = normalizeTrackObj(lang, developer[lang]);
+    const devVal = findInObj(developer, lang);
+    const manVal = findInObj(manifest, lang);
+    const demVal = findInObj(demo, lang);
+
+    if (devVal !== undefined) {
+      resolvedTracks[lang] = normalizeTrackObj(lang, devVal);
       sourceByLanguage[lang] = 'developer';
-    } else if (isVal(manifest[lang])) {
-      resolvedTracks[lang] = normalizeTrackObj(lang, manifest[lang]);
+    } else if (manVal !== undefined) {
+      resolvedTracks[lang] = normalizeTrackObj(lang, manVal);
       sourceByLanguage[lang] = 'generated';
-    } else if (isVal(demo[lang])) {
-      resolvedTracks[lang] = normalizeTrackObj(lang, demo[lang]);
+    } else if (demVal !== undefined) {
+      resolvedTracks[lang] = normalizeTrackObj(lang, demVal);
       sourceByLanguage[lang] = 'demo';
     }
   }
@@ -223,7 +239,7 @@ export function resolveAudioAvailability({
     }
   }
 
-  const finalSourceLang = detectedSourceLang || sourceLanguage || 'en';
+  const finalSourceLang = normalizeLanguageCode(detectedSourceLang) || normalizeLanguageCode(sourceLanguage) || 'en';
 
   if (!hasAvailableAudio) {
     const missing = Array.isArray(visibilityFilter) ? visibilityFilter : EMPTY_ARRAY;
@@ -260,7 +276,7 @@ export function resolveAudioAvailability({
   if (mode === 'all') {
     visibleLanguages = [...availableLanguages];
   } else if (mode === 'filter') {
-    const requestedLangs = (visibilityFilter || []).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+    const requestedLangs = (visibilityFilter || []).map(s => normalizeLanguageCode(s) || String(s).trim().toLowerCase()).filter(Boolean);
     const availableSet = new Set(availableLanguages);
 
     missingLanguages = requestedLangs.filter(l => !availableSet.has(l));
@@ -335,8 +351,11 @@ export function resolveAudioAvailability({
   // 3. 'original'
   let activeSelected = 'original';
   if (selectedLanguage !== undefined && selectedLanguage !== null) {
-    if (selectedLanguage === 'original' || resolvedTracks[selectedLanguage]) {
-      activeSelected = selectedLanguage;
+    const normSelected = normalizeLanguageCode(selectedLanguage) || selectedLanguage;
+    if (selectedLanguage === 'original' || normSelected === 'original' || resolvedTracks[normSelected] || resolvedTracks[selectedLanguage]) {
+      activeSelected = (selectedLanguage === 'original' || normSelected === 'original')
+        ? 'original'
+        : (resolvedTracks[normSelected] ? normSelected : selectedLanguage);
     }
   } else if (finalSourceLang && (resolvedTracks[finalSourceLang] || finalSourceLang === 'original')) {
     activeSelected = finalSourceLang;
@@ -368,4 +387,149 @@ export function resolveAudioAvailability({
   };
 }
 
+/**
+ * Normalizes relative and absolute audio URLs deterministically.
+ */
+export function normalizeAudioUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    if (typeof window !== 'undefined' && window.document && window.document.baseURI) {
+      return new URL(trimmed, window.document.baseURI).href;
+    }
+    if (typeof document !== 'undefined' && document.baseURI) {
+      return new URL(trimmed, document.baseURI).href;
+    }
+    return new URL(trimmed, 'http://localhost/').href;
+  } catch (_) {
+    return trimmed;
+  }
+}
+
+/**
+ * SINGLE SOURCE OF TRUTH: Active Audio Track Resolver
+ * 
+ * Decides authoritatively what track should play:
+ * Mode: 'original' vs 'dub'
+ * Precedence: developer override > generated/manifest audio > original audio
+ */
+export function resolveActiveAudioTrack({
+  availability,
+  selectedLanguage,
+  sourceLanguage,
+  developerAudio = {},
+  manifestAudio = {},
+  demoAudio = {},
+  videoKey = 'default'
+} = {}) {
+  const avail = availability || resolveAudioAvailability({
+    manifestAudio,
+    developerAudio,
+    demoAudio,
+    sourceLanguage,
+    selectedLanguage,
+    videoKey
+  });
+
+  const effectiveSource = normalizeLanguageCode(avail.sourceLanguage || sourceLanguage || 'en') || 'en';
+  const normInputSelected = (selectedLanguage !== undefined && selectedLanguage !== null)
+    ? (selectedLanguage === 'original' || selectedLanguage === 'source' ? 'original' : (normalizeLanguageCode(selectedLanguage) || selectedLanguage))
+    : null;
+  const effectiveSelected = normInputSelected !== null 
+    ? normInputSelected 
+    : (avail.selectedLanguage || 'original');
+
+  // 1. Check if developer explicitly passed a dub track for the selected language
+  const devAudio = developerAudio && typeof developerAudio === 'object' && !Array.isArray(developerAudio) ? developerAudio : {};
+  if (effectiveSelected !== 'original' && devAudio[effectiveSelected]) {
+    const rawSrc = typeof devAudio[effectiveSelected] === 'string' 
+      ? devAudio[effectiveSelected] 
+      : (devAudio[effectiveSelected] && devAudio[effectiveSelected].src);
+    if (rawSrc) {
+      const norm = normalizeAudioUrl(rawSrc);
+      const langMeta = getLanguageByCode(effectiveSelected);
+      const label = (typeof devAudio[effectiveSelected] === 'object' && devAudio[effectiveSelected].label)
+        ? devAudio[effectiveSelected].label
+        : (langMeta ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) : effectiveSelected);
+      return {
+        mode: 'dub',
+        language: effectiveSelected,
+        url: rawSrc,
+        normalizedUrl: norm,
+        source: 'developer',
+        trackId: `developer:${effectiveSelected}:${norm}`,
+        playable: true,
+        label
+      };
+    }
+  }
+
+  // 2. Original Mode: when 'original' is explicitly selected or sourceLanguage without external developer override
+  if (effectiveSelected === 'original') {
+    const origTrack = avail.originalTrack || (avail.resolvedTracks && avail.resolvedTracks[effectiveSource]) || null;
+    const langMeta = getLanguageByCode(effectiveSource);
+    const langName = langMeta ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) : effectiveSource;
+    const label = origTrack?.label || `${langName} (Original)`;
+    return {
+      mode: 'original',
+      language: effectiveSource,
+      url: null,
+      normalizedUrl: null,
+      source: 'original',
+      trackId: `original:${effectiveSource}`,
+      playable: true,
+      label
+    };
+  }
+
+  // 3. Check resolved availability tracks (generated / manifest)
+  const track = avail.resolvedTracks ? avail.resolvedTracks[effectiveSelected] : null;
+  if (track && track.src) {
+    const isSourceTrack = Boolean(track.source) || effectiveSelected === effectiveSource;
+    const sourceKind = avail.sourceByLanguage ? avail.sourceByLanguage[effectiveSelected] : 'generated';
+
+    // If it is the original source track without a developer override, it is original audio
+    if (isSourceTrack && sourceKind !== 'developer') {
+      return {
+        mode: 'original',
+        language: effectiveSelected,
+        url: null,
+        normalizedUrl: null,
+        source: 'original',
+        trackId: `original:${effectiveSelected}`,
+        playable: true,
+        label: track.label || `${effectiveSelected} (Original)`
+      };
+    }
+
+    const norm = normalizeAudioUrl(track.src);
+    return {
+      mode: 'dub',
+      language: effectiveSelected,
+      url: track.src,
+      normalizedUrl: norm,
+      source: sourceKind || 'generated',
+      trackId: `${sourceKind || 'generated'}:${effectiveSelected}:${norm}`,
+      playable: true,
+      label: track.label || effectiveSelected
+    };
+  }
+
+  // 4. Fallback to original audio if selected track is not available/playable
+  const langMeta = getLanguageByCode(effectiveSource);
+  const langName = langMeta ? (langMeta.nativeName ? `${langMeta.nativeName} / ${langMeta.name}` : langMeta.name) : effectiveSource;
+  return {
+    mode: 'original',
+    language: effectiveSource,
+    url: null,
+    normalizedUrl: null,
+    source: 'original',
+    trackId: `original:${effectiveSource}`,
+    playable: true,
+    label: `${langName} (Original)`
+  };
+}
+
 export default resolveAudioAvailability;
+

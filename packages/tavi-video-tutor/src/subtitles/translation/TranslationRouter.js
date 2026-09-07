@@ -1,5 +1,6 @@
 import { AITutorTranslationProvider, MyMemoryTranslationProvider } from './TranslationProvider.js';
 import { LocalNllbProvider } from './LocalNllbProvider.js';
+import { normalizeLanguageCode } from '../languages/registry.js';
 
 export class TranslationRouter {
   constructor(options = {}) {
@@ -10,8 +11,8 @@ export class TranslationRouter {
   }
 
   supports(sourceLang, targetLang) {
-    const srcClean = String(sourceLang || 'en').toLowerCase();
-    const tgtClean = String(targetLang || 'en').toLowerCase();
+    const srcClean = normalizeLanguageCode(sourceLang) || String(sourceLang || 'en').toLowerCase().trim();
+    const tgtClean = normalizeLanguageCode(targetLang) || String(targetLang || 'en').toLowerCase().trim();
     if (srcClean === tgtClean) return true;
     if (this.mode === 'offline') {
       return this.localProvider.supports(srcClean, tgtClean);
@@ -20,17 +21,22 @@ export class TranslationRouter {
   }
 
   async translateSegments(segments, sourceLang, targetLang) {
-    const srcClean = String(sourceLang || 'en').toLowerCase();
-    const tgtClean = String(targetLang || 'en').toLowerCase();
+    const srcClean = normalizeLanguageCode(sourceLang) || String(sourceLang || 'en').toLowerCase().trim();
+    const tgtClean = normalizeLanguageCode(targetLang) || String(targetLang || 'en').toLowerCase().trim();
 
     if (srcClean === tgtClean) {
       return segments.map((s, idx) => ({
-        id: s.id || `cue_${String(idx + 1).padStart(6, '0')}`,
-        start: Number(s.start),
-        end: Number(s.end),
-        text: s.text
+        ...s,
+        id: s.id || s.segmentId || `cue_${String(idx + 1).padStart(6, '0')}`,
+        start: Number(s.start !== undefined ? s.start : s.startTime),
+        end: Number(s.end !== undefined ? s.end : s.endTime),
+        text: s.text || s.originalText,
+        originalText: s.originalText || s.text,
+        translatedText: s.text || s.originalText
       }));
     }
+
+    let translated = null;
 
     // Explicit Offline Mode
     if (this.mode === 'offline') {
@@ -38,38 +44,54 @@ export class TranslationRouter {
         throw new Error(`UNSUPPORTED_OFFLINE: Offline translation unavailable for language '${targetLang}' (Unsupported by local NLLB-200 model).`);
       }
       console.log(`[TranslationRouter] Offline Mode Active → Routing ${targetLang} to Local NLLB Provider`);
-      return await this.localProvider.translateSegments(segments, srcClean, tgtClean);
-    }
+      translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
+    } else {
+      // Auto Mode: Online Preferred → Local Fallback
+      try {
+        if (this.mode !== 'offline') {
+          const onlineResult = await this.onlineProvider.translateSegments(segments, srcClean, tgtClean);
+          if (onlineResult && Array.isArray(onlineResult) && onlineResult.length > 0) {
+            translated = onlineResult;
+          }
+        }
+      } catch (onlineErr) {
+        if (this.mode === 'online') {
+          throw onlineErr;
+        }
 
-    // Auto Mode: Online Preferred → Local Fallback
-    try {
-      if (this.mode !== 'offline') {
-        const onlineResult = await this.onlineProvider.translateSegments(segments, srcClean, tgtClean);
-        if (onlineResult && Array.isArray(onlineResult) && onlineResult.length > 0) {
-          return onlineResult;
+        console.warn(`\n⚠ Online translation provider unavailable for ${targetLang}: ${onlineErr.message}`);
+
+        if (this.localProvider.supports(srcClean, tgtClean)) {
+          console.log(`→ Switching to Local NLLB Fallback for ${targetLang}...`);
+          translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
+        } else {
+          throw new Error(`UNSUPPORTED_OFFLINE: Online translation failed and language '${targetLang}' is unsupported by local NLLB-200 fallback model.`);
         }
       }
-    } catch (onlineErr) {
-      if (this.mode === 'online') {
-        throw onlineErr;
-      }
 
-      console.warn(`\n⚠ Online translation provider unavailable for ${targetLang}: ${onlineErr.message}`);
-
-      if (this.localProvider.supports(srcClean, tgtClean)) {
-        console.log(`→ Switching to Local NLLB Fallback for ${targetLang}...`);
-        return await this.localProvider.translateSegments(segments, srcClean, tgtClean);
-      } else {
-        throw new Error(`UNSUPPORTED_OFFLINE: Online translation failed and language '${targetLang}' is unsupported by local NLLB-200 fallback model.`);
+      // Fallback if online provider returned empty
+      if (!translated && this.localProvider.supports(srcClean, tgtClean)) {
+        translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
       }
     }
 
-    // Fallback if online provider returned empty
-    if (this.localProvider.supports(srcClean, tgtClean)) {
-      return await this.localProvider.translateSegments(segments, srcClean, tgtClean);
+    if (!translated) {
+      throw new Error(`No translation provider available for pair ${sourceLang} -> ${targetLang}`);
     }
 
-    throw new Error(`No translation provider available for pair ${sourceLang} -> ${targetLang}`);
+    // Preserve speaker identity and timeline invariants from source segments
+    return translated.map((t, idx) => {
+      const orig = segments[idx] || {};
+      return {
+        ...orig,
+        ...t,
+        speakerId: orig.speakerId || t.speakerId,
+        segmentId: orig.segmentId || t.segmentId || t.id,
+        originalText: orig.originalText || orig.text,
+        translatedText: t.text || t.translatedText,
+        text: t.text || t.translatedText
+      };
+    });
   }
 }
 

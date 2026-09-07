@@ -23,7 +23,7 @@ export const AITutor = forwardRef(({
   tracks,
   config,
   audioDubs = {},
-  qualities = [],
+  qualities,
   subLanguage,
   defaultSubLanguage = 'en',
   playbackRates = [0.5, 1, 1.25, 1.5, 2],

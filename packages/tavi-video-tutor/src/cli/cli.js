@@ -449,6 +449,12 @@ export const runAudioStatus = async (options = {}, cwd = process.cwd()) => {
     console.log(`Source Language:     ${sourceLang} (Original)`);
     console.log(`Generated Tracks:    ${audioKeys.length} track(s)`);
 
+    const speakerMeta = manifestStore.loadSpeakerMetadata(v.id);
+    if (speakerMeta) {
+      console.log(`Detected Speakers:   ${speakerMeta.detectedSpeakerCount} speaker(s) (${speakerMeta.speakerMode || 'auto'})`);
+      console.log(`Speaker Overlaps:    ${speakerMeta.overlappingIntervals?.length || 0} interval(s)`);
+    }
+
     if (audioKeys.length > 0) {
       console.log(`\nAudio Languages:`);
       for (const lang of audioKeys) {
@@ -708,6 +714,28 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
     }
   }
 
+  let speakerModeVal = 'auto';
+  const speakerModeIdx = args.indexOf('--speaker-mode');
+  if (speakerModeIdx !== -1 && args[speakerModeIdx + 1] && !args[speakerModeIdx + 1].startsWith('-')) {
+    speakerModeVal = args[speakerModeIdx + 1];
+  } else {
+    const smEq = args.find(a => a.startsWith('--speaker-mode='));
+    if (smEq) {
+      speakerModeVal = smEq.split('=')[1];
+    }
+  }
+
+  let speakerConcurrencyVal = undefined;
+  const scIdx = args.indexOf('--speaker-concurrency');
+  if (scIdx !== -1 && args[scIdx + 1] && !args[scIdx + 1].startsWith('-')) {
+    speakerConcurrencyVal = parseInt(args[scIdx + 1], 10);
+  } else {
+    const scEq = args.find(a => a.startsWith('--speaker-concurrency='));
+    if (scEq) {
+      speakerConcurrencyVal = parseInt(scEq.split('=')[1], 10);
+    }
+  }
+
   const firstArg = args[0] || 'generate';
   const isFlag = firstArg.startsWith('-');
   const command = isFlag ? 'generate' : firstArg;
@@ -753,6 +781,8 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
         noQuality,
         quality: !noQuality,
         audioLanguages: audioLanguagesVal,
+        speakerMode: speakerModeVal,
+        speakerConcurrency: speakerConcurrencyVal,
         yes,
         nonInteractive
       }, cwd);

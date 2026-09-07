@@ -1,5 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
+import { AudioController } from '../services/AudioController.js';
+import { normalizeAudioUrl } from '../subtitles/resolver/audioResolver.js';
 
+/**
+ * Backward-compatible useAudioDubSync wrapper powered by production AudioController.
+ */
 export const useAudioDubSync = ({
   isPlaying,
   currentTime,
@@ -7,68 +12,93 @@ export const useAudioDubSync = ({
   volume,
   isMuted,
   audioUrl,
+  videoRef,
   onDriftCorrect
 }) => {
+  const controllerRef = useRef(null);
   const audioRef = useRef(null);
-  const syncLoopRef = useRef(null);
-  const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
 
-  // Synchronize play/pause, volume, mute, and playback rate
+  if (!controllerRef.current) {
+    controllerRef.current = new AudioController({
+      volume,
+      isMuted,
+      playbackRate,
+      onDriftCorrect
+    });
+    audioRef.current = controllerRef.current.audioElement;
+  }
+
+  const controller = controllerRef.current;
+
+  // Video element sync
   useEffect(() => {
-    if (!audioUrl) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      return;
+    if (videoRef?.current) {
+      controller.attachVideo(videoRef.current);
     }
+  }, [videoRef, videoRef?.current, controller]);
 
-    // Load new audio URL if it changes
-    if (!audioRef.current || audioRef.current.src !== audioUrl) {
-      if (audioRef.current) audioRef.current.pause();
-      audioRef.current = new Audio(audioUrl);
-      audioRef.current.currentTime = currentTime;
-    }
+  // Volume & mute sync
+  useEffect(() => {
+    controller.setVolume(volume);
+  }, [volume, controller]);
 
-    const audio = audioRef.current;
-    audio.playbackRate = playbackRate;
-    audio.volume = isMuted ? 0 : volume;
+  useEffect(() => {
+    controller.setMuted(isMuted);
+  }, [isMuted, controller]);
 
-    if (isPlaying) {
-      audio.play().catch(err => {
-        console.warn('Audio Dub playback was delayed or blocked:', err);
+  useEffect(() => {
+    controller.setPlaybackRate(playbackRate);
+  }, [playbackRate, controller]);
+
+  // Track switch sync
+  useEffect(() => {
+    if (audioUrl) {
+      const norm = normalizeAudioUrl(audioUrl);
+      controller.switchTrack({
+        mode: 'dub',
+        language: 'dub',
+        url: audioUrl,
+        normalizedUrl: norm,
+        trackId: `dub:${norm}`,
+        playable: true
       });
     } else {
-      audio.pause();
+      controller.switchTrack({
+        mode: 'original',
+        language: 'original'
+      });
     }
+  }, [audioUrl, controller]);
 
-    return () => {
-      // Clean up on component update/unmount
-      if (syncLoopRef.current) clearInterval(syncLoopRef.current);
-    };
-  }, [isPlaying, playbackRate, volume, isMuted, audioUrl]);
-
-  // Precision drift correction loop (runs every 200ms when playing)
+  // Play/pause sync
   useEffect(() => {
-    if (isPlaying && audioRef.current && audioUrl) {
-      syncLoopRef.current = setInterval(() => {
-        const audio = audioRef.current;
-        const currentVal = currentTimeRef.current;
-        const drift = Math.abs(currentVal - audio.currentTime);
-        
-        // If drift is larger than 150 milliseconds, force align the audio track
-        if (drift > 0.15) {
-          audio.currentTime = currentVal;
-          onDriftCorrect?.(currentVal);
-        }
-      }, 200);
+    if (isPlaying) {
+      controller.handleVideoPlay();
+    } else {
+      controller.handleVideoPause();
     }
+  }, [isPlaying, controller]);
 
+  // Seek sync
+  useEffect(() => {
+    if (audioUrl && controller.audioElement) {
+      const drift = Math.abs(currentTime - controller.audioElement.currentTime);
+      if (drift > 0.25) {
+        controller.audioElement.currentTime = currentTime;
+      }
+    }
+  }, [currentTime, audioUrl, controller]);
+
+  // Cleanup
+  useEffect(() => {
     return () => {
-      if (syncLoopRef.current) clearInterval(syncLoopRef.current);
+      if (controllerRef.current) {
+        controllerRef.current.destroy();
+        controllerRef.current = null;
+        audioRef.current = null;
+      }
     };
-  }, [isPlaying, audioUrl, onDriftCorrect]);
+  }, []);
 
   return audioRef;
 };
