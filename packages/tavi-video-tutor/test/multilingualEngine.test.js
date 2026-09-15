@@ -15,6 +15,23 @@ import { processSingleVideo } from '../src/subtitles/pipeline/processVideo.js';
 import { processAllVideos } from '../src/subtitles/pipeline/processVideos.js';
 import { VideoEntry } from '../src/subtitles/config/loadConfig.js';
 
+function createValidatedTestTranslator() {
+  const translations = {
+    te: 'పైథాన్ పాఠానికి స్వాగతం.',
+    hi: 'पायथन पाठ में आपका स्वागत है।',
+    ja: 'Pythonのレッスンへようこそ。',
+    ko: '파이썬 수업에 오신 것을 환영합니다.',
+    es: 'Bienvenido a la lección de Python.'
+  };
+  return {
+    supports: () => true,
+    translateSegments: async (segments, _source, target) => segments.map((segment) => ({
+      ...segment,
+      text: translations[target] || `Translated in ${target}`
+    }))
+  };
+}
+
 test('1. Language Registry & RTL Direction Detection', () => {
   assert.equal(AITUTOR_LANGUAGES.length, 109);
 
@@ -35,7 +52,7 @@ test('1. Language Registry & RTL Direction Detection', () => {
 });
 
 test('2. Timestamp Preservation During Translation', async () => {
-  const translator = new AITutorTranslationProvider({ allowTestFallback: true });
+  const translator = createValidatedTestTranslator();
   const masterSegments = [
     { start: 1.0, end: 4.2, text: 'Welcome to Python.' },
     { start: 4.5, end: 8.0, text: 'Today we will learn variables.' }
@@ -56,7 +73,7 @@ test('3. Master Transcript Caching — Transcribe Once, Translate Many', async (
   const manifestStore = new ManifestStore(tmpCwd);
   const transcriptCache = new TranscriptCache(tmpCwd);
   const transcriber = new WhisperProvider({ allowTestFallback: true });
-  const translator = new AITutorTranslationProvider({ allowTestFallback: true });
+  const translator = createValidatedTestTranslator();
 
   const video = new VideoEntry({
     id: 'python-intro',
@@ -65,7 +82,7 @@ test('3. Master Transcript Caching — Transcribe Once, Translate Many', async (
   });
 
   let events1 = [];
-  const res1 = await processSingleVideo(video, manifestStore, { transcriptCache, transcriber, translator }, (evt) => {
+  const res1 = await processSingleVideo(video, manifestStore, { transcriptCache, transcriber, translator, allowTestFallback: true }, (evt) => {
     events1.push(evt);
   });
 
@@ -79,7 +96,7 @@ test('3. Master Transcript Caching — Transcribe Once, Translate Many', async (
   });
 
   let events2 = [];
-  const res2 = await processSingleVideo(updatedVideo, manifestStore, { transcriptCache, transcriber, translator }, (evt) => {
+  const res2 = await processSingleVideo(updatedVideo, manifestStore, { transcriptCache, transcriber, translator, allowTestFallback: true }, (evt) => {
     events2.push(evt);
   });
 
@@ -110,9 +127,9 @@ test('4. End-to-End Multilingual processAllVideos Pipeline', async () => {
   fs.writeFileSync(path.join(tmpCwd, 'aitutor.config.json'), JSON.stringify(config), 'utf8');
 
   const transcriber = new WhisperProvider({ allowTestFallback: true });
-  const translator = new AITutorTranslationProvider({ allowTestFallback: true });
+  const translator = createValidatedTestTranslator();
 
-  const res = await processAllVideos({ transcriber, translator }, tmpCwd);
+  const res = await processAllVideos({ transcriber, translator, allowTestFallback: true }, tmpCwd);
   assert.equal(res.totalVideos, 2);
   assert.equal(res.generatedSubtitles, 5);
 

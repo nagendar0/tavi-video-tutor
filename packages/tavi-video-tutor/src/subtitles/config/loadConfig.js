@@ -19,6 +19,10 @@ export class VideoEntry {
       throw new Error('Malformed video configuration entry');
     }
 
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(this.id)) {
+      throw new Error(`Invalid video id "${this.id}". Use only letters, numbers, underscores, and hyphens.`);
+    }
+
     if (this.languages === 'all') {
       this.languages = AITUTOR_LANGUAGES.map(l => l.code);
     } else if (!Array.isArray(this.languages)) {

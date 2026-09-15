@@ -205,9 +205,15 @@ export const resolveLanguageCapability = (code) => {
     return {
       languageId: String(code || '').toLowerCase(),
       canonicalCode: null,
+      normalizedCode: null,
+      displayName: null,
       supported: false,
       translationSupported: false,
+      translationSupport: false,
       ttsSupported: false,
+      ttsSupport: false,
+      speakerAwareCapability: false,
+      subtitleCapability: false,
       error: 'UNSUPPORTED_LANGUAGE'
     };
   }
@@ -222,19 +228,39 @@ export const resolveLanguageCapability = (code) => {
   return {
     languageId: canonical,
     canonicalCode: canonical,
+    normalizedCode: canonical,
     displayName: meta.name,
     nativeName: meta.nativeName,
     iso639_2: meta.iso639_2,
     bcp47: meta.bcp47,
     ttsLocale,
+    voiceLocale: ttsLocale,
     translationCode,
+    translationProvider: 'mymemory',
+    translationFallbackProvider: 'nllb',
     voiceId,
     supported: true,
     translationSupported: true,
+    translationSupport: true,
+    ttsProvider: 'node-tts',
     ttsSupported: true,
+    ttsSupport: true,
+    speakerAwareCapability: true,
+    subtitleCapability: true,
     preferredVoices: {
       female: [`${canonical}_voice_1`, `${ttsLocale}-Female`],
       male: [`${canonical}_voice_2`, `${ttsLocale}-Male`]
     }
   };
 };
+
+/**
+ * Programmatically returns capability matrix for all registered languages.
+ * Dynamically reads the registry without hardcoding language count.
+ * 
+ * @returns {Array<Object>}
+ */
+export const getAllLanguageCapabilities = () => {
+  return AITUTOR_LANGUAGES.map(lang => resolveLanguageCapability(lang.code));
+};
+

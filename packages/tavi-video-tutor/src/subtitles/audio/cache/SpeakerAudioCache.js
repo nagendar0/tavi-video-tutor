@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { validateGeneratedAudio } from '../validateAudio.js';
 
 /**
  * Granular Segment-Level Audio Cache.
@@ -46,18 +47,24 @@ export class SpeakerAudioCache {
     speakerId = 'spk_000001',
     segmentId = 'seg_001',
     text = '',
+    sourceLanguage = 'en',
     targetLanguage = 'en',
     voiceId = 'voice_1',
-    provider = 'node-tts'
+    provider = 'node-tts',
+    model = 'default',
+    config = 'default'
   }) {
     const payload = [
       String(videoFingerprint).trim(),
       String(speakerId).trim(),
       String(segmentId).trim(),
       String(text).trim(),
+      String(sourceLanguage).toLowerCase().trim(),
       String(targetLanguage).toLowerCase().trim(),
       String(voiceId).trim(),
-      String(provider).trim()
+      String(provider).trim(),
+      String(model).trim(),
+      String(config).trim()
     ].join('::');
 
     return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 24);
@@ -69,18 +76,51 @@ export class SpeakerAudioCache {
     const entry = this.index.get(key);
 
     if (entry && entry.audioPath && fs.existsSync(entry.audioPath)) {
-      return {
-        cached: true,
-        key,
-        audioPath: entry.audioPath,
-        duration: entry.duration
-      };
+      try {
+        const stat = fs.statSync(entry.audioPath);
+        if (stat.size >= 100) {
+          const validation = validateGeneratedAudio(entry.audioPath, {
+            minSizeBytes: 100,
+            decodeTest: false
+          });
+          if (validation.valid) {
+            return {
+              cached: true,
+              key,
+              audioPath: entry.audioPath,
+              duration: entry.duration || validation.duration
+            };
+          }
+        }
+        // Artifact invalid or corrupted — quarantine/delete and invalidate cache
+        try { fs.unlinkSync(entry.audioPath); } catch (_) {}
+        this.index.delete(key);
+        this.save();
+      } catch (_) {
+        this.index.delete(key);
+      }
     }
 
     return null;
   }
 
   saveSegmentAudio(params, sourceAudioPath, duration) {
+    if (!sourceAudioPath || !fs.existsSync(sourceAudioPath)) {
+      return null;
+    }
+    const stat = fs.statSync(sourceAudioPath);
+    if (stat.size < 100) {
+      return null;
+    }
+
+    const validation = validateGeneratedAudio(sourceAudioPath, {
+      minSizeBytes: 100,
+      decodeTest: false
+    });
+    if (!validation.valid) {
+      return null;
+    }
+
     this.load();
     fs.mkdirSync(this.cacheDir, { recursive: true });
 
@@ -102,6 +142,7 @@ export class SpeakerAudioCache {
     this.save();
     return entry;
   }
+
 
   clear() {
     this.index.clear();

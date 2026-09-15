@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { getFFmpegBinaryPath } from '../audio/extractAudio.js';
 import { computeMediaFingerprint } from '../cache/manifest.js';
@@ -36,6 +37,14 @@ export const getFFprobeBinaryPath = () => {
       return pkgBin;
     }
   } catch (_) {}
+
+  if (isWin) {
+    const localAppData = process.env.LOCALAPPDATA || (os.homedir ? path.join(os.homedir(), 'AppData', 'Local') : '');
+    if (localAppData) {
+      const wingetLink = path.join(localAppData, 'Microsoft', 'WinGet', 'Links', exeName);
+      if (fs.existsSync(wingetLink)) return wingetLink;
+    }
+  }
 
   return 'ffprobe';
 };

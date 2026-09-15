@@ -83,6 +83,16 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
   let transcodedCount = 0;
   let cachedCount = 0;
 
+  const validateRendition = async (filePath, rendition) => {
+    const outputProbe = await probeMedia(filePath, { cwd: manifestStore.cwd });
+    if (outputProbe.video?.codec !== 'h264' || outputProbe.video?.height !== rendition.height || outputProbe.video?.width !== rendition.width) {
+      throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} produced ${outputProbe.video?.codec || 'unknown'} ${outputProbe.video?.width || 0}x${outputProbe.video?.height || 0}; expected H.264 ${rendition.width}x${rendition.height}.`);
+    }
+    if (probeInfo.duration > 0 && (!Number.isFinite(outputProbe.duration) || Math.abs(outputProbe.duration - probeInfo.duration) > 2)) {
+      throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} duration ${outputProbe.duration}s differs from source ${probeInfo.duration}s.`);
+    }
+  };
+
   for (const rendition of plan.renditions) {
     // If this rendition represents the original source resolution and the source is ALREADY browser-native H.264 MP4,
     // point directly to the source video. Otherwise (e.g. .avi, .mkv, .mov, .webm, non-h264), generate a browser MP4 rendition!
@@ -112,7 +122,16 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
     const publicUrl = `/aitutor/videos/${videoEntry.id}/${filename}`;
 
     const isFileOnDisk = fs.existsSync(publicFilePath) && fs.statSync(publicFilePath).size > 0;
-    const isCached = isFileOnDisk && isSameFingerprint && !options.force;
+    let isCached = isFileOnDisk && isSameFingerprint && !options.force;
+
+    if (isCached) {
+      try {
+        await validateRendition(publicFilePath, rendition);
+      } catch (err) {
+        isCached = false;
+        onProgress?.({ type: 'rendition-cache-invalid', height: rendition.height, message: `⚠ ${rendition.label} cache invalid; regenerating (${err.message})` });
+      }
+    }
 
     if (isCached) {
       cachedCount++;
@@ -136,6 +155,8 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
           }
         }
       });
+
+      await validateRendition(publicFilePath, rendition);
 
       // Mirror to internal directory
       try {

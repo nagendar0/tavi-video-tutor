@@ -139,7 +139,7 @@ test('8. CLI Commands — status, validate & clean', async () => {
 
   // Generate test assets
   const transcriber = new WhisperProvider({ allowTestFallback: true });
-  await runGenerate({ transcriber }, tmpDir);
+  await runGenerate({ transcriber, allowTestFallback: true }, tmpDir);
 
   // Validate should pass after generation
   const valAfter = await runValidate({}, tmpDir);

@@ -82,7 +82,7 @@ test('4. CLI End-to-End — Generation, Caching, Clean-Video & Clean-All', async
   // Step 4a: Run initial generation
   const transcriber = new WhisperProvider({ allowTestFallback: true });
   const translator = new AITutorTranslationProvider({ allowTestFallback: true });
-  await runGenerate({ transcriber, translator }, tmpDir);
+  await runGenerate({ transcriber, translator, allowTestFallback: true }, tmpDir);
 
   const internalManifestPath = path.join(tmpDir, '.aitutor', 'manifest.json');
   const publicManifestPath = path.join(tmpDir, 'public', 'aitutor', 'manifest.json');

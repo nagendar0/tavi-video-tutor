@@ -8,8 +8,10 @@ import { SpeakerAudioCache } from '../audio/cache/SpeakerAudioCache.js';
 import { BoundedTaskQueue } from '../audio/queue/BoundedTaskQueue.js';
 import { AudioTimelineEngine } from '../audio/mixer/AudioTimelineEngine.js';
 import { TimelineMixer } from '../audio/mixer/TimelineMixer.js';
+import { validateGeneratedAudio } from '../audio/validateAudio.js';
+
 import { TempWorkspace } from '../storage/tempWorkspace.js';
-import { resolveDirectMediaSource, resolveVideoSource } from '../video/resolveVideo.js';
+import { resolveDirectMediaSource, resolveVideoSource, validateResolvedRemoteHost } from '../video/resolveVideo.js';
 import { extractAudio } from '../audio/extractAudio.js';
 import { probeMedia } from '../video/MediaProbe.js';
 import { WhisperProvider } from '../transcription/WhisperProvider.js';
@@ -18,7 +20,7 @@ import { TranscriptCache } from '../transcript/transcriptCache.js';
 import { TranscriptNormalizer } from '../transcript/normalizer.js';
 import { SubtitleSegmenter } from '../segmentation/SubtitleSegmenter.js';
 import { MetricsCollector } from '../metrics/MetricsCollector.js';
-import { TranslationValidator } from '../translation/TranslationValidator.js';
+import { TranslationValidator, SCRIPT_RANGE_MAP } from '../translation/TranslationValidator.js';
 import { generateWebVTT, secondsToVttTimestamp } from '../vtt/generateVtt.js';
 import { computeMediaFingerprint } from '../cache/manifest.js';
 import { normalizeLanguageCode, resolveLanguageCapability } from '../languages/registry.js';
@@ -56,6 +58,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
   metrics.cacheStats.misses++;
   let masterTranscript = null;
   let extractedAudio = null;
+  let retainedExtractionWorkspace = null;
   const isMasterCached = transcriptCache.hasMasterTranscript(videoEntry.id, currentFingerprint);
 
   if (isMasterCached && !options.force) {
@@ -69,6 +72,9 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
     try {
       const audioStart = Date.now();
       const resolvedVideo = resolveDirectMediaSource(videoEntry, workspace);
+      if (resolvedVideo.type === 'remote') {
+        await validateResolvedRemoteHost(resolvedVideo.filePath, options);
+      }
       let probeInfo = null;
 
       try {
@@ -103,13 +109,15 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
           onProgress?.({ type: 'ffmpeg-read', message: '→ Reading video URL with FFmpeg' });
           onProgress?.({ type: 'ffmpeg-extract', message: '→ Extracting audio stream' });
           extractedAudio = await extractAudio(resolvedVideo.filePath, workspace, {
-            audioStreamIndex: selectedAudioStreamIndex
+            audioStreamIndex: selectedAudioStreamIndex,
+            allowTestFallback: options.allowTestFallback === true
           });
         } catch (directErr) {
           onProgress?.({ type: 'ffmpeg-fallback', message: '→ Fallback to media download stream...' });
           const fallbackVideo = await resolveVideoSource(videoEntry, workspace);
           extractedAudio = await extractAudio(fallbackVideo.filePath, workspace, {
-            audioStreamIndex: selectedAudioStreamIndex
+            audioStreamIndex: selectedAudioStreamIndex,
+            allowTestFallback: options.allowTestFallback === true
           });
         }
         metrics.recordTiming('audioExtractionTime', Date.now() - audioStart);
@@ -150,9 +158,13 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
         onProgress?.({ type: 'master-created', message: '✓ Master transcript created & saved' });
       }
     } finally {
-      if (!options.keepTemp) {
+      if (!options.keepTemp && requestedAudioLanguages.length === 0) {
         onProgress?.({ type: 'cleaning-audio', message: '→ Cleaning temporary audio' });
         workspace.cleanup();
+      } else if (!options.keepTemp) {
+        // Speaker diarization must analyse the real extracted waveform. Keep this
+        // workspace until the audio-dubbing phase completes.
+        retainedExtractionWorkspace = workspace;
       } else {
         onProgress?.({ type: 'keep-temp', message: `→ Retaining temporary audio workspace (--keep-temp)` });
       }
@@ -195,6 +207,10 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       // Readability alignment & segmentation for target language
       const segmentedTranslated = segmenter.segmentTranscript(translatedSegments);
       const validationResult = validator.validateSegments(masterSegments, segmentedTranslated, targetLang);
+
+      if (targetLang !== sourceLang && validationResult.status !== 'PASS') {
+        throw new Error(`TRANSLATION_VALIDATION_FAILED: ${validationResult.details?.find(d => d.status !== 'PASS')?.reason || validationResult.status}`);
+      }
 
       const vttStart = Date.now();
       const vttString = generateWebVTT(segmentedTranslated);
@@ -275,6 +291,13 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
         ? extractedAudio.audioPath
         : null;
       diarizationResult = await diarizer.diarize(audioSourceForDiarization, speechSourceSegments);
+    }
+
+    if (diarizationResult.status === 'unavailable') {
+      if (!options.keepTemp && retainedExtractionWorkspace) {
+        retainedExtractionWorkspace.cleanup();
+      }
+      throw new Error(`SPEAKER_DIARIZATION_UNAVAILABLE: ${diarizationResult.reason || 'No source audio was available for speaker analysis.'}`);
     }
 
     const detectedSpeakerCount = diarizationResult.detectedSpeakerCount || 1;
@@ -373,7 +396,37 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
           for (const seg of translatedSegments) {
             const spkId = seg.speakerId || 'spk_000001';
             const assignedVoice = voiceAssignments[spkId] || { voiceId: `${targetLang}_voice_1`, pitchOffset: 0, rateOffset: 1.0 };
-            const segText = seg.translatedText || seg.text || seg.originalText || '';
+            
+            // STRICT SEGMENT DATA RESOLUTION: NEVER silently fall back to English for foreign dubs
+            let segText = '';
+            if (targetLang === sourceLang) {
+              segText = String(seg.text || seg.originalText || '').trim();
+            } else {
+              segText = (seg.translatedText !== undefined && seg.translatedText !== null && String(seg.translatedText).trim() !== '')
+                ? String(seg.translatedText).trim()
+                : String(seg.text || '').trim();
+
+              const srcText = String(seg.originalText || '').trim();
+
+              // Fail-safe 1: Missing translation in non-source dub must error rather than speaking English
+              if (!segText && srcText) {
+                throw new Error(`TRANSLATION_MISSING_FOR_DUB: Segment '${seg.segmentId}' has no translated text for target language '${targetLang}'`);
+              }
+
+              // Fail-safe 2: Script validation for distinct-alphabet languages (hi, te, ta, etc.)
+              const scriptRegex = SCRIPT_RANGE_MAP[targetLang];
+              if (scriptRegex && srcText) {
+                const hasAlphaWords = /[a-zA-Z]{2,}/.test(srcText);
+                if (hasAlphaWords) {
+                  const hasScript = scriptRegex.test(segText);
+                  if (!hasScript && segText.toLowerCase() === srcText.toLowerCase()) {
+                    throw new Error(`UNTRANSLATED_SOURCE_TEXT_IN_DUB: Segment '${seg.segmentId}' contains untranslated English text for '${targetLang}' dub`);
+                  }
+                }
+              }
+            }
+
+            console.log(`[TTS Request] lang=${targetLang}, speaker=${spkId}, text="${segText.substring(0, 40)}..."`);
 
             queue.addTask(seg.segmentId, async () => {
               const cacheKeyParams = {
@@ -381,9 +434,12 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
                 speakerId: spkId,
                 segmentId: seg.segmentId,
                 text: segText,
+                sourceLanguage: sourceLang,
                 targetLanguage: targetLang,
                 voiceId: assignedVoice.voiceId,
-                provider: ttsProvider.constructor.name
+                provider: ttsProvider.constructor.name,
+                // Prevent pre-hardening synthetic artifacts from being reused.
+                config: 'real-speech-v1'
               };
 
               const cachedAudio = audioCache.getSegmentAudio(cacheKeyParams);
@@ -401,6 +457,9 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
                   pitchOffset: assignedVoice.pitchOffset,
                   rateOffset: assignedVoice.rateOffset
                 });
+                if (ttsRes.synthetic) {
+                  throw new Error(`SYNTHETIC_TTS_REJECTED: No real speech was generated for '${targetLang}' segment '${seg.segmentId}'.`);
+                }
                 segAudioPath = ttsRes.audioPath;
                 segDuration = ttsRes.duration;
                 audioCache.saveSegmentAudio(cacheKeyParams, segAudioPath, segDuration);
@@ -408,6 +467,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
 
               const aligned = await timelineEngine.alignSegment({
                 ...seg,
+                text: segText,
                 voiceId: assignedVoice.voiceId,
                 generatedAudio: segAudioPath,
                 generatedDuration: segDuration,
@@ -429,6 +489,14 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
           await timelineMixer.mix(alignedSegments, targetM4a, {
             totalDuration,
             ambientAudioPath: (options.preserveAmbient && extractedAudio) ? extractedAudio.audioPath : null
+          });
+
+          // Mandatory audio verification before manifest/cache registration
+          validateGeneratedAudio(targetM4a, {
+            minSizeBytes: 500,
+            expectedCodec: 'aac',
+            decodeTest: true,
+            throwOnError: true
           });
 
           // 4. Save to Manifest & Save detailed generation metadata
@@ -471,10 +539,10 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       const chunk = requestedAudioLanguages.slice(i, i + audioConcurrency);
       await Promise.all(chunk.map((lang, idx) => processAudioLanguage(lang, i + idx, requestedAudioLanguages.length)));
     }
+  }
 
-    if (Object.keys(generatedAudioMap).length > 0) {
-      manifestStore.saveMultilingualAudio(videoEntry, sourceLang, generatedAudioMap, currentFingerprint);
-    }
+  if (!options.keepTemp && retainedExtractionWorkspace) {
+    retainedExtractionWorkspace.cleanup();
   }
 
   return {

@@ -1,6 +1,6 @@
 {
   "name": "tavi-video-tutor",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Enterprise-grade React video player SDK & automated multilingual subtitle & audio dubbing engine powered by Web Worker VTT parsing, TTS speech synthesis, timestamp alignment, automatic video quality ladder, and WAI-ARIA accessibility.",
 
   "type": "module",
@@ -49,6 +49,7 @@
       "default": "./src/subtitles/resolver/qualityResolver.js"
     },
     "./dist/style.css": "./dist/tavi-video-tutor.css",
+    "./dist/tavi-video-tutor.css": "./dist/tavi-video-tutor.css",
     "./style.css": "./dist/tavi-video-tutor.css",
     "./package.json": "./package.json"
   },

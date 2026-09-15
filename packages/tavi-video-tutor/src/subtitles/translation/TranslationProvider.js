@@ -62,8 +62,13 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     super();
     this.options = options;
     this.maxRetries = options.maxRetries || 3;
+    this.timeoutMs = options.timeoutMs || 8000;
     this.maxBatchCues = options.maxBatchCues || 15;
     this.maxBatchChars = options.maxBatchChars || 1500;
+    this.consecutiveFailures = 0;
+    this.circuitBreakerThreshold = options.circuitBreakerThreshold || 3;
+    this.circuitBreakerCooldownMs = options.circuitBreakerCooldownMs || 30000;
+    this.circuitBreakerResetTime = 0;
     loadTranslationTextCache();
   }
 
@@ -73,42 +78,105 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     return Boolean(lang);
   }
 
-  async fetchWithRetry(url) {
+  isCircuitOpen() {
+    if (this.circuitBreakerResetTime && Date.now() < this.circuitBreakerResetTime) {
+      return true;
+    }
+    if (this.circuitBreakerResetTime && Date.now() >= this.circuitBreakerResetTime) {
+      this.circuitBreakerResetTime = 0;
+      this.consecutiveFailures = 0;
+    }
+    return false;
+  }
+
+  recordSuccess() {
+    this.consecutiveFailures = 0;
+    this.circuitBreakerResetTime = 0;
+  }
+
+  recordFailure(err) {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= this.circuitBreakerThreshold) {
+      this.circuitBreakerResetTime = Date.now() + this.circuitBreakerCooldownMs;
+      console.warn(`[MyMemoryTranslationProvider] Circuit breaker tripped after ${this.consecutiveFailures} consecutive failures. Suspended until ${new Date(this.circuitBreakerResetTime).toISOString()}`);
+    }
+  }
+
+  async fetchWithRetry(url, options = {}) {
+    if (this.isCircuitOpen()) {
+      throw new Error(`CIRCUIT_BREAKER_OPEN: Translation provider temporarily suspended due to repeated failures.`);
+    }
+
+    const timeout = options.timeoutMs || this.timeoutMs;
     let attempt = 0;
+    let lastError = null;
+
     while (attempt < this.maxRetries) {
       attempt++;
+      let timer = null;
       try {
-        const response = await fetch(url);
+        const controller = new AbortController();
+        timer = setTimeout(() => {
+          controller.abort(new Error(`Translation request timed out after ${timeout}ms`));
+        }, timeout);
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+
         if (response.status === 429 || response.status >= 500) {
+          const err = new Error(`HTTP_${response.status}: Translation service returned ${response.status}`);
+          lastError = err;
           if (attempt < this.maxRetries) {
             const jitter = Math.floor(Math.random() * 100);
             const backoffMs = Math.pow(2, attempt) * 200 + jitter;
             await new Promise(resolve => setTimeout(resolve, backoffMs));
             continue;
           }
+          this.recordFailure(err);
+          throw err;
         }
+
+        if (!response.ok) {
+          const err = new Error(`HTTP_${response.status}: Translation request failed with status ${response.status}`);
+          this.recordFailure(err);
+          throw err;
+        }
+
+        this.recordSuccess();
         return response;
       } catch (err) {
-        if (attempt < this.maxRetries) {
+        if (timer) clearTimeout(timer);
+        lastError = err;
+        if (attempt < this.maxRetries && !this.isCircuitOpen()) {
           const jitter = Math.floor(Math.random() * 100);
           const backoffMs = Math.pow(2, attempt) * 200 + jitter;
           await new Promise(resolve => setTimeout(resolve, backoffMs));
           continue;
         }
+        this.recordFailure(err);
         throw err;
       }
     }
-    return null;
+
+    this.recordFailure(lastError);
+    throw lastError || new Error(`Translation request failed after ${this.maxRetries} retries`);
   }
 
   async fetchSingleText(text, langPair) {
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langPair}`;
     const response = await this.fetchWithRetry(url);
-    if (response && response.ok) {
-      const data = await response.json();
-      return data.responseData?.translatedText || text;
+    if (!response || !response.ok) {
+      throw new Error(`Translation request failed for pair ${langPair}`);
     }
-    return text;
+    const data = await response.json();
+    if (data.responseStatus && data.responseStatus !== 200) {
+      throw new Error(`MyMemory error (status ${data.responseStatus}): ${data.responseDetails || 'Translation failed'}`);
+    }
+    const translated = data.responseData?.translatedText;
+    if (!translated || typeof translated !== 'string' || !translated.trim() || translated.toUpperCase().includes('MYMEMORY WARNING')) {
+      throw new Error(`Invalid or quota-limited translation response for pair ${langPair}: ${translated || 'empty'}`);
+    }
+    return translated.trim();
   }
 
   async translateSegments(segments, sourceLanguage = 'en', targetLanguage) {
@@ -134,7 +202,7 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     for (let i = 0; i < segments.length; i++) {
       const cue = segments[i];
       const cueId = cue.id || `cue_${String(i + 1).padStart(6, '0')}`;
-      const origText = String(cue.text || '').trim();
+      const origText = String(cue.text || cue.originalText || '').trim();
 
       if (!origText) {
         results[i] = {
@@ -170,7 +238,7 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     let currentChars = 0;
 
     for (const idx of uncachedIndices) {
-      const cueText = String(segments[idx].text || '').trim();
+      const cueText = String(segments[idx].text || segments[idx].originalText || '').trim();
       const addedChars = cueText.length + DELIMITER.length;
 
       if (currentBatch.length >= this.maxBatchCues || (currentChars + addedChars > this.maxBatchChars && currentBatch.length > 0)) {
@@ -186,11 +254,11 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
       batches.push(currentBatch);
     }
 
-    // Step 3: Process batches with failure isolation
+    // Step 3: Process batches with bounded retries and explicit error propagation
     let cacheUpdated = false;
 
     for (const batch of batches) {
-      const textsToTranslate = batch.map(idx => String(segments[idx].text || '').trim());
+      const textsToTranslate = batch.map(idx => String(segments[idx].text || segments[idx].originalText || '').trim());
       const batchCombinedText = textsToTranslate.join(DELIMITER);
 
       let translatedTexts = [];
@@ -202,7 +270,13 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
 
         if (response && response.ok) {
           const data = await response.json();
+          if (data.responseStatus && data.responseStatus !== 200) {
+            throw new Error(`MyMemory API status ${data.responseStatus}`);
+          }
           const rawTranslated = data.responseData?.translatedText || '';
+          if (rawTranslated.toUpperCase().includes('MYMEMORY WARNING')) {
+            throw new Error('MyMemory quota exceeded');
+          }
           const parts = rawTranslated.split('|||').map(p => p.trim());
 
           if (parts.length === batch.length) {
@@ -228,7 +302,11 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
         const cue = segments[idx];
         const cueId = cue.id || `cue_${String(idx + 1).padStart(6, '0')}`;
         const origText = String(cue.text || '').trim();
-        const translatedVal = String(translatedTexts[k] || origText).trim();
+        const translatedVal = String(translatedTexts[k] || '').trim();
+
+        if (!translatedVal) {
+          throw new Error(`TRANSLATION_FAILED: Translation provider produced empty output for language '${targetLanguage}'`);
+        }
 
         results[idx] = {
           id: cueId,
@@ -285,7 +363,7 @@ export class AITutorTranslationProvider extends TranslationProvider {
           id: s.id || `cue_${String(idx + 1).padStart(6, '0')}`,
           start: Number(s.start),
           end: Number(s.end),
-          text: s.text
+          text: `[TEST-${tgtClean}] ${s.text}`
         }));
       }
       throw new Error(`Real translation failed for ${sourceLanguage} -> ${targetLanguage}: ${err.message}`);
@@ -293,3 +371,4 @@ export class AITutorTranslationProvider extends TranslationProvider {
   }
 }
 
+export default TranslationProvider;

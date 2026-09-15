@@ -1,5 +1,6 @@
 import { AudioFeatureExtractor } from './AudioFeatureExtractor.js';
 import { VoiceActivityDetector } from './VoiceActivityDetector.js';
+import fs from 'fs';
 
 /**
  * Universal Speaker Diarizer.
@@ -41,6 +42,22 @@ export class SpeakerDiarizer {
       }
     } else if (audioInput) {
       frames = this.extractor.extractFromBuffer(audioInput);
+    }
+
+    // Speaker inference without waveform data would fabricate identities from
+    // transcript text/timestamps. Preserve explicit upstream labels only; all
+    // other callers receive an honest unavailable result.
+    const hasExplicitSpeakerLabels = Array.isArray(asrSegments) && asrSegments.some(s => s?.speaker || s?.speakerId);
+    if (frames.length === 0 && !hasExplicitSpeakerLabels) {
+      return {
+        status: 'unavailable',
+        reason: 'DIARIZATION_AUDIO_UNAVAILABLE',
+        detectedSpeakerCount: 0,
+        speakers: [],
+        segments: [],
+        overlappingIntervals: [],
+        speakerTimelineMap: {}
+      };
     }
 
     // 1. Voice Activity Detection
@@ -112,6 +129,7 @@ export class SpeakerDiarizer {
         startTime: interval.start,
         endTime: interval.end,
         duration: Number((interval.end - interval.start).toFixed(3)),
+        text: interval.text || '',
         originalText: interval.text || '',
         confidence: interval.confidence || 0.95,
         language: interval.language || 'en',

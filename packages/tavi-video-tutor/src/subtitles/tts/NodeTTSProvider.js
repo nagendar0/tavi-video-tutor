@@ -1,15 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { TTSProvider } from './TTSProvider.js';
 import { getFFmpegBinaryPath } from '../audio/extractAudio.js';
+import { validateGeneratedAudio } from '../audio/validateAudio.js';
 import { normalizeLanguageCode, resolveLanguageCapability } from '../languages/registry.js';
 
 export class NodeTTSProvider extends TTSProvider {
   constructor(options = {}) {
     super(options);
-    this.allowSyntheticFallback = options.allowSyntheticFallback ?? true;
+    // Synthetic tones/silence are useful only for isolated tests. They must never
+    // be the default for a user-facing dubbing job.
+    this.allowSyntheticFallback = options.allowSyntheticFallback === true;
     this.onlineFallback = options.onlineFallback ?? true;
   }
 
@@ -235,11 +238,14 @@ Write-Output ($selectedToken.GetDescription().Trim())
         }
       }
 
-      const voiceArg = matchingVoice ? `-v "${matchingVoice}"` : '';
-      execSync(`say ${voiceArg} -o "${outputPath}" --data-format=LEI16@44100 "${text.replace(/"/g, '\\"')}"`, {
-        stdio: 'ignore',
-        timeout: 8000
-      });
+      const args = [
+        ...(matchingVoice ? ['-v', matchingVoice] : []),
+        '-o', outputPath,
+        '--data-format=LEI16@44100',
+        text
+      ];
+      const result = spawnSync('say', args, { stdio: 'ignore', timeout: 8000 });
+      if (result.status !== 0 || result.error) return null;
 
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
         const dur = this.getAudioDuration(outputPath);
@@ -254,10 +260,11 @@ Write-Output ($selectedToken.GetDescription().Trim())
    */
   async synthesizeLinuxSpeech(text, langCode, outputPath, options = {}) {
     try {
-      execSync(`espeak-ng -v ${langCode} -w "${outputPath}" "${text.replace(/"/g, '\\"')}"`, {
+      const result = spawnSync('espeak-ng', ['-v', langCode, '-w', outputPath, text], {
         stdio: 'ignore',
         timeout: 8000
       });
+      if (result.status !== 0 || result.error) return null;
 
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
         const dur = this.getAudioDuration(outputPath);
@@ -298,12 +305,23 @@ Write-Output ($selectedToken.GetDescription().Trim())
     fs.writeFileSync(tempMp3, buffer);
 
     // Transcode MP3 to WAV using FFmpeg
-    execSync(`"${ffmpeg}" -y -i "${tempMp3}" -ar 44100 -ac 2 -c:a pcm_s16le "${outputPath}"`, {
-      stdio: 'ignore'
-    });
+    try {
+      const transcodeProc = spawnSync(ffmpeg, [
+        '-y',
+        '-i', tempMp3,
+        '-ar', '44100',
+        '-ac', '2',
+        '-c:a', 'pcm_s16le',
+        outputPath
+      ], { windowsHide: true });
 
-    if (fs.existsSync(tempMp3)) {
-      try { fs.unlinkSync(tempMp3); } catch (_) {}
+      if (transcodeProc.status !== 0 && transcodeProc.error) {
+        throw new Error(`Online TTS transcode failed: ${transcodeProc.error.message}`);
+      }
+    } finally {
+      if (fs.existsSync(tempMp3)) {
+        try { fs.unlinkSync(tempMp3); } catch (_) {}
+      }
     }
 
     if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
@@ -329,41 +347,60 @@ Write-Output ($selectedToken.GetDescription().Trim())
     const f1 = Math.round(Math.max(100, Math.min(1000, baseF1 * pitchFactor)));
     const f2 = Math.round(Math.max(200, Math.min(2000, baseF2 * pitchFactor)));
 
-    const ffmpegCmd = `"${ffmpegBin}" -y -f lavfi -i "sine=frequency=${f1}:duration=${durFixed}" -f lavfi -i "sine=frequency=${f2}:duration=${durFixed}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first,volume=0.3" -c:a pcm_s16le -ar 44100 -ac 2 "${outputPath}"`;
-    try {
-      execSync(ffmpegCmd, { stdio: 'ignore' });
-    } catch (err) {
-      try {
-        execSync(`"${ffmpegBin}" -y -f lavfi -i "sine=frequency=${f1}:duration=${durFixed}" -c:a pcm_s16le -ar 44100 -ac 2 "${outputPath}"`, { stdio: 'ignore' });
-      } catch (_) {
-        this.generateDummyWavFile(outputPath, duration);
-      }
+    // 1. Try formant dual-sine harmonic voice synthesis
+    const sineArgs = [
+      '-y',
+      '-f', 'lavfi', '-i', `sine=frequency=${f1}:duration=${durFixed}`,
+      '-f', 'lavfi', '-i', `sine=frequency=${f2}:duration=${durFixed}`,
+      '-filter_complex', '[0:a][1:a]amix=inputs=2:duration=first,volume=0.3',
+      '-c:a', 'pcm_s16le',
+      '-ar', '44100',
+      '-ac', '2',
+      outputPath
+    ];
+
+    let proc = spawnSync(ffmpegBin, sineArgs, { encoding: 'utf8', windowsHide: true });
+    if (proc.status === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 500) {
+      return outputPath;
     }
 
-    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-      this.generateDummyWavFile(outputPath, duration);
+    // 2. Fallback single sine wave
+    const singleSineArgs = [
+      '-y',
+      '-f', 'lavfi', '-i', `sine=frequency=${f1}:duration=${durFixed}`,
+      '-c:a', 'pcm_s16le',
+      '-ar', '44100',
+      '-ac', '2',
+      outputPath
+    ];
+
+    proc = spawnSync(ffmpegBin, singleSineArgs, { encoding: 'utf8', windowsHide: true });
+    if (proc.status === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 500) {
+      return outputPath;
     }
-  }
 
-  generateDummyWavFile(outputPath, duration) {
-    const sampleRate = 44100;
-    const numSamples = Math.round(sampleRate * Math.max(0.5, duration));
-    const wavBuffer = Buffer.alloc(44 + numSamples * 2);
-    wavBuffer.write('RIFF', 0);
-    wavBuffer.writeUInt32LE(36 + numSamples * 2, 4);
-    wavBuffer.write('WAVE', 8);
-    wavBuffer.write('fmt ', 12);
-    wavBuffer.writeUInt32LE(16, 16);
-    wavBuffer.writeUInt16LE(1, 20);
-    wavBuffer.writeUInt16LE(1, 22);
-    wavBuffer.writeUInt32LE(sampleRate, 24);
-    wavBuffer.writeUInt32LE(sampleRate * 2, 28);
-    wavBuffer.writeUInt16LE(2, 32);
-    wavBuffer.writeUInt16LE(16, 34);
-    wavBuffer.write('data', 36);
-    wavBuffer.writeUInt32LE(numSamples * 2, 40);
+    // 3. Fallback to valid silent PCM track (never a fake 44-byte dummy header)
+    const silentArgs = [
+      '-y',
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+      '-t', durFixed,
+      '-c:a', 'pcm_s16le',
+      '-ar', '44100',
+      '-ac', '2',
+      outputPath
+    ];
 
-    fs.writeFileSync(outputPath, wavBuffer);
+    proc = spawnSync(ffmpegBin, silentArgs, { encoding: 'utf8', windowsHide: true });
+    if (proc.status === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 500) {
+      return outputPath;
+    }
+
+    if (fs.existsSync(outputPath)) {
+      try { fs.unlinkSync(outputPath); } catch (_) {}
+    }
+
+    const stderr = (proc.stderr || proc.error?.message || 'Unknown error').trim();
+    throw new Error(`Failed to generate synthetic audio [exitCode=${proc.status}]: ${stderr}`);
   }
 
   getAudioDuration(filePath) {
@@ -373,8 +410,9 @@ Write-Output ($selectedToken.GetDescription().Trim())
       if (!fs.existsSync(ffprobeBin)) {
         ffprobeBin = 'ffprobe';
       }
-      const probeOutput = execSync(`"${ffprobeBin}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-      const parsed = parseFloat(probeOutput.trim());
+      const probe = spawnSync(ffprobeBin, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+      if (probe.status !== 0 || probe.error) return null;
+      const parsed = parseFloat((probe.stdout || '').trim());
       return isNaN(parsed) ? null : parsed;
     } catch (_) {
       return null;

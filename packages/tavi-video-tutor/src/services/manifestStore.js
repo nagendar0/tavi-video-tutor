@@ -1,29 +1,31 @@
-let cachedManifest = null;
-let fetchPromise = null;
+const cachedManifests = new Map();
+const manifestFetches = new Map();
 
 export const loadManifest = async (manifestUrl = '/aitutor/manifest.json') => {
-  if (cachedManifest) return cachedManifest;
+  if (cachedManifests.has(manifestUrl)) return cachedManifests.get(manifestUrl);
 
-  if (fetchPromise) return fetchPromise;
+  if (manifestFetches.has(manifestUrl)) return manifestFetches.get(manifestUrl);
 
-  fetchPromise = (async () => {
+  const fetchPromise = (async () => {
     try {
       if (typeof window === 'undefined' || typeof fetch === 'undefined') {
         return null;
       }
       const response = await fetch(manifestUrl);
       if (response.ok) {
-        cachedManifest = await response.json();
-        return cachedManifest;
+        const manifest = await response.json();
+        cachedManifests.set(manifestUrl, manifest);
+        return manifest;
       }
     } catch (_) {
       // Manifest not found or not generated yet
     } finally {
-      fetchPromise = null;
+      manifestFetches.delete(manifestUrl);
     }
     return null;
   })();
 
+  manifestFetches.set(manifestUrl, fetchPromise);
   return fetchPromise;
 };
 
@@ -44,21 +46,6 @@ export const resolveManifestSubtitle = async (videoSrc, videoId = null) => {
   const exactMatch = entries.find(entry => entry.src === videoSrc);
   if (exactMatch) {
     return exactMatch;
-  }
-
-  // 3. Match by normalized filename/basename
-  const getBasename = (urlStr) => {
-    if (!urlStr) return '';
-    const clean = urlStr.split('?')[0].split('#')[0];
-    return clean.split('/').pop() || '';
-  };
-
-  const targetBasename = getBasename(videoSrc);
-  if (targetBasename) {
-    const filenameMatch = entries.find(entry => getBasename(entry.src) === targetBasename);
-    if (filenameMatch) {
-      return filenameMatch;
-    }
   }
 
   return null;

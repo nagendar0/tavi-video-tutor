@@ -112,12 +112,29 @@ export class LocalNllbProvider extends TranslationProvider {
       }
     }
 
-    console.log(`\nLocal NLLB Translation Engine\n──────────────\nModel: ${this.modelId}\nStatus: Loading model into memory...\n`);
+    console.log(`\nLocal NLLB Translation Engine\n──────────────────────────────\nModel: ${this.modelId}\nEstimated Model Size: ~600 MB\nStatus: Loading model into memory...\n`);
 
-    NLLB_PIPELINE_INSTANCE = await pipeline('translation', this.modelId);
-    console.log(`✓ Local NLLB model loaded successfully!\n`);
-    return NLLB_PIPELINE_INSTANCE;
+    const progress_callback = (evt) => {
+      if (!evt || !evt.file) return;
+      if (evt.status === 'progress' && evt.progress !== undefined) {
+        const pct = Math.round(evt.progress);
+        if (pct % 25 === 0) {
+          const fileName = evt.file.split('/').pop() || evt.file;
+          console.log(`  [NLLB Download] ${fileName}: ${pct}%`);
+        }
+      }
+    };
+
+    try {
+      NLLB_PIPELINE_INSTANCE = await pipeline('translation', this.modelId, { progress_callback });
+      console.log(`✓ Local NLLB model loaded successfully!\n`);
+      return NLLB_PIPELINE_INSTANCE;
+    } catch (loadErr) {
+      console.error(`❌ Failed to load local NLLB model '${this.modelId}':`, loadErr.message);
+      throw loadErr;
+    }
   }
+
 
   async translateSegments(segments, sourceLanguage = 'en', targetLanguage) {
     const srcClean = normalizeLanguageCode(sourceLanguage) || String(sourceLanguage).toLowerCase().trim();
@@ -145,7 +162,7 @@ export class LocalNllbProvider extends TranslationProvider {
     for (let i = 0; i < segments.length; i++) {
       const cue = segments[i];
       const cueId = cue.id || `cue_${String(i + 1).padStart(6, '0')}`;
-      const origText = String(cue.text || '').trim();
+      const origText = String(cue.text || cue.originalText || '').trim();
 
       if (!origText) {
         results[i] = { id: cueId, start: Number(cue.start), end: Number(cue.end), text: '' };
@@ -197,11 +214,11 @@ export class LocalNllbProvider extends TranslationProvider {
     for (const idx of uncachedIndices) {
       const cue = segments[idx];
       const cueId = cue.id || `cue_${String(idx + 1).padStart(6, '0')}`;
-      const origText = String(cue.text || '').trim();
+      const origText = String(cue.text || cue.originalText || '').trim();
 
       const { text: protectedText, map: tokenMap } = protectTokens(origText);
 
-      let translatedText = origText;
+      let translatedText = '';
       try {
         const output = await translator(protectedText, {
           src_lang: srcFlores,
@@ -209,10 +226,14 @@ export class LocalNllbProvider extends TranslationProvider {
         });
 
         if (output && output[0] && output[0].translation_text) {
-          translatedText = output[0].translation_text;
+          translatedText = output[0].translation_text.trim();
         }
-      } catch (_) {
-        translatedText = origText;
+      } catch (inferErr) {
+        throw new Error(`Local NLLB inference failed for cue ${cueId} (${srcClean} -> ${tgtClean}): ${inferErr.message}`);
+      }
+
+      if (!translatedText) {
+        throw new Error(`Local NLLB produced empty translation for cue ${cueId} (${srcClean} -> ${tgtClean})`);
       }
 
       const finalText = restoreTokens(translatedText, tokenMap);
@@ -228,6 +249,7 @@ export class LocalNllbProvider extends TranslationProvider {
       LOCAL_CACHE_MAP.set(cacheKey, finalText);
       cacheUpdated = true;
     }
+
 
     if (cacheUpdated) {
       saveCache();

@@ -83,6 +83,16 @@ export class TranslationValidator {
       return { status: 'FAIL', details: [] };
     }
 
+    if (sourceSegments.length !== translatedSegments.length) {
+      return {
+        status: 'FAIL',
+        passCount: 0,
+        suspiciousCount: 0,
+        failCount: Math.abs(sourceSegments.length - translatedSegments.length),
+        details: [{ status: 'FAIL', reason: 'Source and translated cue counts differ' }]
+      };
+    }
+
     let passCount = 0;
     let suspiciousCount = 0;
     let failCount = 0;

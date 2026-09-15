@@ -65,7 +65,7 @@ export class TranslationRouter {
           console.log(`→ Switching to Local NLLB Fallback for ${targetLang}...`);
           translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
         } else {
-          throw new Error(`UNSUPPORTED_OFFLINE: Online translation failed and language '${targetLang}' is unsupported by local NLLB-200 fallback model.`);
+          throw new Error(`TRANSLATION NOT AVAILABLE FOR <${targetLang}> [UNSUPPORTED_OFFLINE]: Online translation failed (${onlineErr.message}) and language '${targetLang}' is unsupported by local NLLB-200 fallback model.`);
         }
       }
 
@@ -76,20 +76,24 @@ export class TranslationRouter {
     }
 
     if (!translated) {
-      throw new Error(`No translation provider available for pair ${sourceLang} -> ${targetLang}`);
+      throw new Error(`TRANSLATION NOT AVAILABLE FOR <${targetLang}>: No translation provider available for pair ${sourceLang} -> ${targetLang}`);
     }
+
 
     // Preserve speaker identity and timeline invariants from source segments
     return translated.map((t, idx) => {
       const orig = segments[idx] || {};
+      const targetText = String(t.translatedText || t.text || '').trim();
+      const sourceText = String(orig.originalText || orig.text || '').trim();
+
       return {
         ...orig,
         ...t,
         speakerId: orig.speakerId || t.speakerId,
         segmentId: orig.segmentId || t.segmentId || t.id,
-        originalText: orig.originalText || orig.text,
-        translatedText: t.text || t.translatedText,
-        text: t.text || t.translatedText
+        originalText: sourceText,
+        translatedText: targetText,
+        text: targetText || (srcClean === tgtClean ? sourceText : '')
       };
     });
   }

@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import { Readable } from 'stream';
+import { promises as dns } from 'dns';
+import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
 /**
@@ -281,6 +282,31 @@ export const validateRemoteUrl = (rawUrl, options = {}) => {
   return parsedUrl;
 };
 
+/**
+ * Reject hostnames that resolve to a restricted address. This complements the
+ * literal-host check above and prevents a public-looking DNS name from being
+ * used as a proxy to a private network.
+ */
+export const validateResolvedRemoteHost = async (rawUrl, options = {}) => {
+  const parsedUrl = validateRemoteUrl(rawUrl, options);
+  if (options.allowPrivateNetwork || net.isIP(parsedUrl.hostname)) {
+    return parsedUrl;
+  }
+
+  let addresses;
+  try {
+    addresses = await dns.lookup(parsedUrl.hostname, { all: true, verbatim: true });
+  } catch (err) {
+    throw new Error(`SSRF_DNS_FAILED: Unable to resolve '${parsedUrl.hostname}': ${err.message}`);
+  }
+
+  if (!addresses.length || addresses.some(({ address }) => isPrivateHost(address))) {
+    throw new Error(`SSRF_BLOCKED: Hostname '${parsedUrl.hostname}' resolves to a restricted private or loopback network address.`);
+  }
+
+  return parsedUrl;
+};
+
 export const resolveDirectMediaSource = (videoEntry, tempWorkspace, options = {}) => {
   const src = videoEntry.src;
 
@@ -330,7 +356,7 @@ export const resolveVideoSource = async (videoEntry, tempWorkspace, options = {}
   let redirectCount = 0;
 
   while (redirectCount <= maxRedirects) {
-    validateRemoteUrl(currentUrl, options);
+    await validateResolvedRemoteHost(currentUrl, options);
 
     try {
       const controller = new AbortController();
@@ -367,8 +393,25 @@ export const resolveVideoSource = async (videoEntry, tempWorkspace, options = {}
         throw new Error(`HTTP_${response.status}: Failed to fetch media from ${redactUrlSecrets(currentUrl)}`);
       }
 
+      const maxDownloadBytes = options.maxDownloadBytes ?? 2 * 1024 * 1024 * 1024;
+      const contentLength = Number(response.headers.get('content-length') || 0);
+      if (Number.isFinite(contentLength) && contentLength > maxDownloadBytes) {
+        throw new Error(`MEDIA_TOO_LARGE: Remote media declares ${contentLength} bytes; limit is ${maxDownloadBytes} bytes.`);
+      }
+
       const fileStream = fs.createWriteStream(targetPath);
-      await pipeline(Readable.fromWeb(response.body), fileStream);
+      let downloadedBytes = 0;
+      const sizeGuard = new Transform({
+        transform(chunk, encoding, callback) {
+          downloadedBytes += chunk.length;
+          if (downloadedBytes > maxDownloadBytes) {
+            callback(new Error(`MEDIA_TOO_LARGE: Remote media exceeded ${maxDownloadBytes} bytes.`));
+            return;
+          }
+          callback(null, chunk);
+        }
+      });
+      await pipeline(Readable.fromWeb(response.body), sizeGuard, fileStream);
 
       return {
         type: 'downloaded',

@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { spawn } from 'child_process';
 import { getFFmpegBinaryPath } from '../audio/extractAudio.js';
 import { getFFprobeBinaryPath } from '../video/MediaProbe.js';
 import { isWhisperModelCached, QUALITY_MODEL_MAP, WHISPER_MODEL_SIZES } from '../transcription/WhisperProvider.js';
+import { getTransformers } from '../transcription/transformersLoader.js';
 import { AITUTOR_LANGUAGES } from '../languages/registry.js';
 import { TranslationRouter } from '../translation/TranslationRouter.js';
 import { NodeTTSProvider } from '../tts/NodeTTSProvider.js';
@@ -21,12 +21,32 @@ export const checkNode = () => {
   };
 };
 
+export const verifyFFmpegFunctional = (binPath) => {
+  return new Promise((resolve) => {
+    let proc;
+    const isWinScript = process.platform === 'win32' && (binPath.endsWith('.bat') || binPath.endsWith('.cmd'));
+    try {
+      const execBinary = isWinScript ? 'cmd.exe' : binPath;
+      const execArgs = isWinScript ? ['/c', binPath, '-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', '-t', '0.05', '-f', 'null', '-'] : ['-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', '-t', '0.05', '-f', 'null', '-'];
+      proc = spawn(execBinary, execArgs);
+    } catch {
+      resolve(false);
+      return;
+    }
+    proc.on('error', () => resolve(false));
+    proc.on('close', (code) => resolve(code === 0));
+  });
+};
+
 export const checkFFmpeg = () => {
   return new Promise((resolve) => {
     const binPath = getFFmpegBinaryPath();
     let proc;
+    const isWinScript = process.platform === 'win32' && (binPath.endsWith('.bat') || binPath.endsWith('.cmd'));
     try {
-      proc = spawn(binPath, ['-version']);
+      const execBinary = isWinScript ? 'cmd.exe' : binPath;
+      const execArgs = isWinScript ? ['/c', binPath, '-version'] : ['-version'];
+      proc = spawn(execBinary, execArgs);
     } catch (err) {
       resolve({
         name: 'FFmpeg',
@@ -49,16 +69,29 @@ export const checkFFmpeg = () => {
         error: err.message
       });
     });
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
       if (code === 0) {
         const firstLine = stdout.split('\n')[0] || 'ffmpeg version unknown';
         const verMatch = firstLine.match(/ffmpeg\s+version\s+([^\s]+)/i);
-        resolve({
-          name: 'FFmpeg',
-          pass: true,
-          path: binPath,
-          version: verMatch ? verMatch[1] : firstLine.trim()
-        });
+        const versionStr = verMatch ? verMatch[1] : firstLine.trim();
+
+        const isFunctional = await verifyFFmpegFunctional(binPath);
+        if (isFunctional) {
+          resolve({
+            name: 'FFmpeg',
+            pass: true,
+            path: binPath,
+            version: versionStr
+          });
+        } else {
+          resolve({
+            name: 'FFmpeg',
+            pass: false,
+            path: binPath,
+            version: versionStr,
+            error: 'BROKEN: FFmpeg executable exists but failed synthetic transcode test'
+          });
+        }
       } else {
         resolve({
           name: 'FFmpeg',
@@ -72,12 +105,32 @@ export const checkFFmpeg = () => {
   });
 };
 
+export const verifyFFprobeFunctional = (binPath) => {
+  return new Promise((resolve) => {
+    let proc;
+    const isWinScript = process.platform === 'win32' && (binPath.endsWith('.bat') || binPath.endsWith('.cmd'));
+    try {
+      const execBinary = isWinScript ? 'cmd.exe' : binPath;
+      const execArgs = isWinScript ? ['/c', binPath, '-f', 'lavfi', '-i', 'anullsrc', '-show_streams', '-v', 'error'] : ['-f', 'lavfi', '-i', 'anullsrc', '-show_streams', '-v', 'error'];
+      proc = spawn(execBinary, execArgs);
+    } catch {
+      resolve(false);
+      return;
+    }
+    proc.on('error', () => resolve(false));
+    proc.on('close', (code) => resolve(code === 0));
+  });
+};
+
 export const checkFFprobe = () => {
   return new Promise((resolve) => {
     const binPath = getFFprobeBinaryPath();
     let proc;
+    const isWinScript = process.platform === 'win32' && (binPath.endsWith('.bat') || binPath.endsWith('.cmd'));
     try {
-      proc = spawn(binPath, ['-version']);
+      const execBinary = isWinScript ? 'cmd.exe' : binPath;
+      const execArgs = isWinScript ? ['/c', binPath, '-version'] : ['-version'];
+      proc = spawn(execBinary, execArgs);
     } catch (err) {
       resolve({
         name: 'FFprobe',
@@ -100,16 +153,29 @@ export const checkFFprobe = () => {
         error: err.message
       });
     });
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
       if (code === 0) {
         const firstLine = stdout.split('\n')[0] || 'ffprobe version unknown';
         const verMatch = firstLine.match(/ffprobe\s+version\s+([^\s]+)/i);
-        resolve({
-          name: 'FFprobe',
-          pass: true,
-          path: binPath,
-          version: verMatch ? verMatch[1] : firstLine.trim()
-        });
+        const versionStr = verMatch ? verMatch[1] : firstLine.trim();
+
+        const isFunctional = await verifyFFprobeFunctional(binPath);
+        if (isFunctional) {
+          resolve({
+            name: 'FFprobe',
+            pass: true,
+            path: binPath,
+            version: versionStr
+          });
+        } else {
+          resolve({
+            name: 'FFprobe',
+            pass: false,
+            path: binPath,
+            version: versionStr,
+            error: 'BROKEN: FFprobe executable exists but failed stream inspection test'
+          });
+        }
       } else {
         resolve({
           name: 'FFprobe',
@@ -132,7 +198,7 @@ export const checkWingetAvailable = () => {
     let proc;
     try {
       proc = spawn('winget', ['--version']);
-    } catch (_) {
+    } catch {
       resolve(false);
       return;
     }
@@ -141,30 +207,25 @@ export const checkWingetAvailable = () => {
   });
 };
 
-export const checkWhisperProvider = async () => {
-  let pass = false;
-  let providerName = 'None';
+export const checkWhisperProvider = async (options = {}) => {
   try {
-    const hfModule = await import('@huggingface/transformers').catch(() => null);
-    if (hfModule && typeof hfModule.pipeline === 'function') {
-      pass = true;
-      providerName = '@huggingface/transformers';
-    } else {
-      const xenovaModule = await import('@xenova/transformers').catch(() => null);
-      if (xenovaModule && typeof xenovaModule.pipeline === 'function') {
-        pass = true;
-        providerName = '@xenova/transformers';
-      }
+    const cwd = options.cwd || process.cwd();
+    const { pipeline } = await getTransformers({ cwd, forceReload: options.forceReload });
+    if (typeof pipeline === 'function') {
+      return {
+        name: 'Whisper Provider',
+        pass: true,
+        provider: '@huggingface/transformers',
+        details: '@huggingface/transformers'
+      };
     }
-  } catch (_) {
-    pass = false;
-  }
+  } catch {}
 
   return {
     name: 'Whisper Provider',
-    pass,
-    provider: providerName,
-    details: pass ? providerName : 'Missing (@huggingface/transformers)'
+    pass: false,
+    provider: 'None',
+    details: 'Missing (@huggingface/transformers)'
   };
 };
 
@@ -203,7 +264,7 @@ export const checkTranslationProvider = (config = {}) => {
 
 export const checkTTSProvider = (config = {}) => {
   try {
-    const tts = new NodeTTSProvider(config.audio?.tts || {});
+    new NodeTTSProvider(config.audio?.tts || {});
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
     const engine = isWin ? 'Windows System.Speech' : isMac ? 'macOS say' : 'Linux espeak / FFmpeg synth';
@@ -270,7 +331,7 @@ export const checkDiskSpace = (cwd = process.cwd(), requiredMB = 200) => {
         details: `${freeMB} MB available (min ${requiredMB} MB)`
       };
     }
-  } catch (_) {}
+  } catch {}
 
   // Fallback write test
   try {

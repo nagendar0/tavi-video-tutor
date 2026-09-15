@@ -126,7 +126,11 @@ test('Gate 3: Partial language translation failure does not destroy or abort suc
         if (tgt === 'broken_lang') {
           throw new Error('Simulated upstream failure for broken_lang');
         }
-        return segs.map(s => ({ ...s, text: `Translated in ${tgt}` }));
+        const translations = {
+          es: 'Lección traducida',
+          hi: 'अनुवादित पाठ'
+        };
+        return segs.map(s => ({ ...s, text: translations[tgt] || `Translated in ${tgt}` }));
       }
     };
 
