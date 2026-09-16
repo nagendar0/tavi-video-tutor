@@ -13,6 +13,8 @@ import { TimelineMixer } from '../src/subtitles/audio/mixer/TimelineMixer.js';
 import { AudioController } from '../src/services/AudioController.js';
 import { resolveAudioAvailability } from '../src/subtitles/resolver/audioResolver.js';
 
+import { createValidWaveBuffer } from '../src/subtitles/audio/validateAudio.js';
+
 class MockTTSProvider {
   constructor(options = {}) {
     this.options = options;
@@ -24,9 +26,9 @@ class MockTTSProvider {
     const outputDir = options.outputDir || os.tmpdir();
     fs.mkdirSync(outputDir, { recursive: true });
     const filePath = path.join(outputDir, `mock_${Date.now()}_${Math.random().toString(36).substring(2,6)}.wav`);
-    // Minimal mock WAV
-    const dummyBuf = Buffer.alloc(100);
-    fs.writeFileSync(filePath, dummyBuf);
+    // Valid mock WAV audio
+    const validBuf = createValidWaveBuffer(2.0, 16000, 1);
+    fs.writeFileSync(filePath, validBuf);
     return {
       audioPath: filePath,
       duration: 2.0,
@@ -105,7 +107,7 @@ test('2. SpeakerAudioCache — Granular Segment-Level Audio Cache (Phase 22)', (
     const cache = new SpeakerAudioCache(tmpDir);
 
     const dummyWav = path.join(tmpDir, 'source.wav');
-    fs.writeFileSync(dummyWav, 'dummy audio content');
+    fs.writeFileSync(dummyWav, createValidWaveBuffer(2.5, 16000, 1));
 
     const params = {
       videoFingerprint: 'fp_999',
@@ -138,7 +140,7 @@ test('3. AudioTimelineEngine — Safe Tempo Bounds & Pacing Preservation (Phase 
   try {
     const engine = new AudioTimelineEngine({ outputDir: tmpDir, minTempo: 0.75, maxTempo: 1.5 });
     const dummyAudio = path.join(tmpDir, 'input.wav');
-    fs.writeFileSync(dummyAudio, 'dummy wav');
+    fs.writeFileSync(dummyAudio, createValidWaveBuffer(6.0, 16000, 1));
 
     // Case A: Natural ratio within bounds
     const segA = {
@@ -200,7 +202,8 @@ test('4. End-to-End Speaker-Aware Generation with Multi-Track Timeline (Phases 2
           transcribe: async () => ({ language: 'en', segments: masterSegments })
         },
         audioLanguages: ['hi', 'te'],
-        force: true
+        force: true,
+        allowTestFallback: true
       }
     );
 

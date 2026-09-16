@@ -1,52 +1,74 @@
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import { Readable } from 'stream';
+import http from 'http';
+import https from 'https';
+import { promises as dns } from 'dns';
+import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
 /**
- * Parses an IPv4 address (dotted decimal, integer, hex, or octal) into a 32-bit unsigned integer.
+ * Parses an individual IPv4 address part (decimal, hex, or octal).
+ */
+const parseIPv4Part = (partStr) => {
+  if (!partStr || typeof partStr !== 'string') return null;
+  const p = partStr.trim();
+  if (!p) return null;
+  let val;
+  if (/^0x[0-9a-fA-F]+$/i.test(p)) {
+    val = parseInt(p, 16);
+  } else if (/^0[0-7]+$/.test(p)) {
+    val = parseInt(p, 8);
+  } else if (/^\d+$/.test(p)) {
+    val = parseInt(p, 10);
+  } else {
+    return null;
+  }
+  if (!Number.isSafeInteger(val) || val < 0 || isNaN(val)) return null;
+  return val;
+};
+
+/**
+ * Parses an IPv4 address (dotted decimal, integer, hex, or octal in 1, 2, 3, or 4 parts)
+ * into a 32-bit unsigned integer per POSIX inet_aton standard.
  * Returns null if invalid.
  */
 export const parseIPv4ToUint32 = (ipStr) => {
   if (!ipStr || typeof ipStr !== 'string') return null;
   const clean = ipStr.trim();
 
-  // Pure integer / decimal representation (e.g. "2130706433")
-  if (/^\d+$/.test(clean)) {
-    const num = Number(clean);
-    if (Number.isSafeInteger(num) && num >= 0 && num <= 0xffffffff) {
-      return num >>> 0;
-    }
-  }
-
-  // Hexadecimal notation (e.g. "0x7f000001")
-  if (/^0x[0-9a-fA-F]+$/i.test(clean)) {
-    const num = Number(clean);
-    if (Number.isSafeInteger(num) && num >= 0 && num <= 0xffffffff) {
-      return num >>> 0;
-    }
-  }
-
   const parts = clean.split('.');
-  if (parts.length === 4) {
-    let result = 0;
-    for (let i = 0; i < 4; i++) {
-      const part = parts[i];
-      let val;
-      if (/^0x[0-9a-fA-F]+$/i.test(part)) {
-        val = parseInt(part, 16);
-      } else if (/^0[0-7]+$/.test(part)) {
-        val = parseInt(part, 8);
-      } else if (/^\d+$/.test(part)) {
-        val = parseInt(part, 10);
-      } else {
-        return null;
-      }
-      if (val < 0 || val > 255 || isNaN(val)) return null;
-      result = (result << 8) | val;
-    }
-    return result >>> 0;
+  if (parts.length < 1 || parts.length > 4) return null;
+
+  const parsedParts = [];
+  for (const part of parts) {
+    const val = parseIPv4Part(part);
+    if (val === null) return null;
+    parsedParts.push(val);
+  }
+
+  // 1 part (a): 32-bit integer (e.g. "2130706433" or "0x7f000001")
+  if (parsedParts.length === 1) {
+    if (parsedParts[0] > 0xffffffff) return null;
+    return parsedParts[0] >>> 0;
+  }
+
+  // 2 parts (a.b): a is 8 bits (0..255), b is 24 bits (0..16777215) (e.g. "127.1")
+  if (parsedParts.length === 2) {
+    if (parsedParts[0] > 255 || parsedParts[1] > 0xffffff) return null;
+    return (((parsedParts[0] << 24) >>> 0) | parsedParts[1]) >>> 0;
+  }
+
+  // 3 parts (a.b.c): a is 8 bits, b is 8 bits, c is 16 bits (0..65535) (e.g. "127.0.1")
+  if (parsedParts.length === 3) {
+    if (parsedParts[0] > 255 || parsedParts[1] > 255 || parsedParts[2] > 0xffff) return null;
+    return (((parsedParts[0] << 24) >>> 0) | (parsedParts[1] << 16) | parsedParts[2]) >>> 0;
+  }
+
+  // 4 parts (a.b.c.d): each is 8 bits (0..255)
+  if (parsedParts.length === 4) {
+    if (parsedParts.some(p => p > 255)) return null;
+    return (((parsedParts[0] << 24) >>> 0) | (parsedParts[1] << 16) | (parsedParts[2] << 8) | parsedParts[3]) >>> 0;
   }
 
   return null;
@@ -281,6 +303,33 @@ export const validateRemoteUrl = (rawUrl, options = {}) => {
   return parsedUrl;
 };
 
+/**
+ * Reject hostnames that resolve to a restricted address. This complements the
+ * literal-host check above and prevents a public-looking DNS name from being
+ * used as a proxy to a private network.
+ */
+export const validateResolvedRemoteHost = async (rawUrl, options = {}) => {
+  const parsedUrl = validateRemoteUrl(rawUrl, options);
+  if (options.allowPrivateNetwork || net.isIP(parsedUrl.hostname)) {
+    parsedUrl.address = parsedUrl.hostname;
+    return parsedUrl;
+  }
+
+  let addresses;
+  try {
+    addresses = await dns.lookup(parsedUrl.hostname, { all: true, verbatim: true });
+  } catch (err) {
+    throw new Error(`SSRF_DNS_FAILED: Unable to resolve '${parsedUrl.hostname}': ${err.message}`);
+  }
+
+  if (!addresses.length || addresses.some(({ address }) => isPrivateHost(address))) {
+    throw new Error(`SSRF_BLOCKED: Hostname '${parsedUrl.hostname}' resolves to a restricted private or loopback network address.`);
+  }
+
+  parsedUrl.address = addresses[0].address;
+  return parsedUrl;
+};
+
 export const resolveDirectMediaSource = (videoEntry, tempWorkspace, options = {}) => {
   const src = videoEntry.src;
 
@@ -330,29 +379,68 @@ export const resolveVideoSource = async (videoEntry, tempWorkspace, options = {}
   let redirectCount = 0;
 
   while (redirectCount <= maxRedirects) {
-    validateRemoteUrl(currentUrl, options);
+    const validatedUrl = await validateResolvedRemoteHost(currentUrl, options);
+    const pinnedIp = validatedUrl.address || validatedUrl.hostname;
 
     try {
-      const controller = new AbortController();
-      const timeoutMs = options.timeoutMs || 30000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const isHttps = validatedUrl.protocol === 'https:';
+      const client = isHttps ? https : http;
 
-      const response = await fetch(currentUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
-        },
-        redirect: 'manual',
-        signal: controller.signal
+      const agent = isHttps
+        ? new https.Agent({
+            keepAlive: false,
+            lookup: (_hostname, _opts, cb) => {
+              cb(null, pinnedIp, net.isIP(pinnedIp));
+            }
+          })
+        : new http.Agent({
+            keepAlive: false,
+            lookup: (_hostname, _opts, cb) => {
+              cb(null, pinnedIp, net.isIP(pinnedIp));
+            }
+          });
+
+      const timeoutMs = options.timeoutMs || 30000;
+      const maxDownloadBytes = options.maxDownloadBytes ?? 2 * 1024 * 1024 * 1024;
+
+      const response = await new Promise((resolve, reject) => {
+        const req = client.request(validatedUrl, {
+          method: 'GET',
+          agent,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+          },
+          timeout: timeoutMs
+        });
+
+        const timer = setTimeout(() => {
+          req.destroy(new Error(`Timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        req.on('error', (err) => {
+          clearTimeout(timer);
+          agent.destroy();
+          reject(err);
+        });
+
+        req.on('response', (res) => {
+          clearTimeout(timer);
+          resolve({ res, agent });
+        });
+
+        req.end();
       });
 
-      clearTimeout(timeoutId);
+      const res = response.res;
+      const resAgent = response.agent;
 
       // Handle Redirects with Security Re-validation
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get('location');
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+        resAgent.destroy();
+        const location = res.headers['location'];
         if (!location) {
-          throw new Error(`HTTP ${response.status} redirect missing Location header.`);
+          throw new Error(`HTTP ${res.statusCode} redirect missing Location header.`);
         }
         const resolvedRedirect = new URL(location, currentUrl).toString();
         redirectCount++;
@@ -363,12 +451,32 @@ export const resolveVideoSource = async (videoEntry, tempWorkspace, options = {}
         continue;
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP_${response.status}: Failed to fetch media from ${redactUrlSecrets(currentUrl)}`);
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        resAgent.destroy();
+        throw new Error(`HTTP_${res.statusCode}: Failed to fetch media from ${redactUrlSecrets(currentUrl)}`);
+      }
+
+      const contentLength = Number(res.headers['content-length'] || 0);
+      if (Number.isFinite(contentLength) && contentLength > maxDownloadBytes) {
+        resAgent.destroy();
+        throw new Error(`MEDIA_TOO_LARGE: Remote media declares ${contentLength} bytes; limit is ${maxDownloadBytes} bytes.`);
       }
 
       const fileStream = fs.createWriteStream(targetPath);
-      await pipeline(Readable.fromWeb(response.body), fileStream);
+      let downloadedBytes = 0;
+      const sizeGuard = new Transform({
+        transform(chunk, encoding, callback) {
+          downloadedBytes += chunk.length;
+          if (downloadedBytes > maxDownloadBytes) {
+            callback(new Error(`MEDIA_TOO_LARGE: Remote media exceeded ${maxDownloadBytes} bytes.`));
+            return;
+          }
+          callback(null, chunk);
+        }
+      });
+
+      await pipeline(res, sizeGuard, fileStream);
+      resAgent.destroy();
 
       return {
         type: 'downloaded',

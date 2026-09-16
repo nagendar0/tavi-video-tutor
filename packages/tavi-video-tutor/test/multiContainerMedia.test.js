@@ -9,6 +9,7 @@ import { planQualityLadder } from '../src/subtitles/video/QualityPlanner.js';
 import { processSingleVideo } from '../src/subtitles/pipeline/processVideo.js';
 import { processVideoQuality } from '../src/subtitles/video/processVideoQuality.js';
 import { ManifestStore } from '../src/subtitles/cache/manifest.js';
+import { createValidWaveBuffer } from '../src/subtitles/audio/validateAudio.js';
 
 console.log('🧪 Running Multi-Container Media Input Normalization Test Suite...\n');
 
@@ -305,14 +306,20 @@ test('10. Full ProcessVideo pipeline works seamlessly on MKV input container', a
 
   const dummyTranslator = {
     supports: () => true,
-    translateSegments: async (segs, src, tgt) => segs.map(s => ({ ...s, text: `[${tgt}] ${s.text}` }))
+    translateSegments: async (segs, src, tgt) => {
+      const translations = {
+        hi: 'इस पाठ में आपका स्वागत है।',
+        te: 'ఈ పాఠానికి స్వాగతం.'
+      };
+      return segs.map(s => ({ ...s, text: translations[tgt] || `Translated in ${tgt}` }));
+    }
   };
 
   const dummyTTS = {
     synthesize: async (text, lang, opts) => {
-      const p = path.join(opts.outputDir, `${lang}_synth.m4a`);
-      fs.writeFileSync(p, Buffer.alloc(100));
-      return { audioPath: p, duration: 1.0 };
+      const p = path.join(opts.outputDir, `${lang}_synth.wav`);
+      fs.writeFileSync(p, createValidWaveBuffer(1.0, 16000, 1));
+      return { audioPath: p, duration: 1.0, format: 'wav' };
     }
   };
 

@@ -7,13 +7,19 @@ const DB_VERSION = 1;
 const STORE_SUBTITLES = 'subtitles';
 const STORE_MANIFESTS = 'manifests';
 
+let dbInstancePromise = null;
+
 export class IndexedDBCache {
   static async openDB() {
     if (typeof window === 'undefined' || !window.indexedDB) {
       return null;
     }
 
-    return new Promise((resolve, reject) => {
+    if (dbInstancePromise) {
+      return dbInstancePromise;
+    }
+
+    dbInstancePromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onupgradeneeded = (e) => {
@@ -26,9 +32,35 @@ export class IndexedDBCache {
         }
       };
 
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => {
+          db.close();
+          dbInstancePromise = null;
+        };
+        db.onclose = () => {
+          dbInstancePromise = null;
+        };
+        resolve(db);
+      };
+
+      request.onerror = () => {
+        dbInstancePromise = null;
+        reject(request.error);
+      };
     });
+
+    return dbInstancePromise;
+  }
+
+  static async closeDB() {
+    if (dbInstancePromise) {
+      try {
+        const db = await dbInstancePromise;
+        db?.close();
+      } catch (_) {}
+      dbInstancePromise = null;
+    }
   }
 
   static async getSubtitle(key) {
@@ -41,8 +73,20 @@ export class IndexedDBCache {
         const store = tx.objectStore(STORE_SUBTITLES);
         const req = store.get(key);
 
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
+        const cleanup = () => {
+          req.onsuccess = null;
+          req.onerror = null;
+        };
+
+        req.onsuccess = () => {
+          const res = req.result || null;
+          cleanup();
+          resolve(res);
+        };
+        req.onerror = () => {
+          cleanup();
+          resolve(null);
+        };
       });
     } catch (_) {
       return null;
@@ -59,8 +103,19 @@ export class IndexedDBCache {
         const store = tx.objectStore(STORE_SUBTITLES);
         const req = store.put(value, key);
 
-        req.onsuccess = () => resolve(true);
-        req.onerror = () => resolve(false);
+        const cleanup = () => {
+          req.onsuccess = null;
+          req.onerror = null;
+        };
+
+        req.onsuccess = () => {
+          cleanup();
+          resolve(true);
+        };
+        req.onerror = () => {
+          cleanup();
+          resolve(false);
+        };
       });
     } catch (_) {
       return false;

@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
+import { validateGeneratedAudio } from '../audio/validateAudio.js';
+import { TranslationValidator } from '../translation/TranslationValidator.js';
 
 export const computeMediaFingerprint = (srcOrEntry, cwd = process.cwd(), extra = null, remoteMetadata = null) => {
   const src = typeof srcOrEntry === 'string' ? srcOrEntry : (srcOrEntry && srcOrEntry.src ? srcOrEntry.src : '');
@@ -170,7 +172,7 @@ export class ManifestStore {
     return requestedLangs.every(lang => this.isLanguageCached(videoEntry.id, lang, fingerprint));
   }
 
-  isLanguageCached(videoId, langCode, fingerprint = null) {
+  isLanguageCached(videoId, langCode, fingerprint = null, options = {}) {
     const manifest = this.loadManifest();
     const entry = manifest[videoId];
     if (!entry) return false;
@@ -182,13 +184,41 @@ export class ManifestStore {
 
     try {
       const publicPath = normalizeSubtitlePath(subInfo.src, this.publicDir);
-      return fs.existsSync(publicPath);
+      if (!fs.existsSync(publicPath)) return false;
+
+      // Validate VTT content — do not accept empty, malformed, or untranslated VTT as cache hit
+      const content = fs.readFileSync(publicPath, 'utf8');
+      const sourceLang = entry.sourceLanguage || entry.language || 'en';
+
+      let sourceVttContent = null;
+      if (normLang !== sourceLang) {
+        const srcSubInfo = entry.subtitles?.[sourceLang];
+        if (srcSubInfo?.src && srcSubInfo.src !== subInfo.src) {
+          try {
+            const srcPath = normalizeSubtitlePath(srcSubInfo.src, this.publicDir);
+            if (fs.existsSync(srcPath)) {
+              sourceVttContent = fs.readFileSync(srcPath, 'utf8');
+            }
+          } catch (_) {}
+        }
+      }
+
+      const validator = new TranslationValidator();
+      const validation = validator.validateVttContent(content, normLang, sourceLang, sourceVttContent);
+      if (!validation.valid) {
+        if (options.pruneCorrupt) {
+          try { fs.unlinkSync(publicPath); } catch (_) {}
+        }
+        return false;
+      }
+
+      return true;
     } catch (_) {
       return false;
     }
   }
 
-  isAudioLanguageCached(videoId, langCode, fingerprint = null) {
+  isAudioLanguageCached(videoId, langCode, fingerprint = null, options = {}) {
     const manifest = this.loadManifest();
     const entry = manifest[videoId];
     if (!entry) return false;
@@ -200,7 +230,35 @@ export class ManifestStore {
 
     try {
       const publicPath = normalizeSubtitlePath(audioInfo.src, this.publicDir);
-      return fs.existsSync(publicPath);
+      if (!fs.existsSync(publicPath)) return false;
+
+      // Validate artifact content — do not accept 0-byte or empty audio as cache hit
+      const stat = fs.statSync(publicPath);
+      const minBytes = options.minSizeBytes ?? 100;
+      if (stat.size < minBytes) {
+        if (options.pruneCorrupt) {
+          try { fs.unlinkSync(publicPath); } catch (_) {}
+        }
+        return false;
+      }
+
+      if (options.decodeTest !== false) {
+        const validation = validateGeneratedAudio(publicPath, {
+          minSizeBytes: minBytes,
+          expectedCodec: options.expectedCodec || 'aac',
+          decodeTest: true,
+          rejectSilence: true,
+          rejectTone: true
+        });
+        if (!validation.valid) {
+          if (options.pruneCorrupt) {
+            try { fs.unlinkSync(publicPath); } catch (_) {}
+          }
+          return false;
+        }
+      }
+
+      return true;
     } catch (_) {
       return false;
     }
@@ -277,7 +335,7 @@ export class ManifestStore {
     return subtitlesEntryMap;
   }
 
-  saveMultilingualAudio(videoEntry, sourceLanguage, audioMap, extraFingerprint = null) {
+  saveMultilingualAudio(videoEntry, sourceLanguage, audioMap, extraFingerprint = null, options = {}) {
     const manifest = this.loadManifest();
     const videoSubDirName = videoEntry.id;
 
@@ -294,12 +352,24 @@ export class ManifestStore {
 
     Object.entries(audioMap).forEach(([langCode, audioData]) => {
       const srcFile = typeof audioData === 'string' ? audioData : audioData.filePath || audioData.src;
+      const isFileOnDisk = srcFile && fs.existsSync(srcFile);
+
+      // If a local file path exists on disk, validate it before copying unless skipValidation is true
+      if (isFileOnDisk && options.skipValidation !== true) {
+        validateGeneratedAudio(srcFile, {
+          minSizeBytes: options.minSizeBytes ?? 100,
+          expectedCodec: options.expectedCodec ?? 'aac',
+          decodeTest: options.decodeTest ?? false,
+          throwOnError: true
+        });
+      }
+
       const filename = `${langCode}.m4a`;
       const internalFilePath = path.join(internalAudioSubDir, filename);
       const publicFilePath = path.join(publicAudioSubDir, filename);
       const publicUrl = `/aitutor/audio/${videoSubDirName}/${filename}`;
 
-      if (srcFile && fs.existsSync(srcFile) && srcFile !== publicFilePath && srcFile !== internalFilePath) {
+      if (isFileOnDisk && srcFile !== publicFilePath && srcFile !== internalFilePath) {
         fs.copyFileSync(srcFile, internalFilePath);
         fs.copyFileSync(srcFile, publicFilePath);
       }
@@ -309,7 +379,7 @@ export class ManifestStore {
 
       audioLanguagesEntryMap[langCode] = {
         label: audioData.label || label,
-        src: publicUrl,
+        src: (typeof audioData === 'object' && audioData.src && !isFileOnDisk) ? audioData.src : publicUrl,
         language: langCode,
         source: langCode === (sourceLanguage || existingEntry.sourceLanguage || 'en'),
         speakerAware: Boolean(audioData && (audioData.speakerAware !== undefined ? audioData.speakerAware : true))

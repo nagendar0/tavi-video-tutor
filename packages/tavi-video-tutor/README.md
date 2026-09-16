@@ -349,13 +349,21 @@ Users can control subtitle display via the player UI controls or keyboard shortc
 
 ---
 
-## 11. 109 SUPPORTED LANGUAGES
+## 11. LANGUAGE CAPABILITY MATRIX & REGISTRY
 
-AITutor provides a built-in registry of **109 global languages**:
+AITutor provides a standardized multi-tier capability matrix across **109 global languages**:
 
-- **Online Translation Coverage**: **109 / 109 languages** supported via translation providers.
-- **Native Offline NLLB Coverage**: **106 / 109 languages** supported locally via `@xenova/transformers`.
-- **Unsupported Offline Languages**: `bi` (Bislama), `ch` (Chamorro), `doi` (Dogri).
+| Capability | Supported Languages | Verification Status | Fallback / Notes |
+| :--- | :--- | :--- | :--- |
+| **Subtitle Transcription (ASR)** | All Whisper-supported languages (auto-detected) | Verified via Whisper neural ASR | Default English if undetected |
+| **Online Subtitle Translation** | **109 / 109 languages** | Production ready | Cloud translation providers |
+| **Offline Subtitle Translation** | **106 / 109 languages** | Production ready via local NLLB-200 | `bi`, `ch`, `doi` require online translation |
+| **Neural Audio Dubbing (TTS)** | **58 verified languages** | Production verified real speech synthesis | Throws `AUDIO_NOT_AVAILABLE_FOR_LANGUAGE` if unsupported |
+
+### Verified Neural Audio Dubbing Languages (58 Languages):
+`af`, `ar`, `az`, `bg`, `bn`, `bs`, `ca`, `cs`, `cy`, `da`, `de`, `el`, `en`, `es`, `et`, `fa`, `fi`, `fr`, `gl`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `is`, `it`, `ja`, `ka`, `kk`, `kn`, `ko`, `lt`, `lv`, `mk`, `ml`, `mr`, `ms`, `ne`, `nl`, `no`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `sr`, `sv`, `sw`, `ta`, `te`, `th`, `tr`, `uk`, `ur`, `vi`, `zh`.
+
+> **Production Invariant**: AITutor **never claims** a language has audio dubbing support unless verified, genuine speech synthesis is functional for that locale. When TTS cannot generate real speech for a requested language, it raises an explicit `AUDIO_NOT_AVAILABLE_FOR_LANGUAGE` error rather than synthesizing flat tones, silence, or fake audio.
 
 <details>
 <summary><strong>Click to View Complete 109 Language Code Registry</strong></summary>
@@ -791,11 +799,25 @@ AITutor includes native accessibility and internationalization support:
 
 ---
 
-## 30. SECURITY
+## 30. SECURITY & ZERO-TRUST VALIDATION
 
-- **SSRF Protection**: Remote video URLs targeting localhost, private subnets (`10.0.0.0/8`, `192.168.0.0/16`), or metadata IPs are rejected.
-- **Process Isolation**: Safe `spawn` argument array passing prevents command injection vulnerabilities during FFmpeg invocation.
-- **Token Sanitization**: Signed URL query tokens are sanitized before computing cache fingerprints.
+AITutor enforces multi-layer enterprise security across network fetching, process execution, and media validation:
+
+### 🛡️ 1. Advanced SSRF Defense & DNS Rebinding Mitigation
+- **Protocol Enforcement**: Only `http:` and `https:` protocols are accepted. File schemes (`file://`), loopback abstractions, and esoteric schemes (`gopher://`, `dict://`) are rejected immediately.
+- **Private Subnet & Cloud Metadata Blocking**: All target IPs are resolved before connecting. Private IPv4 ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`), link-local / cloud metadata services (`169.254.0.0/16`), and IPv6 equivalents (`::1`, `fc00::/7`, `fe80::/10`, IPv4-mapped IPv6 `::ffff:127.0.0.1`) are denied.
+- **DNS Rebinding Protection via Native IP Pinning**: A custom Node.js `http.Agent` / `https.Agent` lookup resolver pins outgoing TCP sockets directly to the pre-validated IP address, eliminating TOCTOU (Time-of-Check to Time-of-Use) DNS rebinding attacks while preserving standard TLS SNI handshakes and HTTP `Host` headers.
+- **Strict Redirect Validation**: Up to 5 redirects are permitted, with every intermediate URL re-evaluating hostname and resolved IP before following. Downgrading from HTTPS to plain HTTP is prohibited.
+- **Resource Exhaustion Guards**: Network media fetching enforces an explicit 30-second socket timeout and aborts any download exceeding the 2 GB maximum file limit.
+
+### 🔍 2. Zero-Trust Media Validation
+- **Video Rendition Integrity**: Every transcoded MP4 rendition is probed with FFprobe before registration in `manifest.json`. Renditions must contain valid `h264` video streams, `aac` audio streams, non-zero frame dimensions, and matching duration. Corrupted or invalid renditions are discarded and re-transcoded.
+- **Audio Dub Volumetric Speech Verification**: Generated and cached multilingual audio tracks are validated using the FFmpeg `volumedetect` filter. Files where `max_volume < -50 dB` or `mean_volume < -60 dB` are rejected with `SILENT_AUDIO`, preventing silent tracks or tone artifacts from reaching learners.
+- **Subtitle WebVTT Verification**: Subtitle files are verified for the `WEBVTT` header, timestamp syntax (`00:00:00.000 --> 00:00:02.000`), non-empty cues, target-script range checks, and exact match detection against source VTT. Stale or untranslated VTT files are rejected on both generation and cache lookup.
+
+### 🔒 3. Process Isolation & Token Sanitization
+- **Safe Argument Spawning**: FFmpeg, FFprobe, and external utilities execute via parameterized argument arrays in `child_process.spawn`. Shell interpretation is disabled (`shell: false`), preventing shell injection vulnerabilities.
+- **Sensitive Token Sanitization**: Ephemeral authentication tokens (`token=`, `sig=`, `expires=`) are stripped from remote media URLs prior to generating cache keys, preventing credential leakage in logs and persistent cache manifests.
 
 ---
 
@@ -1290,6 +1312,66 @@ Switching between subtitles, audio languages, and video quality renditions is fu
 
 ---
 
-## 36. LICENSE
+## 34. OPERATIONAL & PLATFORM REQUIREMENTS
+
+AITutor is designed for production media processing and requires the following minimum system and platform prerequisites:
+
+| Component | Minimum Requirement | Recommended | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Node.js** | `>= 18.0.0` (LTS or current) | Node.js `20.x` or `22.x` | Runtime execution and CLI pipeline |
+| **FFmpeg** | `>= 5.0` with `libx264` and `aac` | FFmpeg `7.x` or `9.x` on system `PATH` | Audio extraction, volume analysis, multi-track mixing, rendition ladder |
+| **FFprobe** | Installed alongside FFmpeg | FFprobe on system `PATH` | Media container and stream probing |
+| **Memory (RAM)** | `>= 4 GB` available | `>= 8 GB` | Whisper ASR neural inference and multi-channel timeline mixing |
+| **Operating System** | macOS, Linux (Ubuntu/Debian/Alpine), Windows 10/11 | Any 64-bit OS | Cross-platform child-process execution |
+
+---
+
+## 35. PRODUCTION ERROR CODE REFERENCE
+
+When processing, validating, or synthesizing media assets, AITutor fails explicitly with strongly-typed error codes rather than silently producing corrupt or mock assets:
+
+| Error Code | Category | Cause / Description | Remediation |
+| :--- | :--- | :--- | :--- |
+| `SYNTHETIC_AUDIO_DISALLOWED` | Audio Security | Attempted to use synthetic/tone fallback in production mode | Ensure real TTS provider or real speech audio is supplied |
+| `AUDIO_NOT_AVAILABLE_FOR_LANGUAGE` | Language Capability | Requested audio dubbing for a language without verified TTS voice pack | Consult the 58 verified TTS language matrix; do not request unsupported locales |
+| `SYNTHETIC_TONE_AUDIO` | Audio Integrity | Audio validation detected pure sine tone or flat artificial crest factor ($1.35 \le \text{crest} \le 1.52$) | Supply genuine speech or music audio; pure test tones are rejected |
+| `SILENT_AUDIO` | Audio Integrity | Audio file contains silence or near-silence ($<-60\text{ dB}$) | Check microphone, source audio stream, or TTS volume configuration |
+| `SSRF_BLOCKED` | Network Security | Video URL resolves to private, loopback, link-local, multicast, or metadata address | Provide public internet URL or local disk file path |
+| `INVALID_MEDIA_CONTAINER` | Media Probe | File container format cannot be parsed by FFmpeg/FFprobe | Verify file is a supported media container (MP4, MKV, WebM, AVI, MOV) |
+| `NO_AUDIO_STREAM_FOUND` | Extraction | Input video contains zero audio streams for transcription | Ensure source video has an active audio track before generating subtitles |
+| `UNTRANSLATED_SOURCE_TEXT_IN_DUB` | Subtitle/Dub QA | Foreign dub segment contains verbatim English text for script-distinct languages | Verify translation API response or provide manual glossary translation |
+| `INVALID_VTT_HEADER` | Subtitle Format | Subtitle track does not begin with valid `WEBVTT` signature | Regenerate track or fix file header |
+| `NON_MONOTONIC_TIMESTAMPS` | Subtitle Timing | Cue timestamps are out of chronological order or overlapping improperly | Run `npx aitutor clean` and regenerate subtitles |
+
+---
+
+## 36. PRODUCTION RELEASE VERIFICATION CHECKLIST
+
+Before releasing a new package version, execute the full release verification suite:
+
+```bash
+# 1. Static Analysis & Linting (0 errors)
+npm run lint
+
+# 2. Dependency Vulnerability Audit (0 vulnerabilities)
+npm run audit
+
+# 3. Compile Production Distribution Bundles
+npm run build --workspace=tavi-video-tutor
+npm run build --workspace=react-demo
+
+# 4. Comprehensive Unit & Integration Test Suite (438 tests)
+npm test --workspace=tavi-video-tutor
+
+# 5. Real-Media End-to-End Pipeline Verification
+node packages/tavi-video-tutor/scripts/verifyRealMediaEndToEnd.js
+
+# 6. Isolated Tarball Consumer Smoke Test
+node packages/tavi-video-tutor/scripts/smokeTestTarball.js
+```
+
+---
+
+## 37. LICENSE
 
 MIT License © 2026 AITutor Maintainers

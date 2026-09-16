@@ -1,15 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { TTSProvider } from './TTSProvider.js';
 import { getFFmpegBinaryPath } from '../audio/extractAudio.js';
+import { validateGeneratedAudio } from '../audio/validateAudio.js';
 import { normalizeLanguageCode, resolveLanguageCapability } from '../languages/registry.js';
 
 export class NodeTTSProvider extends TTSProvider {
   constructor(options = {}) {
     super(options);
-    this.allowSyntheticFallback = options.allowSyntheticFallback ?? true;
+    // Synthetic tones/silence are strictly prohibited in production paths.
+    // They may only be enabled in test environments with both an environment flag and an explicit test option.
+    const isTestEnv = process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test';
+    this.allowSyntheticFallback = isTestEnv && (options.allowSyntheticFallback === true || options.__testOnlyExplicitFallback === true);
     this.onlineFallback = options.onlineFallback ?? true;
   }
 
@@ -56,15 +60,24 @@ export class NodeTTSProvider extends TTSProvider {
     try {
       if (process.platform === 'win32') {
         const winRes = await this.synthesizeWindowsSpeech(sanitizedText, normLang, outputPath, options);
-        if (winRes) return winRes;
+        if (winRes && fs.existsSync(winRes.audioPath)) {
+          const val = validateGeneratedAudio(winRes.audioPath, { rejectSilence: true, rejectTone: true, decodeTest: true });
+          if (val.valid) return winRes;
+        }
       } else if (process.platform === 'darwin') {
         const macRes = await this.synthesizeDarwinSpeech(sanitizedText, normLang, outputPath, options);
-        if (macRes) return macRes;
+        if (macRes && fs.existsSync(macRes.audioPath)) {
+          const val = validateGeneratedAudio(macRes.audioPath, { rejectSilence: true, rejectTone: true, decodeTest: true });
+          if (val.valid) return macRes;
+        }
       } else if (process.platform === 'linux') {
         const linRes = await this.synthesizeLinuxSpeech(sanitizedText, normLang, outputPath, options);
-        if (linRes) return linRes;
+        if (linRes && fs.existsSync(linRes.audioPath)) {
+          const val = validateGeneratedAudio(linRes.audioPath, { rejectSilence: true, rejectTone: true, decodeTest: true });
+          if (val.valid) return linRes;
+        }
       }
-    } catch (sysErr) {
+    } catch (_sysErr) {
       // System speech failed or unsupported for this language, proceed to online/fallback
     }
 
@@ -72,14 +85,20 @@ export class NodeTTSProvider extends TTSProvider {
     if (this.onlineFallback && options.offline !== true) {
       try {
         const onlineRes = await this.synthesizeOnlineTTS(sanitizedText, normLang, outputPath, options);
-        if (onlineRes) return onlineRes;
-      } catch (onlineErr) {
+        if (onlineRes && fs.existsSync(onlineRes.audioPath)) {
+          const val = validateGeneratedAudio(onlineRes.audioPath, { rejectSilence: true, rejectTone: true, decodeTest: true });
+          if (val.valid) return onlineRes;
+        }
+      } catch (_onlineErr) {
         // Online TTS failed or offline
       }
     }
 
-    // 3. Guaranteed Formant Fallback (if permitted)
-    if (this.allowSyntheticFallback || options.allowSyntheticFallback) {
+    // 3. Test-only synthetic fallback (strictly guarded: impossible to activate in production)
+    const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+      (this.allowSyntheticFallback || options.__testOnlyExplicitFallback === true);
+
+    if (isExplicitTestMode) {
       this.generateFFmpegSyntheticAudio(sanitizedText, estimatedDuration, outputPath, options);
       return {
         audioPath: outputPath,
@@ -90,7 +109,7 @@ export class NodeTTSProvider extends TTSProvider {
       };
     }
 
-    throw new Error(`AUDIO_NOT_AVAILABLE_FOR_LANGUAGE: Speech synthesis failed for language '${normLang}'`);
+    throw new Error(`AUDIO_NOT_AVAILABLE_FOR_LANGUAGE: Speech synthesis failed for language '${normLang}'. No real speech could be generated.`);
   }
 
   /**
@@ -235,11 +254,14 @@ Write-Output ($selectedToken.GetDescription().Trim())
         }
       }
 
-      const voiceArg = matchingVoice ? `-v "${matchingVoice}"` : '';
-      execSync(`say ${voiceArg} -o "${outputPath}" --data-format=LEI16@44100 "${text.replace(/"/g, '\\"')}"`, {
-        stdio: 'ignore',
-        timeout: 8000
-      });
+      const args = [
+        ...(matchingVoice ? ['-v', matchingVoice] : []),
+        '-o', outputPath,
+        '--data-format=LEI16@44100',
+        text
+      ];
+      const result = spawnSync('say', args, { stdio: 'ignore', timeout: 8000 });
+      if (result.status !== 0 || result.error) return null;
 
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
         const dur = this.getAudioDuration(outputPath);
@@ -254,10 +276,11 @@ Write-Output ($selectedToken.GetDescription().Trim())
    */
   async synthesizeLinuxSpeech(text, langCode, outputPath, options = {}) {
     try {
-      execSync(`espeak-ng -v ${langCode} -w "${outputPath}" "${text.replace(/"/g, '\\"')}"`, {
+      const result = spawnSync('espeak-ng', ['-v', langCode, '-w', outputPath, text], {
         stdio: 'ignore',
         timeout: 8000
       });
+      if (result.status !== 0 || result.error) return null;
 
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
         const dur = this.getAudioDuration(outputPath);
@@ -298,12 +321,23 @@ Write-Output ($selectedToken.GetDescription().Trim())
     fs.writeFileSync(tempMp3, buffer);
 
     // Transcode MP3 to WAV using FFmpeg
-    execSync(`"${ffmpeg}" -y -i "${tempMp3}" -ar 44100 -ac 2 -c:a pcm_s16le "${outputPath}"`, {
-      stdio: 'ignore'
-    });
+    try {
+      const transcodeProc = spawnSync(ffmpeg, [
+        '-y',
+        '-i', tempMp3,
+        '-ar', '44100',
+        '-ac', '2',
+        '-c:a', 'pcm_s16le',
+        outputPath
+      ], { windowsHide: true });
 
-    if (fs.existsSync(tempMp3)) {
-      try { fs.unlinkSync(tempMp3); } catch (_) {}
+      if (transcodeProc.status !== 0 && transcodeProc.error) {
+        throw new Error(`Online TTS transcode failed: ${transcodeProc.error.message}`);
+      }
+    } finally {
+      if (fs.existsSync(tempMp3)) {
+        try { fs.unlinkSync(tempMp3); } catch (_) {}
+      }
     }
 
     if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
@@ -320,6 +354,11 @@ Write-Output ($selectedToken.GetDescription().Trim())
   }
 
   generateFFmpegSyntheticAudio(text, duration, outputPath, options = {}) {
+    const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+      (this.allowSyntheticFallback || options.__testOnlyExplicitFallback === true);
+    if (!isExplicitTestMode) {
+      throw new Error('SYNTHETIC_AUDIO_DISALLOWED: Synthetic speech tones or silence cannot be generated in production.');
+    }
     const ffmpegBin = getFFmpegBinaryPath();
     const durFixed = Math.max(0.5, duration).toFixed(3);
     const isFemale = options.gender === 'female' || (options.pitchOffset && options.pitchOffset > 0);
@@ -329,41 +368,29 @@ Write-Output ($selectedToken.GetDescription().Trim())
     const f1 = Math.round(Math.max(100, Math.min(1000, baseF1 * pitchFactor)));
     const f2 = Math.round(Math.max(200, Math.min(2000, baseF2 * pitchFactor)));
 
-    const ffmpegCmd = `"${ffmpegBin}" -y -f lavfi -i "sine=frequency=${f1}:duration=${durFixed}" -f lavfi -i "sine=frequency=${f2}:duration=${durFixed}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first,volume=0.3" -c:a pcm_s16le -ar 44100 -ac 2 "${outputPath}"`;
-    try {
-      execSync(ffmpegCmd, { stdio: 'ignore' });
-    } catch (err) {
-      try {
-        execSync(`"${ffmpegBin}" -y -f lavfi -i "sine=frequency=${f1}:duration=${durFixed}" -c:a pcm_s16le -ar 44100 -ac 2 "${outputPath}"`, { stdio: 'ignore' });
-      } catch (_) {
-        this.generateDummyWavFile(outputPath, duration);
-      }
+    // Formant dual-sine harmonic voice synthesis exclusively for isolated tests
+    const sineArgs = [
+      '-y',
+      '-f', 'lavfi', '-i', `sine=frequency=${f1}:duration=${durFixed}`,
+      '-f', 'lavfi', '-i', `sine=frequency=${f2}:duration=${durFixed}`,
+      '-filter_complex', '[0:a][1:a]amix=inputs=2:duration=first,volume=0.3',
+      '-c:a', 'pcm_s16le',
+      '-ar', '44100',
+      '-ac', '2',
+      outputPath
+    ];
+
+    let proc = spawnSync(ffmpegBin, sineArgs, { encoding: 'utf8', windowsHide: true });
+    if (proc.status === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 500) {
+      return outputPath;
     }
 
-    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-      this.generateDummyWavFile(outputPath, duration);
+    if (fs.existsSync(outputPath)) {
+      try { fs.unlinkSync(outputPath); } catch (_) {}
     }
-  }
 
-  generateDummyWavFile(outputPath, duration) {
-    const sampleRate = 44100;
-    const numSamples = Math.round(sampleRate * Math.max(0.5, duration));
-    const wavBuffer = Buffer.alloc(44 + numSamples * 2);
-    wavBuffer.write('RIFF', 0);
-    wavBuffer.writeUInt32LE(36 + numSamples * 2, 4);
-    wavBuffer.write('WAVE', 8);
-    wavBuffer.write('fmt ', 12);
-    wavBuffer.writeUInt32LE(16, 16);
-    wavBuffer.writeUInt16LE(1, 20);
-    wavBuffer.writeUInt16LE(1, 22);
-    wavBuffer.writeUInt32LE(sampleRate, 24);
-    wavBuffer.writeUInt32LE(sampleRate * 2, 28);
-    wavBuffer.writeUInt16LE(2, 32);
-    wavBuffer.writeUInt16LE(16, 34);
-    wavBuffer.write('data', 36);
-    wavBuffer.writeUInt32LE(numSamples * 2, 40);
-
-    fs.writeFileSync(outputPath, wavBuffer);
+    const stderr = (proc.stderr || proc.error?.message || 'Unknown error').trim();
+    throw new Error(`Failed to generate test synthetic audio [exitCode=${proc.status}]: ${stderr}`);
   }
 
   getAudioDuration(filePath) {
@@ -373,8 +400,9 @@ Write-Output ($selectedToken.GetDescription().Trim())
       if (!fs.existsSync(ffprobeBin)) {
         ffprobeBin = 'ffprobe';
       }
-      const probeOutput = execSync(`"${ffprobeBin}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-      const parsed = parseFloat(probeOutput.trim());
+      const probe = spawnSync(ffprobeBin, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+      if (probe.status !== 0 || probe.error) return null;
+      const parsed = parseFloat((probe.stdout || '').trim());
       return isNaN(parsed) ? null : parsed;
     } catch (_) {
       return null;

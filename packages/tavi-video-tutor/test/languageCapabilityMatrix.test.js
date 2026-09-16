@@ -78,16 +78,20 @@ test('2. Dynamic Multilingual Normalization Matrix Across All 109 Languages', ()
   }
 });
 
+import {
+  VERIFIED_TTS_LANGUAGES,
+  UNSUPPORTED_TRANSLATION_LANGUAGES
+} from '../src/subtitles/languages/registry.js';
+
 test('3. Capability Resolution Matrix Across All 109 Languages', () => {
   for (const lang of AITUTOR_LANGUAGES) {
     const code = lang.code;
     const capability = resolveLanguageCapability(code);
 
-    assert.equal(capability.supported, true, `${code} must be marked supported`);
     assert.equal(capability.canonicalCode, code, `${code} canonicalCode mismatch`);
     assert.equal(capability.displayName, lang.name, `${code} displayName mismatch`);
-    assert.equal(capability.ttsSupported, true, `${code} must have ttsSupported: true`);
-    assert.equal(capability.translationSupported, true, `${code} must have translationSupported: true`);
+    assert.equal(capability.ttsSupported, VERIFIED_TTS_LANGUAGES.has(code), `${code} ttsSupported mismatch`);
+    assert.equal(capability.translationSupported, !UNSUPPORTED_TRANSLATION_LANGUAGES.has(code), `${code} translationSupported mismatch`);
     assert.ok(capability.ttsLocale, `${code} must have a valid ttsLocale`);
     assert.ok(capability.preferredVoices, `${code} must define preferredVoices`);
     assert.ok(Array.isArray(capability.preferredVoices.female), `${code} female voices must be array`);
@@ -136,15 +140,16 @@ test('4. Voice Pool & Dynamic Allocation Matrix for All 109 Languages', () => {
   }
 });
 
-test('5. NodeTTSProvider Unified Capability Contract for All 109 Languages', () => {
+test('5. NodeTTSProvider Unified Capability Contract for Verified Languages', () => {
   const tts = new NodeTTSProvider();
 
   for (const lang of AITUTOR_LANGUAGES) {
     const code = lang.code;
+    const isVerified = VERIFIED_TTS_LANGUAGES.has(code);
     assert.equal(
       tts.supportsLanguage(code),
-      true,
-      `NodeTTSProvider must support language ${code} via local voice or online fallback`
+      isVerified,
+      `NodeTTSProvider must accurately report verified TTS support for ${code}`
     );
   }
 

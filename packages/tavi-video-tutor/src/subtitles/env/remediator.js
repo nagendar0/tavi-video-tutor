@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { execSync, spawn } from 'child_process';
 import {
@@ -8,7 +10,8 @@ import {
   checkCacheDirectories,
   runPreflight
 } from './preflight.js';
-import { downloadWhisperModel } from '../transcription/WhisperProvider.js';
+import { downloadWhisperModel, WHISPER_MODEL_SIZES } from '../transcription/WhisperProvider.js';
+
 
 export const askConfirmation = async (question, defaultYes = true, options = {}) => {
   if (options.yes === true || options.y === true) {
@@ -67,6 +70,12 @@ export const installWindowsFFmpeg = async (options = {}) => {
       const bothAvailable = ffmpegCheck.pass && ffprobeCheck.pass;
 
       if (bothAvailable) {
+        if (ffmpegCheck.path && ffmpegCheck.path !== 'ffmpeg') {
+          process.env.FFMPEG_PATH = ffmpegCheck.path;
+        }
+        if (ffprobeCheck.path && ffprobeCheck.path !== 'ffprobe') {
+          process.env.FFPROBE_PATH = ffprobeCheck.path;
+        }
         console.log(`\n✓ FFmpeg and FFprobe installed and verified on PATH.\n`);
         resolve({ success: true });
       } else if (code === 0) {
@@ -81,17 +90,22 @@ export const installWindowsFFmpeg = async (options = {}) => {
 };
 
 export const installWhisperProvider = async (cwd = process.cwd(), options = {}) => {
+  const hasPkgJson = fs.existsSync(path.join(cwd, 'package.json'));
+  const saveFlag = options.saveDev ? '--save-dev' : (options.save ? '--save' : (options.noSave ? '--no-save' : (hasPkgJson ? '--save-optional' : '--no-save')));
+  const installCmd = `npm install ${saveFlag} @huggingface/transformers@^4.2.0`;
+
   console.log(`\n→ Installing Whisper Provider (@huggingface/transformers)...`);
-  console.log(`  Command: npm install --no-save @huggingface/transformers@^4.2.0\n`);
+  console.log(`  Target Directory: ${cwd}`);
+  console.log(`  Command: ${installCmd}\n`);
 
   try {
-    execSync('npm install --no-save @huggingface/transformers@^4.2.0', {
+    execSync(installCmd, {
       cwd,
       stdio: 'inherit'
     });
-    const check = await checkWhisperProvider();
+    const check = await checkWhisperProvider({ cwd, forceReload: true });
     if (check.pass) {
-      console.log(`\n✓ Whisper provider installed and verified.\n`);
+      console.log(`\n✓ Whisper provider installed and verified successfully.\n`);
       return { success: true };
     }
     return { success: false, error: 'Verification failed after npm install' };
@@ -101,8 +115,10 @@ export const installWhisperProvider = async (cwd = process.cwd(), options = {}) 
 };
 
 export const downloadModelArtifacts = async (modelName, options = {}) => {
+  const estSize = WHISPER_MODEL_SIZES[modelName] || '~145 MB';
   console.log(`\n→ Initializing Whisper Model: ${modelName}`);
-  console.log(`  Destination: Local cache`);
+  console.log(`  Estimated Download Size: ${estSize}`);
+  console.log(`  Destination: Local HuggingFace / Transformers model cache`);
   console.log(`  Downloading pipeline weights...\n`);
 
   try {
@@ -117,6 +133,7 @@ export const downloadModelArtifacts = async (modelName, options = {}) => {
     return { success: false, error: err.message };
   }
 };
+
 
 export const remediateMissing = async (preflightResult, options = {}, cwd = process.cwd()) => {
   const { missing } = preflightResult;

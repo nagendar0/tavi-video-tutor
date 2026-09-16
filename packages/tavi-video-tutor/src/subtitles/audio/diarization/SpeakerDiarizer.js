@@ -1,5 +1,6 @@
 import { AudioFeatureExtractor } from './AudioFeatureExtractor.js';
 import { VoiceActivityDetector } from './VoiceActivityDetector.js';
+import fs from 'fs';
 
 /**
  * Universal Speaker Diarizer.
@@ -41,6 +42,22 @@ export class SpeakerDiarizer {
       }
     } else if (audioInput) {
       frames = this.extractor.extractFromBuffer(audioInput);
+    }
+
+    // Speaker inference without waveform data would fabricate identities from
+    // transcript text/timestamps. Preserve explicit upstream labels only; all
+    // other callers receive an honest unavailable result.
+    const hasExplicitSpeakerLabels = Array.isArray(asrSegments) && asrSegments.some(s => s?.speaker || s?.speakerId);
+    if (frames.length === 0 && !hasExplicitSpeakerLabels) {
+      return {
+        status: 'unavailable',
+        reason: 'DIARIZATION_AUDIO_UNAVAILABLE',
+        detectedSpeakerCount: 0,
+        speakers: [],
+        segments: [],
+        overlappingIntervals: [],
+        speakerTimelineMap: {}
+      };
     }
 
     // 1. Voice Activity Detection
@@ -112,6 +129,7 @@ export class SpeakerDiarizer {
         startTime: interval.start,
         endTime: interval.end,
         duration: Number((interval.end - interval.start).toFixed(3)),
+        text: interval.text || '',
         originalText: interval.text || '',
         confidence: interval.confidence || 0.95,
         language: interval.language || 'en',
@@ -171,21 +189,41 @@ export class SpeakerDiarizer {
    */
   computeSegmentEmbedding(frames, interval) {
     if (!frames || frames.length === 0) {
-      // Synthetic fallback embedding if frames empty
-      const spkKey = interval.speaker || interval.speakerId || interval.text || String(interval.start);
-      const hash = this.hashString(spkKey);
-      return {
-        pitchMean: 120 + (hash % 180),
-        centroidMean: 1000 + (hash % 2000),
-        energyMean: 0.1,
-        zcrMean: 0.08,
-        vector: [
-          (120 + (hash % 180)) / 400,
-          (1000 + (hash % 2000)) / 4000,
-          0.1,
-          0.08
-        ]
-      };
+      if (interval && (interval.speaker || interval.speakerId)) {
+        const spkKey = interval.speaker || interval.speakerId;
+        const hash = this.hashString(spkKey);
+        return {
+          pitchMean: 120 + (hash % 180),
+          centroidMean: 1000 + (hash % 2000),
+          energyMean: 0.1,
+          zcrMean: 0.08,
+          vector: [
+            (120 + (hash % 180)) / 400,
+            (1000 + (hash % 2000)) / 4000,
+            0.1,
+            0.08
+          ]
+        };
+      }
+      const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+        (this.options.allowTestFallback === true || this.options.__testOnlyExplicitFallback === true);
+      if (isExplicitTestMode) {
+        const spkKey = interval.speaker || interval.speakerId || interval.text || String(interval.start);
+        const hash = this.hashString(spkKey);
+        return {
+          pitchMean: 120 + (hash % 180),
+          centroidMean: 1000 + (hash % 2000),
+          energyMean: 0.1,
+          zcrMean: 0.08,
+          vector: [
+            (120 + (hash % 180)) / 400,
+            (1000 + (hash % 2000)) / 4000,
+            0.1,
+            0.08
+          ]
+        };
+      }
+      throw new Error(`DIARIZATION_AUDIO_UNAVAILABLE: No acoustic frames available for speech segment '${interval.id || interval.start}'.`);
     }
 
     const pitchedFrames = frames.filter(f => f.pitch > 0);

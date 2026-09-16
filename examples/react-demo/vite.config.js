@@ -81,12 +81,6 @@ const youtubeTranscriptPlugin = () => ({
 
 export default defineConfig({
   plugins: [react(), youtubeTranscriptPlugin()],
-  resolve: {
-    alias: {
-      'tavi-video-tutor/dist/style.css': path.resolve(__dirname, '../../packages/tavi-video-tutor/src/styles/ai-tutor.css'),
-      'tavi-video-tutor': path.resolve(__dirname, '../../packages/tavi-video-tutor/src/index.js')
-    }
-  },
   server: {
     port: 5180
   }

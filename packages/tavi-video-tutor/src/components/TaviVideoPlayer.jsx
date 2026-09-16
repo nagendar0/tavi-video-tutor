@@ -529,6 +529,10 @@ const PauseIconLarge = () => (
   </svg>
 );
 
+// Module-level cache and in-flight request deduplication for React StrictMode & cross-instance resilience
+const GLOBAL_SUBTITLE_CACHE = new Map();
+const GLOBAL_IN_FLIGHT_SUBTITLES = new Map();
+
 export const TaviVideoPlayer = forwardRef(({
   src,
   id,
@@ -770,8 +774,19 @@ export const TaviVideoPlayer = forwardRef(({
   }, [tracks, config]);
 
   // Automatically build standard config.file.tracks objects for all 100+ languages
-  const generatedTracks = useMemo(() => {
+  const [generatedTracks, setGeneratedTracks] = useState([]);
+  const activeBlobUrlsRef = useRef([]);
+
+  useEffect(() => {
+    // Revoke previous URLs
+    activeBlobUrlsRef.current.forEach(url => {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    });
+    activeBlobUrlsRef.current = [];
+
+    const newBlobUrls = [];
     const list = [];
+
     Object.entries(combinedSubtitles).forEach(([langCode, vttContent], idx) => {
       if (!vttContent) return; // deleted or null
       let srcUrl = vttContent;
@@ -779,6 +794,7 @@ export const TaviVideoPlayer = forwardRef(({
         try {
           const blob = new Blob([vttContent], { type: 'text/vtt' });
           srcUrl = URL.createObjectURL(blob);
+          newBlobUrls.push(srcUrl);
         } catch (_) {}
       }
       list.push({
@@ -789,7 +805,15 @@ export const TaviVideoPlayer = forwardRef(({
         default: langCode === defaultSubLanguage || (idx === 0 && defaultSubLanguage === 'en')
       });
     });
-    return list;
+
+    activeBlobUrlsRef.current = newBlobUrls;
+    setGeneratedTracks(list);
+
+    return () => {
+      newBlobUrls.forEach(url => {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      });
+    };
   }, [combinedSubtitles, defaultSubLanguage]);
 
   // Trigger onTracksChange whenever tracks array updates
@@ -1005,9 +1029,10 @@ export const TaviVideoPlayer = forwardRef(({
   const [primaryCues, setPrimaryCues] = useState([]);
   const [secondaryCues, setSecondaryCues] = useState([]);
   const subtitleCacheRef = useRef({});
+  const inFlightSubtitlesRef = useRef({});
   const isTranscribingRef = useRef(false);
 
-  // Asynchronous subtitle loader (handles both URL fetching and raw content)
+  // Asynchronous subtitle loader (handles both URL fetching and raw content with in-flight deduplication)
   const loadSubtitles = async (contentOrUrl) => {
     if (!contentOrUrl) return [];
 
@@ -1020,20 +1045,44 @@ export const TaviVideoPlayer = forwardRef(({
     );
 
     if (isUrl) {
+      if (GLOBAL_SUBTITLE_CACHE.has(contentOrUrl)) {
+        const cached = GLOBAL_SUBTITLE_CACHE.get(contentOrUrl);
+        subtitleCacheRef.current[contentOrUrl] = cached;
+        return cached;
+      }
       if (subtitleCacheRef.current[contentOrUrl]) {
         return subtitleCacheRef.current[contentOrUrl];
       }
-      try {
-        const response = await fetch(contentOrUrl);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const text = await response.text();
-        const parsed = parseWebVTT(text);
-        subtitleCacheRef.current[contentOrUrl] = parsed;
-        return parsed;
-      } catch (err) {
-        console.error('Failed to load subtitle file:', contentOrUrl, err);
-        return [];
+
+      // Deduplicate in-flight requests (across mounts and under React StrictMode)
+      if (GLOBAL_IN_FLIGHT_SUBTITLES.has(contentOrUrl)) {
+        return await GLOBAL_IN_FLIGHT_SUBTITLES.get(contentOrUrl);
       }
+      if (inFlightSubtitlesRef.current[contentOrUrl]) {
+        return await inFlightSubtitlesRef.current[contentOrUrl];
+      }
+
+      const fetchPromise = (async () => {
+        try {
+          const response = await fetch(contentOrUrl);
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const text = await response.text();
+          const parsed = parseWebVTT(text);
+          subtitleCacheRef.current[contentOrUrl] = parsed;
+          GLOBAL_SUBTITLE_CACHE.set(contentOrUrl, parsed);
+          return parsed;
+        } catch (err) {
+          console.error('Failed to load subtitle file:', contentOrUrl, err);
+          return [];
+        } finally {
+          delete inFlightSubtitlesRef.current[contentOrUrl];
+          GLOBAL_IN_FLIGHT_SUBTITLES.delete(contentOrUrl);
+        }
+      })();
+
+      inFlightSubtitlesRef.current[contentOrUrl] = fetchPromise;
+      GLOBAL_IN_FLIGHT_SUBTITLES.set(contentOrUrl, fetchPromise);
+      return await fetchPromise;
     }
 
     return parseWebVTT(contentOrUrl);
@@ -1053,18 +1102,24 @@ export const TaviVideoPlayer = forwardRef(({
         const response = await fetch(`/api/translate?to=${targetLang}&text=${encodeURIComponent(combinedText)}`);
         if (!response.ok) throw new Error('Translation failed');
         const data = await response.json();
+        if (!data || typeof data.translation !== 'string' || !data.translation.trim()) {
+          throw new Error('Translation response is empty or malformed');
+        }
         
         // Split by newline and handle potential length mismatches
         const translatedLines = data.translation.split('\n');
+        if (translatedLines.length !== batch.length || translatedLines.some(line => !line.trim())) {
+          throw new Error('Translation response does not preserve cue boundaries');
+        }
         batch.forEach((cue, index) => {
           translatedCues.push({
             ...cue,
-            text: translatedLines[index] ? translatedLines[index].trim() : cue.text
+            text: translatedLines[index].trim()
           });
         });
       } catch (err) {
         console.error('Batch translation error:', err);
-        batch.forEach(cue => translatedCues.push(cue));
+        throw err;
       }
     }
     return translatedCues;
@@ -2044,7 +2099,7 @@ export const TaviVideoPlayer = forwardRef(({
       video.muted = Boolean(activeAudioUrl) || isMuted;
       video.volume = activeAudioUrl ? 0 : (isMuted ? 0 : volume);
     }
-  }, [activeSrc, activeAudioUrl]);
+  }, [activeSrc]);
 
   const transcribingUrlRef = useRef(null);
   const videoIdentityRef = useRef(src);

@@ -66,13 +66,15 @@ export function createSpeakerSegment(seg = {}) {
   const duration = Number((endTime - startTime).toFixed(3));
   const segmentId = seg.segmentId || seg.id || `seg_${Math.round(startTime * 1000)}_${Math.round(endTime * 1000)}`;
 
+  const canonicalText = String(seg.text || seg.originalText || '').trim();
   const segment = {
     segmentId,
     speakerId: seg.speakerId,
     startTime,
     endTime,
     duration,
-    originalText: String(seg.originalText || seg.text || '').trim(),
+    text: canonicalText,
+    originalText: canonicalText,
     confidence: Number((seg.confidence !== undefined ? seg.confidence : 1.0).toFixed(3)),
     language: String(seg.language || 'en').toLowerCase()
   };

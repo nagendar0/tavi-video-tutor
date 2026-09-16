@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, 'fix/**', 'feat/**']
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-build:
+    name: Build & Demo Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
+      - name: Run Security Audit
+        run: npm run audit
+      - name: Build package
+        run: npm run build --workspace=tavi-video-tutor
+      - name: Build demo app
+        run: npm run build --workspace=react-demo
+
+  test:
+    name: Unit Tests (Node ${{ matrix.node-version }} on ${{ matrix.os }})
+    needs: lint-and-build
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install FFmpeg (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg
+      - name: Install dependencies
+        run: npm ci
+      - name: Build package
+        run: npm run build --workspace=tavi-video-tutor
+      - name: Run unit tests
+        run: npm test --workspace=tavi-video-tutor
+
+  real-media-e2e:
+    name: Real-Media End-to-End Pipeline
+    needs: lint-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install dependencies
+        run: npm ci
+      - name: Build package
+        run: npm run build --workspace=tavi-video-tutor
+      - name: Run Real-Media Integration Test
+        run: node --test test/realMediaEndToEnd.test.js
+        working-directory: packages/tavi-video-tutor
+
+  tarball-smoke:
+    name: Clean Tarball Consumer Smoke Test
+    needs: lint-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Consumer Smoke Test
+        run: node scripts/smokeTestTarball.js
+        working-directory: packages/tavi-video-tutor

@@ -110,11 +110,11 @@ test('6. Full Pipeline — processAllVideos End-to-End', async () => {
   const translator = new AITutorTranslationProvider({ allowTestFallback: true });
 
   // Run 1: Should generate both
-  const res1 = await processAllVideos({ transcriber, translator }, tmpCwd);
+  const res1 = await processAllVideos({ transcriber, translator, allowTestFallback: true }, tmpCwd);
   assert.equal(res1.generatedSubtitles, 2);
 
   // Run 2: Should skip both as cached
-  const res2 = await processAllVideos({ transcriber, translator }, tmpCwd);
+  const res2 = await processAllVideos({ transcriber, translator, allowTestFallback: true }, tmpCwd);
   assert.equal(res2.generatedSubtitles, 0);
 
   fs.rmSync(tmpCwd, { recursive: true, force: true });

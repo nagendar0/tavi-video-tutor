@@ -100,7 +100,7 @@ test('6. Audio Manifest Generation & Preserving Qualities / Subtitles', () => {
     store.saveMultilingualAudio(videoEntry, 'en', {
       en: { filePath: dummyAudioFile, label: 'English' },
       hi: { filePath: dummyAudioFile, label: 'Hindi' }
-    });
+    }, null, { skipValidation: true });
 
     const manifest = store.loadManifest();
     const entry = manifest['test_vid_1'];
@@ -191,7 +191,8 @@ test('10. ProcessSingleVideo Audio Dubbing Pipeline & Cache Hits', async () => {
     const res1 = await processSingleVideo(videoEntry, store, {
       transcriber: mockTranscriber,
       translator: mockTranslator,
-      audioLanguages: ['en', 'hi']
+      audioLanguages: ['en', 'hi'],
+      allowTestFallback: true
     });
 
     assert.equal(res1.status, 'completed');
@@ -201,7 +202,8 @@ test('10. ProcessSingleVideo Audio Dubbing Pipeline & Cache Hits', async () => {
     const res2 = await processSingleVideo(videoEntry, store, {
       transcriber: mockTranscriber,
       translator: mockTranslator,
-      audioLanguages: ['en', 'hi']
+      audioLanguages: ['en', 'hi'],
+      allowTestFallback: true
     });
 
     assert.equal(res2.status, 'cached');
@@ -238,7 +240,8 @@ test('11. Fault Isolation — Partial TTS Failure Does Not Abort Successful Lang
     const res = await processSingleVideo(videoEntry, store, {
       transcriber: mockTranscriber,
       ttsProvider: mockTTS,
-      audioLanguages: ['en', 'fail_lang']
+      audioLanguages: ['en', 'fail_lang'],
+      allowTestFallback: true
     });
 
     assert.equal(res.status, 'completed');

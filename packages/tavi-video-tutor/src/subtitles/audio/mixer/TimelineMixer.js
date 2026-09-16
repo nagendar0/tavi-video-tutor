@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { getFFmpegBinaryPath } from '../extractAudio.js';
+import { validateGeneratedAudio } from '../validateAudio.js';
 
 /**
  * Universal Multi-Track Audio Timeline Mixer.
@@ -11,15 +12,17 @@ import { getFFmpegBinaryPath } from '../extractAudio.js';
  * Features:
  * - Deterministic multi-speaker overlap mixing.
  * - Dynamic audio normalization (dynaudnorm) to prevent clipping and balance levels.
- * - Hierarchical batch mixing for very large segment counts (> 60 segments) to prevent CLI buffer overflow.
- * - Optional ambient audio background preservation with speech ducking.
+ * - Robust process invocation via spawnSync with arguments array (no Windows shell pipe collisions).
+ * - Hierarchical batch mixing for very large segment counts (> 60 segments).
+ * - Comprehensive output audio validation prior to completion.
+ * - Zero dummy/fake 36-byte fallbacks: failure captures exact stderr and aborts cleanly.
  */
 export class TimelineMixer {
   constructor(options = {}) {
     this.ffmpegBin = options.ffmpegBin || getFFmpegBinaryPath();
     this.audioBitrate = options.audioBitrate || '128k';
     this.sampleRate = options.sampleRate || 44100;
-    this.maxBatchInputs = options.maxBatchInputs || 48;
+    this.maxBatchInputs = options.maxBatchInputs || 32;
   }
 
   /**
@@ -40,9 +43,13 @@ export class TimelineMixer {
     const validSegments = (segments || []).filter(s => s && (s.alignedAudioPath || s.audioPath) && fs.existsSync(s.alignedAudioPath || s.audioPath));
     const totalDuration = options.totalDuration || (validSegments.length > 0 ? Math.max(...validSegments.map(s => s.endTime || s.end || 0)) : 10);
 
-    // Empty segments: Generate silent track
-    if (validSegments.length === 0) {
+    // Empty segments input: Generate silent track
+    if (!segments || segments.length === 0) {
       return this.generateSilentTrack(outputPath, totalDuration);
+    }
+
+    if (validSegments.length === 0) {
+      throw new Error('Audio mixing failed: None of the provided segment audio files exist on disk.');
     }
 
     // Sort segments chronologically
@@ -58,16 +65,19 @@ export class TimelineMixer {
 
   /**
    * Single pass mixing for up to maxBatchInputs segments.
+   * Direct process invocation using spawnSync with args array to avoid shell pipe and length limitations.
    */
   async singlePassMix(segments, outputPath, totalDuration, options = {}) {
     const dir = path.dirname(outputPath);
+    fs.mkdirSync(dir, { recursive: true });
+
     const inputArgs = [];
     const filterParts = [];
     const mixLabels = [];
 
     segments.forEach((seg, idx) => {
       const audioPath = seg.alignedAudioPath || seg.audioPath;
-      inputArgs.push(`-i "${audioPath}"`);
+      inputArgs.push('-i', audioPath);
       const startSec = seg.startTime !== undefined ? seg.startTime : seg.start;
       const delayMs = Math.round(Math.max(0, startSec) * 1000);
 
@@ -76,14 +86,13 @@ export class TimelineMixer {
       mixLabels.push(`[delayed${idx}]`);
     });
 
-    let finalMixLabel = '[outa]';
     const numInputs = mixLabels.length;
 
     // Optional ambient background audio
-    let ambientInputArg = '';
+    const ambientArgs = [];
     if (options.ambientAudioPath && fs.existsSync(options.ambientAudioPath)) {
       const ambientIdx = segments.length;
-      ambientInputArg = `-i "${options.ambientAudioPath}"`;
+      ambientArgs.push('-i', options.ambientAudioPath);
       const duckDb = options.ambientDuckingDb || -12;
       filterParts.push(`[${ambientIdx}:a]volume=${duckDb}dB,aresample=${this.sampleRate}[ambient]`);
       filterParts.push(`${mixLabels.join('')}amix=inputs=${numInputs}:duration=longest:dropout_transition=0[voiceMix]`);
@@ -93,21 +102,49 @@ export class TimelineMixer {
     }
 
     const filterComplexStr = filterParts.join(';');
-    const durArg = totalDuration ? `-t ${Math.max(0.5, totalDuration).toFixed(3)}` : '';
-    const ffmpegCmd = `"${this.ffmpegBin}" -y ${inputArgs.join(' ')} ${ambientInputArg} -filter_complex "${filterComplexStr}" -map "[outa]" ${durArg} -c:a aac -b:a ${this.audioBitrate} -ar ${this.sampleRate} -ac 2 "${outputPath}"`;
 
-    try {
-      execSync(ffmpegCmd, { stdio: 'ignore' });
-      if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-        return outputPath;
+    const durArgs = totalDuration ? ['-t', Math.max(0.5, totalDuration).toFixed(3)] : [];
+    const isWav = outputPath.toLowerCase().endsWith('.wav');
+    const codecArgs = isWav
+      ? ['-c:a', 'pcm_s16le', '-ar', String(this.sampleRate), '-ac', '2']
+      : ['-c:a', 'aac', '-b:a', this.audioBitrate, '-ar', String(this.sampleRate), '-ac', '2'];
+
+    const args = [
+      '-y',
+      ...inputArgs,
+      ...ambientArgs,
+      '-filter_complex', filterComplexStr,
+      '-map', '[outa]',
+      ...durArgs,
+      ...codecArgs,
+      outputPath
+    ];
+
+    const proc = spawnSync(this.ffmpegBin, args, { encoding: 'utf8', windowsHide: true });
+    if (proc.status !== 0 || proc.error) {
+      if (fs.existsSync(outputPath)) {
+        try { fs.unlinkSync(outputPath); } catch (_) {}
       }
-    } catch (_) {
-      // Fallback: Safe synthetic M4A generation for test environments
-      this.generateFallbackM4A(outputPath, totalDuration);
+      const stderr = proc.stderr || proc.error?.message || 'Unknown error';
+      throw new Error(`Audio mixing failed with exit code ${proc.status}: ${stderr}`);
     }
 
     if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-      this.generateFallbackM4A(outputPath, totalDuration);
+      throw new Error(`Audio mixing failed: output file is missing or 0 bytes (${outputPath})`);
+    }
+
+    // Final audio validation
+    const validation = validateGeneratedAudio(outputPath, {
+      minDuration: 0.05,
+      expectedCodec: isWav ? 'pcm' : 'aac',
+      decodeTest: true
+    });
+
+    if (!validation.valid) {
+      if (fs.existsSync(outputPath)) {
+        try { fs.unlinkSync(outputPath); } catch (_) {}
+      }
+      throw new Error(`Audio mixing failed validation (${validation.code}): ${validation.message}`);
     }
 
     return outputPath;
@@ -121,23 +158,27 @@ export class TimelineMixer {
     const intermediateTracks = [];
     const batchSize = this.maxBatchInputs;
 
-    for (let i = 0; i < segments.length; i += batchSize) {
-      const chunk = segments.slice(i, i + batchSize);
-      const intermediatePath = path.join(dir, `submix_${Date.now()}_${i}.wav`);
-      await this.singlePassMix(chunk, intermediatePath, totalDuration, {});
-      intermediateTracks.push({
-        startTime: 0,
-        endTime: totalDuration,
-        alignedAudioPath: intermediatePath
-      });
-    }
-
     try {
+      for (let i = 0; i < segments.length; i += batchSize) {
+        const chunk = segments.slice(i, i + batchSize);
+        const intermediatePath = path.join(dir, `submix_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}.wav`);
+        await this.singlePassMix(chunk, intermediatePath, totalDuration, {});
+        intermediateTracks.push({
+          startTime: 0,
+          endTime: totalDuration,
+          alignedAudioPath: intermediatePath
+        });
+      }
+
+      if (intermediateTracks.length > this.maxBatchInputs) {
+        return await this.hierarchicalBatchMix(intermediateTracks, outputPath, totalDuration, options);
+      }
+
       return await this.singlePassMix(intermediateTracks, outputPath, totalDuration, options);
     } finally {
       // Clean temporary submix files
       for (const track of intermediateTracks) {
-        if (fs.existsSync(track.alignedAudioPath)) {
+        if (track.alignedAudioPath && fs.existsSync(track.alignedAudioPath)) {
           try { fs.unlinkSync(track.alignedAudioPath); } catch (_) {}
         }
       }
@@ -145,21 +186,41 @@ export class TimelineMixer {
   }
 
   generateSilentTrack(outputPath, duration) {
-    const durFixed = Math.max(1, duration || 5).toFixed(3);
-    const silentCmd = `"${this.ffmpegBin}" -y -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=${this.sampleRate}" -t ${durFixed} -c:a aac -b:a ${this.audioBitrate} "${outputPath}"`;
-    try {
-      execSync(silentCmd, { stdio: 'ignore' });
-    } catch (_) {
-      this.generateFallbackM4A(outputPath, duration);
-    }
-    return outputPath;
-  }
-
-  generateFallbackM4A(outputPath, duration) {
     const dir = path.dirname(outputPath);
     fs.mkdirSync(dir, { recursive: true });
-    const dummyBuf = Buffer.from('00000020667479704d344120000002004d3441206d70343269736f6d0000000866726565', 'hex');
-    fs.writeFileSync(outputPath, dummyBuf);
+
+    const durFixed = Math.max(0.5, duration || 5).toFixed(3);
+    const isWav = outputPath.toLowerCase().endsWith('.wav');
+    const codecArgs = isWav
+      ? ['-c:a', 'pcm_s16le', '-ar', String(this.sampleRate), '-ac', '2']
+      : ['-c:a', 'aac', '-b:a', this.audioBitrate, '-ar', String(this.sampleRate), '-ac', '2'];
+
+    const args = [
+      '-y',
+      '-f', 'lavfi',
+      '-i', `anullsrc=channel_layout=stereo:sample_rate=${this.sampleRate}`,
+      '-t', durFixed,
+      ...codecArgs,
+      outputPath
+    ];
+
+    const proc = spawnSync(this.ffmpegBin, args, { encoding: 'utf8', windowsHide: true });
+    if (proc.status !== 0 || proc.error) {
+      if (fs.existsSync(outputPath)) {
+        try { fs.unlinkSync(outputPath); } catch (_) {}
+      }
+      throw new Error(`Failed to generate silent audio track (exit code ${proc.status}): ${proc.stderr || proc.error?.message}`);
+    }
+
+    const validation = validateGeneratedAudio(outputPath, { decodeTest: true });
+    if (!validation.valid) {
+      if (fs.existsSync(outputPath)) {
+        try { fs.unlinkSync(outputPath); } catch (_) {}
+      }
+      throw new Error(`Silent track validation failed (${validation.code}): ${validation.message}`);
+    }
+
+    return outputPath;
   }
 }
 

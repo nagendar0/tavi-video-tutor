@@ -1,8 +1,9 @@
 import fs from 'fs';
-import { getTransformers } from './transformersLoader.js';
+import { getTransformers, getGlobalModelCacheDir } from './transformersLoader.js';
 
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
 
 // Global in-memory cache for downloaded/loaded transformers pipelines
 const PIPELINE_MODEL_CACHE = new Map();
@@ -21,6 +22,54 @@ export const WHISPER_MODEL_SIZES = {
   'Xenova/whisper-large-v3': '3.1 GB'
 };
 
+/**
+ * Validates that a directory contains a complete, non-corrupted Whisper ONNX model.
+ * Requires config.json, tokenizer.json, and non-empty ONNX encoder/decoder weights.
+ */
+export const validateModelCacheDirectory = (dir) => {
+  if (!dir || !fs.existsSync(dir)) return false;
+  try {
+    const files = fs.readdirSync(dir);
+    // Config and tokenizer metadata are required
+    if (!files.includes('config.json') || !files.includes('tokenizer.json')) {
+      return false;
+    }
+    const configStat = fs.statSync(path.join(dir, 'config.json'));
+    const tokenStat = fs.statSync(path.join(dir, 'tokenizer.json'));
+    if (configStat.size < 10 || tokenStat.size < 10) {
+      return false;
+    }
+
+    // Check nested onnx/ directory
+    const onnxDir = path.join(dir, 'onnx');
+    if (fs.existsSync(onnxDir)) {
+      const onnxFiles = fs.readdirSync(onnxDir);
+      const encFile = onnxFiles.find(f => f.startsWith('encoder_model') && f.endsWith('.onnx'));
+      const decFile = onnxFiles.find(f => f.startsWith('decoder_model') && f.endsWith('.onnx'));
+      if (encFile && decFile) {
+        const encStat = fs.statSync(path.join(onnxDir, encFile));
+        const decStat = fs.statSync(path.join(onnxDir, decFile));
+        if (encStat.size > 10000 && decStat.size > 10000) {
+          return true;
+        }
+      }
+    }
+
+    // Also check root directory for direct ONNX weights (e.g. custom or flattened caches)
+    const rootEnc = files.find(f => f.startsWith('encoder_model') && f.endsWith('.onnx'));
+    const rootDec = files.find(f => f.startsWith('decoder_model') && f.endsWith('.onnx'));
+    if (rootEnc && rootDec) {
+      const encStat = fs.statSync(path.join(dir, rootEnc));
+      const decStat = fs.statSync(path.join(dir, rootDec));
+      if (encStat.size > 10000 && decStat.size > 10000) {
+        return true;
+      }
+    }
+  } catch (_) {}
+
+  return false;
+};
+
 export const isWhisperModelCached = async (modelName = 'Xenova/whisper-base') => {
   if (PIPELINE_MODEL_CACHE.has(modelName)) {
     return { cached: true, inMemory: true, path: 'memory' };
@@ -30,6 +79,14 @@ export const isWhisperModelCached = async (modelName = 'Xenova/whisper-base') =>
     const { env } = await getTransformers();
     const candidateDirs = [];
 
+    // 1. Configured persistent global cache directory
+    const globalCacheDir = getGlobalModelCacheDir();
+    if (globalCacheDir) {
+      candidateDirs.push(path.join(globalCacheDir, ...modelName.split('/')));
+      candidateDirs.push(path.join(globalCacheDir, modelName));
+    }
+
+    // 2. env.cacheDir from transformers
     if (env?.cacheDir) {
       candidateDirs.push(path.join(env.cacheDir, ...modelName.split('/')));
       candidateDirs.push(path.join(env.cacheDir, modelName));
@@ -39,18 +96,25 @@ export const isWhisperModelCached = async (modelName = 'Xenova/whisper-base') =>
       candidateDirs.push(path.join(env.localModelPath, modelName));
     }
 
-    // Default node_modules / OS hub directories
+    // 3. Default node_modules / OS hub directories
     const homeDir = os.homedir();
     candidateDirs.push(path.join(homeDir, '.cache', 'huggingface', 'hub', `models--${modelName.replace('/', '--')}`));
     candidateDirs.push(path.join(process.cwd(), '.cache', ...modelName.split('/')));
     candidateDirs.push(path.join(process.cwd(), 'models', ...modelName.split('/')));
+    candidateDirs.push(path.join(process.cwd(), '.aitutor', 'models', ...modelName.split('/')));
+    candidateDirs.push(path.join(process.cwd(), 'node_modules', '@huggingface', 'transformers', '.cache', ...modelName.split('/')));
+    candidateDirs.push(path.join(process.cwd(), 'node_modules', '@xenova', 'transformers', '.cache', ...modelName.split('/')));
+
+    // Also check relative to packages/tavi-video-tutor
+    try {
+      const currentDir = path.dirname(fileURLToPath(import.meta.url));
+      candidateDirs.push(path.resolve(currentDir, '../../../node_modules/@huggingface/transformers/.cache', ...modelName.split('/')));
+      candidateDirs.push(path.resolve(currentDir, '../../../node_modules/@xenova/transformers/.cache', ...modelName.split('/')));
+    } catch (_) {}
 
     for (const dir of candidateDirs) {
-      if (fs.existsSync(dir)) {
-        const files = fs.readdirSync(dir);
-        if (files.includes('config.json') || files.includes('tokenizer.json') || files.includes('onnx') || files.length > 0) {
-          return { cached: true, inMemory: false, path: dir };
-        }
+      if (validateModelCacheDirectory(dir)) {
+        return { cached: true, inMemory: false, path: dir };
       }
     }
   } catch (_) {
@@ -62,7 +126,19 @@ export const isWhisperModelCached = async (modelName = 'Xenova/whisper-base') =>
 
 export const downloadWhisperModel = async (modelName = 'Xenova/whisper-base', options = {}) => {
   const provider = new WhisperProvider({ model: modelName, ...options });
-  return await provider.getTranscriberPipeline(modelName);
+  const transcriber = await provider.getTranscriberPipeline(modelName);
+
+  // Validate model can execute without error on a tiny 0.1s synthetic silence buffer
+  try {
+    if (typeof transcriber === 'function') {
+      const dummyPcm = new Float32Array(1600); // 100ms of 16kHz silence
+      await transcriber(dummyPcm, { chunk_length_s: 30 });
+    }
+  } catch (valErr) {
+    throw new Error(`Whisper model download verification failed: ${valErr.message}`);
+  }
+
+  return transcriber;
 };
 
 export class TranscriptionProvider {
@@ -212,26 +288,7 @@ export class WhisperProvider extends TranscriptionProvider {
   async transcribe(audioInput, videoEntry) {
     const audioPath = typeof audioInput === 'string' ? audioInput : audioInput.audioPath;
 
-    if (!fs.existsSync(audioPath) && audioPath.includes('dummy')) {
-      const sampleRate = 16000;
-      const numSamples = sampleRate * 2;
-      const wavBuffer = Buffer.alloc(44 + numSamples * 2);
-      wavBuffer.write('RIFF', 0);
-      wavBuffer.writeUInt32LE(36 + numSamples * 2, 4);
-      wavBuffer.write('WAVE', 8);
-      wavBuffer.write('fmt ', 12);
-      wavBuffer.writeUInt32LE(16, 16);
-      wavBuffer.writeUInt16LE(1, 20);
-      wavBuffer.writeUInt16LE(1, 22);
-      wavBuffer.writeUInt32LE(sampleRate, 24);
-      wavBuffer.writeUInt32LE(sampleRate * 2, 28);
-      wavBuffer.writeUInt16LE(2, 32);
-      wavBuffer.writeUInt16LE(16, 34);
-      wavBuffer.write('data', 36);
-      wavBuffer.writeUInt32LE(numSamples * 2, 40);
-
-      fs.writeFileSync(audioPath, wavBuffer);
-    } else if (!fs.existsSync(audioPath)) {
+    if (!fs.existsSync(audioPath)) {
       throw new Error(`Audio file not found: ${audioPath}`);
     }
 
@@ -274,7 +331,9 @@ export class WhisperProvider extends TranscriptionProvider {
         }));
       }
     } catch (err) {
-      if (this.options.allowTestFallback || this.options.allowFallback || process.env.AITUTOR_ALLOW_FALLBACK === 'true') {
+      const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+        (this.options.__testOnlyExplicitFallback === true || this.options.allowTestFallback === true);
+      if (isExplicitTestMode) {
         segments = [
           { start: 0.5, end: 3.8, text: `Welcome to ${videoEntry.id} video lecture.` },
           { start: 4.2, end: 8.5, text: 'This subtitle was automatically generated by AITutor Subtitle Engine.' }
@@ -284,7 +343,9 @@ export class WhisperProvider extends TranscriptionProvider {
       }
     }
 
-    if (segments.length === 0 && (this.options.allowTestFallback || this.options.allowFallback || process.env.AITUTOR_ALLOW_FALLBACK === 'true')) {
+    const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+      (this.options.__testOnlyExplicitFallback === true || this.options.allowTestFallback === true);
+    if (segments.length === 0 && isExplicitTestMode) {
       segments = [
         { start: 0.5, end: 4.0, text: `Subtitle track for ${videoEntry.id}` }
       ];
