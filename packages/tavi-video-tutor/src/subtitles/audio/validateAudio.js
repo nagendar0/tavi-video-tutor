@@ -123,6 +123,64 @@ export function validateGeneratedAudio(filePath, options = {}) {
     return fail('DURATION_OUT_OF_BOUNDS', `Duration ${durationSec}s exceeds tolerance from expected ${options.expectedDuration}s`);
   }
 
+  // Silence detection via volumedetect
+  const shouldCheckSilence = options.rejectSilence === true || (process.env.NODE_ENV === 'production' && options.rejectSilence !== false);
+  if (shouldCheckSilence) {
+    const ffmpegBin = options.ffmpegBin || getFFmpegBinaryPath();
+    const volumeProc = spawnSync(ffmpegBin, [
+      '-v', 'info',
+      '-i', filePath,
+      '-af', 'volumedetect',
+      '-f', 'null',
+      '-'
+    ], { encoding: 'utf8', windowsHide: true });
+
+    const output = (volumeProc.stderr || '') + (volumeProc.stdout || '');
+    const maxMatch = output.match(/max_volume:\s*([-\d.]+)\s*dB/i);
+    const meanMatch = output.match(/mean_volume:\s*([-\d.]+)\s*dB/i);
+
+    if (maxMatch && meanMatch) {
+      const maxVol = parseFloat(maxMatch[1]);
+      const meanVol = parseFloat(meanMatch[1]);
+      if (maxVol < -50 || meanVol < -60) {
+        return fail('SILENT_AUDIO', `Audio contains near-silence (max_volume: ${maxVol} dB, mean_volume: ${meanVol} dB)`);
+      }
+    }
+  }
+
+  // Tone / synthetic-audio detection via astats
+  const shouldCheckTone = options.rejectTone === true || (process.env.NODE_ENV === 'production' && options.rejectTone !== false);
+  if (shouldCheckTone) {
+    const ffmpegBin = options.ffmpegBin || getFFmpegBinaryPath();
+    const statsProc = spawnSync(ffmpegBin, [
+      '-v', 'info',
+      '-i', filePath,
+      '-af', 'astats=metadata=1:reset=1',
+      '-f', 'null',
+      '-'
+    ], { encoding: 'utf8', windowsHide: true });
+
+    const statsOutput = (statsProc.stderr || '') + (statsProc.stdout || '');
+    const crestMatches = [...statsOutput.matchAll(/Crest factor:\s*([-\d.]+)/gi)];
+    const peakMatches = [...statsOutput.matchAll(/Peak level dB:\s*([-\d.]+)/gi)];
+    const rmsMatches = [...statsOutput.matchAll(/RMS level dB:\s*([-\d.]+)/gi)];
+
+    if (crestMatches.length > 0) {
+      for (let i = 0; i < crestMatches.length; i++) {
+        const crest = parseFloat(crestMatches[i][1]);
+        const peak = peakMatches[i] ? parseFloat(peakMatches[i][1]) : null;
+        const rms = rmsMatches[i] ? parseFloat(rmsMatches[i][1]) : null;
+        const peakRmsDiff = (peak !== null && rms !== null) ? Math.abs(peak - rms) : null;
+
+        // Pure sine wave has theoretical crest factor sqrt(2) ~= 1.414, astats measures ~1.35 - 1.52,
+        // and peak-to-RMS difference ~3.01 dB.
+        if (crest >= 1.35 && crest <= 1.52 && peakRmsDiff !== null && peakRmsDiff >= 2.5 && peakRmsDiff <= 3.8) {
+          return fail('SYNTHETIC_TONE_AUDIO', `Audio contains pure synthetic tone (crest_factor: ${crest}, peak_rms_diff: ${peakRmsDiff.toFixed(2)} dB)`);
+        }
+      }
+    }
+  }
+
   // Quick decode test with ffmpeg
   if (decodeTest) {
     const ffmpegBin = options.ffmpegBin || getFFmpegBinaryPath();
@@ -185,7 +243,17 @@ export function createValidWaveBuffer(durationSeconds = 1.0, sampleRate = 16000,
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
 
-  // Bytes 44 onwards are 0x00 (clean silence)
+  // Synthesize modulated speech-like harmonic PCM audio (non-silent, dynamic crest factor)
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const env = 0.5 + 0.4 * Math.sin(2 * Math.PI * 3.5 * t) * Math.cos(2 * Math.PI * 1.2 * t);
+    const s = 0.4 * Math.sin(2 * Math.PI * 180 * t) + 0.3 * Math.sin(2 * Math.PI * 360 * t) + 0.15 * Math.sin(2 * Math.PI * 720 * t);
+    const sample = Math.max(-32768, Math.min(32767, Math.round(s * env * 22000)));
+    for (let c = 0; c < numChannels; c++) {
+      buffer.writeInt16LE(sample, 44 + (i * numChannels + c) * bytesPerSample);
+    }
+  }
+
   return buffer;
 }
 

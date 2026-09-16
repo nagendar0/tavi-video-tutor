@@ -191,7 +191,9 @@ export class LocalNllbProvider extends TranslationProvider {
     try {
       translator = await this.getPipeline();
     } catch (err) {
-      if (this.options.allowTestFallback) {
+      const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+        this.options.__testOnlyExplicitFallback === true;
+      if (isExplicitTestMode) {
         // Safe test fallback for offline environments where weights aren't pre-downloaded
         for (const idx of uncachedIndices) {
           const cue = segments[idx];

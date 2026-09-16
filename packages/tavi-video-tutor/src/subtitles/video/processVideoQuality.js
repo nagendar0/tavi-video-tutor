@@ -85,8 +85,16 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
 
   const validateRendition = async (filePath, rendition) => {
     const outputProbe = await probeMedia(filePath, { cwd: manifestStore.cwd });
-    if (outputProbe.video?.codec !== 'h264' || outputProbe.video?.height !== rendition.height || outputProbe.video?.width !== rendition.width) {
-      throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} produced ${outputProbe.video?.codec || 'unknown'} ${outputProbe.video?.width || 0}x${outputProbe.video?.height || 0}; expected H.264 ${rendition.width}x${rendition.height}.`);
+    const vCodec = outputProbe.video?.codec || outputProbe.videoCodec;
+    if (vCodec !== 'h264' || outputProbe.video?.height !== rendition.height || outputProbe.video?.width !== rendition.width) {
+      throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} produced ${vCodec || 'unknown'} ${outputProbe.video?.width || 0}x${outputProbe.video?.height || 0}; expected H.264 ${rendition.width}x${rendition.height}.`);
+    }
+    const sourceHasAudio = probeInfo.hasAudio || Boolean(probeInfo.audioCodec || probeInfo.audio?.codec);
+    if (sourceHasAudio) {
+      const aCodec = outputProbe.audio?.codec || outputProbe.audioCodec;
+      if (aCodec !== 'aac') {
+        throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} audio codec is ${aCodec || 'missing'}; expected AAC.`);
+      }
     }
     if (probeInfo.duration > 0 && (!Number.isFinite(outputProbe.duration) || Math.abs(outputProbe.duration - probeInfo.duration) > 2)) {
       throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} duration ${outputProbe.duration}s differs from source ${probeInfo.duration}s.`);
@@ -94,10 +102,13 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
   };
 
   for (const rendition of plan.renditions) {
-    // If this rendition represents the original source resolution and the source is ALREADY browser-native H.264 MP4,
-    // point directly to the source video. Otherwise (e.g. .avi, .mkv, .mov, .webm, non-h264), generate a browser MP4 rendition!
+    // If this rendition represents the original source resolution and the source is ALREADY browser-native H.264 MP4 with AAC audio,
+    // point directly to the source video. Otherwise (e.g. .avi, .mkv, .mov, .webm, non-h264, non-aac), generate a browser MP4 rendition!
+    const sourceHasAudio = probeInfo.hasAudio || Boolean(probeInfo.audioCodec || probeInfo.audio?.codec);
+    const audioIsBrowserNative = !sourceHasAudio || (probeInfo.audio?.codec === 'aac' || probeInfo.audioCodec === 'aac');
     const isBrowserNativeMp4 = (resolved.filePath.endsWith('.mp4') || resolved.filePath.endsWith('.m4v')) && 
-      (probeInfo.video?.codec === 'h264' || probeInfo.videoCodec === 'h264');
+      (probeInfo.video?.codec === 'h264' || probeInfo.videoCodec === 'h264') &&
+      audioIsBrowserNative;
 
     if (rendition.isSource && isBrowserNativeMp4) {
       const sourceUrl = videoEntry.src.replace(/^\.\/public\//, '/').replace(/^public\//, '/');

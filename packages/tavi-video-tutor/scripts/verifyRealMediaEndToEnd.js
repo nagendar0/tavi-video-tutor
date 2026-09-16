@@ -17,7 +17,15 @@ console.log('============================================================');
 console.log('PHASE 27: REAL MEDIA END-TO-END VERIFICATION');
 console.log('============================================================\n');
 
-const REAL_MEDIA_SOURCE = 'C:\\Users\\nagen\\OneDrive\\Videos\\Screen Recordings\\Screen Recording 2026-07-25 231931.mp4';
+const FIXTURE_CANDIDATES = [
+  path.resolve(process.cwd(), '../../examples/react-demo/public/sample.mp4'),
+  path.resolve(process.cwd(), '../examples/react-demo/public/sample.mp4'),
+  path.resolve(process.cwd(), 'examples/react-demo/public/sample.mp4'),
+  path.resolve(process.cwd(), '../../examples/react-demo/public/demo-video.mp4'),
+  path.resolve(process.cwd(), '../examples/react-demo/public/demo-video.mp4'),
+  path.resolve(process.cwd(), 'examples/react-demo/public/demo-video.mp4')
+];
+const REAL_MEDIA_SOURCE = FIXTURE_CANDIDATES.find(p => fs.existsSync(p));
 const ffmpeg = getFFmpegBinaryPath();
 const ffprobe = getFFprobeBinaryPath();
 
@@ -66,7 +74,12 @@ async function runRealMediaAudit() {
     const audioRes = await extractAudio(clipPath, audioOutPath);
     const extractedWav = audioRes.audioPath;
     console.log(`      Extracted: ${extractedWav} (${fs.statSync(extractedWav).size} bytes)`);
-    const audioValidation = validateGeneratedAudio(extractedWav, { minSizeBytes: 1000, decodeTest: true });
+    const audioValidation = validateGeneratedAudio(extractedWav, {
+      minSizeBytes: 1000,
+      decodeTest: true,
+      rejectSilence: true,
+      rejectTone: true
+    });
     assert.equal(audioValidation.valid, true, `Extracted audio must be valid WAV: ${audioValidation.message}`);
     console.log(`      Audio Validation: PASS (Valid PCM WAV, ${audioValidation.duration.toFixed(2)}s)`);
 
@@ -100,12 +113,17 @@ async function runRealMediaAudit() {
     const synthDir = path.join(tmpDir, 'synth');
     fs.mkdirSync(synthDir, { recursive: true });
 
-    // Mock realistic segments
+    // Realistic non-silent speech audio generator for test pipeline
     const mockTTS = {
       synthesize: async (text, lang, opts) => {
         const segPath = path.join(opts.outputDir, `${lang}_${Date.now()}_${Math.random().toString(36).substring(2,6)}.wav`);
-        fs.writeFileSync(segPath, createValidWaveBuffer(2.0, 16000, 1));
-        return { audioPath: segPath, duration: 2.0, format: 'wav' };
+        spawnSync(ffmpeg, [
+          '-y',
+          '-f', 'lavfi', '-i', 'anoisesrc=d=2.5:c=pink:r=16000:a=0.15',
+          '-af', 'lowpass=f=3000,highpass=f=200',
+          segPath
+        ], { windowsHide: true });
+        return { audioPath: segPath, duration: 2.5, format: 'wav' };
       }
     };
 
@@ -113,15 +131,32 @@ async function runRealMediaAudit() {
       transcribe: async () => ({
         language: 'en',
         segments: [
-          { id: 0, start: 0.0, end: 2.5, text: 'Welcome to this computer science lecture.' },
-          { id: 1, start: 2.5, end: 5.0, text: 'Today we will discuss algorithms and systems.' }
+          { id: 'seg_000001', start: 0.0, end: 2.5, text: 'Welcome to this computer science lecture.' },
+          { id: 'seg_000002', start: 2.5, end: 5.0, text: 'Today we will discuss algorithms and systems.' }
         ]
       })
     };
 
     const mockTranslator = {
       supports: () => true,
-      translateSegments: async (segs, src, tgt) => segs.map(s => ({ ...s, text: `[${tgt}] ${s.text}` }))
+      translateSegments: async (segs, src, tgt) => {
+        const translations = {
+          hi: [
+            'इस कंप्यूटर विज्ञान व्याख्यान में आपका स्वागत है।',
+            'आज हम एल्गोरिदम और सिस्टम पर चर्चा करेंगे।'
+          ],
+          te: [
+            'ఈ కంప్యూటర్ సైన్స్ ఉపన్యాసానికి స్వాగతం.',
+            'ఈ రోజు మనం అల్గోరిథంలు మరియు వ్యవస్థల గురించి చర్చిస్తాము.'
+          ]
+        };
+        return segs.map((s, idx) => ({
+          ...s,
+          text: translations[tgt]?.[idx] || (tgt === 'en' ? s.text : s.text),
+          translatedText: translations[tgt]?.[idx] || (tgt === 'en' ? s.text : s.text),
+          originalText: s.text
+        }));
+      }
     };
 
     const pipelineResult = await processSingleVideo(videoEntry, manifestStore, {

@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
 import { validateGeneratedAudio } from '../audio/validateAudio.js';
+import { TranslationValidator } from '../translation/TranslationValidator.js';
 
 export const computeMediaFingerprint = (srcOrEntry, cwd = process.cwd(), extra = null, remoteMetadata = null) => {
   const src = typeof srcOrEntry === 'string' ? srcOrEntry : (srcOrEntry && srcOrEntry.src ? srcOrEntry.src : '');
@@ -171,7 +172,7 @@ export class ManifestStore {
     return requestedLangs.every(lang => this.isLanguageCached(videoEntry.id, lang, fingerprint));
   }
 
-  isLanguageCached(videoId, langCode, fingerprint = null) {
+  isLanguageCached(videoId, langCode, fingerprint = null, options = {}) {
     const manifest = this.loadManifest();
     const entry = manifest[videoId];
     if (!entry) return false;
@@ -183,7 +184,35 @@ export class ManifestStore {
 
     try {
       const publicPath = normalizeSubtitlePath(subInfo.src, this.publicDir);
-      return fs.existsSync(publicPath);
+      if (!fs.existsSync(publicPath)) return false;
+
+      // Validate VTT content — do not accept empty, malformed, or untranslated VTT as cache hit
+      const content = fs.readFileSync(publicPath, 'utf8');
+      const sourceLang = entry.sourceLanguage || entry.language || 'en';
+
+      let sourceVttContent = null;
+      if (normLang !== sourceLang) {
+        const srcSubInfo = entry.subtitles?.[sourceLang];
+        if (srcSubInfo?.src && srcSubInfo.src !== subInfo.src) {
+          try {
+            const srcPath = normalizeSubtitlePath(srcSubInfo.src, this.publicDir);
+            if (fs.existsSync(srcPath)) {
+              sourceVttContent = fs.readFileSync(srcPath, 'utf8');
+            }
+          } catch (_) {}
+        }
+      }
+
+      const validator = new TranslationValidator();
+      const validation = validator.validateVttContent(content, normLang, sourceLang, sourceVttContent);
+      if (!validation.valid) {
+        if (options.pruneCorrupt) {
+          try { fs.unlinkSync(publicPath); } catch (_) {}
+        }
+        return false;
+      }
+
+      return true;
     } catch (_) {
       return false;
     }
@@ -214,7 +243,13 @@ export class ManifestStore {
       }
 
       if (options.decodeTest !== false) {
-        const validation = validateGeneratedAudio(publicPath, { minSizeBytes: minBytes, expectedCodec: options.expectedCodec || 'aac', decodeTest: true });
+        const validation = validateGeneratedAudio(publicPath, {
+          minSizeBytes: minBytes,
+          expectedCodec: options.expectedCodec || 'aac',
+          decodeTest: true,
+          rejectSilence: true,
+          rejectTone: true
+        });
         if (!validation.valid) {
           if (options.pruneCorrupt) {
             try { fs.unlinkSync(publicPath); } catch (_) {}
@@ -228,7 +263,6 @@ export class ManifestStore {
       return false;
     }
   }
-
 
   saveSubtitle(videoEntry, vttContent, language = 'en', extraFingerprint = null) {
     return this.saveMultilingualSubtitles(videoEntry, language, { [language]: vttContent }, extraFingerprint)[language]?.src;

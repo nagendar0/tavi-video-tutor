@@ -774,8 +774,19 @@ export const TaviVideoPlayer = forwardRef(({
   }, [tracks, config]);
 
   // Automatically build standard config.file.tracks objects for all 100+ languages
-  const generatedTracks = useMemo(() => {
+  const [generatedTracks, setGeneratedTracks] = useState([]);
+  const activeBlobUrlsRef = useRef([]);
+
+  useEffect(() => {
+    // Revoke previous URLs
+    activeBlobUrlsRef.current.forEach(url => {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    });
+    activeBlobUrlsRef.current = [];
+
+    const newBlobUrls = [];
     const list = [];
+
     Object.entries(combinedSubtitles).forEach(([langCode, vttContent], idx) => {
       if (!vttContent) return; // deleted or null
       let srcUrl = vttContent;
@@ -783,6 +794,7 @@ export const TaviVideoPlayer = forwardRef(({
         try {
           const blob = new Blob([vttContent], { type: 'text/vtt' });
           srcUrl = URL.createObjectURL(blob);
+          newBlobUrls.push(srcUrl);
         } catch (_) {}
       }
       list.push({
@@ -793,22 +805,16 @@ export const TaviVideoPlayer = forwardRef(({
         default: langCode === defaultSubLanguage || (idx === 0 && defaultSubLanguage === 'en')
       });
     });
-    return list;
-  }, [combinedSubtitles, defaultSubLanguage]);
 
-  // Inline VTT tracks are represented by object URLs. Revoke only the URLs
-  // created for the superseded render/unmount; network URLs are untouched.
-  useEffect(() => {
-    const objectUrls = generatedTracks
-      .map(track => track.src)
-      .filter(trackSrc => typeof trackSrc === 'string' && trackSrc.startsWith('blob:'));
+    activeBlobUrlsRef.current = newBlobUrls;
+    setGeneratedTracks(list);
 
     return () => {
-      objectUrls.forEach(objectUrl => {
-        try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+      newBlobUrls.forEach(url => {
+        try { URL.revokeObjectURL(url); } catch (_) {}
       });
     };
-  }, [generatedTracks]);
+  }, [combinedSubtitles, defaultSubLanguage]);
 
   // Trigger onTracksChange whenever tracks array updates
   const lastTracksSignatureRef = useRef('');

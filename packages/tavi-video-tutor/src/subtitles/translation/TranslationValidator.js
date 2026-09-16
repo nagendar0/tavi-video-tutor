@@ -123,4 +123,113 @@ export class TranslationValidator {
       details
     };
   }
+
+  /**
+   * Parses timestamp string (00:00:00.000 or 00:00.000) into milliseconds.
+   */
+  parseVttTimestampToMs(ts) {
+    if (!ts || typeof ts !== 'string') return null;
+    const parts = ts.trim().split(':');
+    let hours = 0;
+    let minutes = 0;
+    let seconds = 0;
+    let ms = 0;
+    if (parts.length === 3) {
+      hours = parseInt(parts[0], 10);
+      minutes = parseInt(parts[1], 10);
+      const secParts = parts[2].split('.');
+      seconds = parseInt(secParts[0], 10);
+      ms = parseInt(secParts[1] || '0', 10);
+    } else if (parts.length === 2) {
+      minutes = parseInt(parts[0], 10);
+      const secParts = parts[1].split('.');
+      seconds = parseInt(secParts[0], 10);
+      ms = parseInt(secParts[1] || '0', 10);
+    } else {
+      return null;
+    }
+    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds) || isNaN(ms)) return null;
+    return (hours * 3600 + minutes * 60 + seconds) * 1000 + ms;
+  }
+
+  /**
+   * Validates raw WebVTT content for header integrity, valid timestamp arrows,
+   * non-empty cues, strictly monotonic timestamp ordering, and expected script presence for target language.
+   */
+  validateVttContent(vttContent, targetLangCode = null, sourceLangCode = 'en', sourceVttContent = null) {
+    if (!vttContent || typeof vttContent !== 'string') {
+      return { valid: false, reason: 'Empty VTT content' };
+    }
+    const lines = vttContent.split(/\r?\n/);
+    if (!lines[0].startsWith('WEBVTT')) {
+      return { valid: false, reason: 'Missing WEBVTT header' };
+    }
+
+    const cueTexts = [];
+    const arrowLineRegex = /((?:\d{2}:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d{2}:)?\d{2}:\d{2}\.\d{3})/;
+    let prevStartMs = -1;
+    let cueCount = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const match = line.match(arrowLineRegex);
+      if (match) {
+        cueCount++;
+        const startMs = this.parseVttTimestampToMs(match[1]);
+        const endMs = this.parseVttTimestampToMs(match[2]);
+
+        if (startMs === null || endMs === null) {
+          return { valid: false, reason: `Malformed timestamp in cue: ${line}` };
+        }
+        if (startMs >= endMs) {
+          return { valid: false, reason: `Cue start timestamp (${match[1]}) must be strictly before end timestamp (${match[2]})` };
+        }
+        if (startMs < prevStartMs) {
+          return { valid: false, reason: `Out-of-order cue timestamps detected: start ${match[1]} preceded previous start` };
+        }
+        prevStartMs = startMs;
+
+        let text = '';
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() && !arrowLineRegex.test(lines[j].trim())) {
+          text += (text ? ' ' : '') + lines[j].trim();
+          j++;
+        }
+        if (!text.trim()) {
+          return { valid: false, reason: `Empty cue text found after timestamp '${line}'` };
+        }
+        cueTexts.push(text.trim());
+      }
+    }
+
+    if (cueCount === 0) {
+      return { valid: false, reason: 'No valid timestamped cues found in VTT' };
+    }
+
+    if (targetLangCode && sourceLangCode && targetLangCode !== sourceLangCode) {
+      const scriptRegex = SCRIPT_RANGE_MAP[targetLangCode];
+      if (scriptRegex) {
+        const fullText = cueTexts.join(' ');
+        if (!scriptRegex.test(fullText)) {
+          return { valid: false, reason: `Target script missing for '${targetLangCode}' in VTT` };
+        }
+
+        const words = fullText.split(/\s+/).filter(Boolean);
+        const latinWords = words.filter(w => /^[a-zA-Z]{3,}$/.test(w) && !this.protectedTerms.isProtectedTerm(w));
+        if (words.length > 2 && latinWords.length > words.length * 0.7) {
+          return { valid: false, reason: `Excessive untranslated Latin/English text detected in '${targetLangCode}' VTT` };
+        }
+      }
+
+      if (sourceVttContent && typeof sourceVttContent === 'string') {
+        const cleanTgt = vttContent.replace(/^WEBVTT[^\n]*\r?\n+/i, '').trim();
+        const cleanSrc = sourceVttContent.replace(/^WEBVTT[^\n]*\r?\n+/i, '').trim();
+        if (cleanTgt === cleanSrc) {
+          return { valid: false, reason: 'VTT content is identical to source language VTT (untranslated)' };
+        }
+      }
+    }
+
+    return { valid: true };
+  }
 }

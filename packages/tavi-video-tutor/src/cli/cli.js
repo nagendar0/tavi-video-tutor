@@ -736,7 +736,40 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
     }
   }
 
-  const firstArg = args[0] || 'generate';
+  if (args.includes('--help') || args.includes('-h') || firstArg === 'help') {
+    console.log(`
+AITutor CLI — Automated Multilingual Subtitle & Audio Dubbing Engine
+
+Usage:
+  aitutor [command] [options]
+
+Commands:
+  init                     Initialize aitutor.config.mjs in current directory
+  generate                 Run subtitle, translation, audio dub & quality pipeline
+  status                   Show pipeline status for configured videos
+  validate                 Validate generated subtitles and audio tracks
+  clean                    Clean generated subtitles, audio tracks, and qualities
+  doctor                   Run environment and dependency diagnostics
+  setup                    Run interactive/automated environment setup
+  audio [clear|status]     Manage multilingual audio tracks
+
+Options:
+  --video <id>             Filter by video ID
+  --force                  Bypass cache and force regenerate
+  --no-quality             Skip video quality rendition ladder transcoding
+  --keep-temp              Keep temporary extraction workspace files
+  --audio-languages <csv>  Comma-separated list of audio languages or "all"
+  --help, -h               Show this help message
+  --version, -v            Show AITutor package version
+`);
+    return;
+  }
+
+  if (args.includes('--version') || (args.length === 1 && (args[0] === '-v' || args[0] === 'version'))) {
+    console.log('tavi-video-tutor v2.2.1');
+    return;
+  }
+
   const isFlag = firstArg.startsWith('-');
   const command = isFlag ? 'generate' : firstArg;
 

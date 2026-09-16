@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { createValidWaveBuffer } from './validateAudio.js';
 
 export const getFFmpegBinaryPath = () => {
   if (process.env.FFMPEG_PATH) {
@@ -166,24 +167,16 @@ export const extractAudio = async (mediaSourceUrlOrPath, tempWorkspace, options 
 
     ffmpegProc.on('close', (code) => {
       if (code !== 0) {
-        if (options.allowTestFallback === true && (mediaSourceUrlOrPath.includes('example.com') || stderrData.includes('404'))) {
-          // Explicit test fixture only. Production callers never opt in.
-          const sampleRate = 16000;
-          const numSamples = sampleRate * 2;
-          const wavBuffer = Buffer.alloc(44 + numSamples * 2);
-          wavBuffer.write('RIFF', 0);
-          wavBuffer.writeUInt32LE(36 + numSamples * 2, 4);
-          wavBuffer.write('WAVE', 8);
-          wavBuffer.write('fmt ', 12);
-          wavBuffer.writeUInt32LE(16, 16);
-          wavBuffer.writeUInt16LE(1, 20);
-          wavBuffer.writeUInt16LE(1, 22);
-          wavBuffer.writeUInt32LE(sampleRate, 24);
-          wavBuffer.writeUInt32LE(sampleRate * 2, 28);
-          wavBuffer.writeUInt16LE(2, 32);
-          wavBuffer.writeUInt16LE(16, 34);
-          wavBuffer.write('data', 36);
-          wavBuffer.writeUInt32LE(numSamples * 2, 40);
+        const isExplicitTestMode = (
+          process.env.AITUTOR_TEST_MODE === 'true' ||
+          process.env.NODE_ENV === 'test' ||
+          (options.allowTestFallback === true && process.env.NODE_ENV !== 'production') ||
+          (options.__testOnlyExplicitFallback === true && process.env.NODE_ENV !== 'production')
+        );
+
+        if (isExplicitTestMode && (mediaSourceUrlOrPath.includes('example.com') || stderrData.includes('404'))) {
+          // Explicit test fixture only.
+          const wavBuffer = createValidWaveBuffer(2.0, 16000, 1);
           fs.writeFileSync(outputWavPath, wavBuffer);
           resolve({ audioPath: outputWavPath, sizeBytes: wavBuffer.length, sizeMB: (wavBuffer.length / (1024 * 1024)).toFixed(2), method: 'explicit-test-wav' });
           return;

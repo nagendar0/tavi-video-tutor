@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { pathToFileURL } from 'url';
 import { AITUTOR_LANGUAGES } from '../languages/registry.js';
 
@@ -39,8 +40,9 @@ export class VideoEntry {
   deriveIdFromSrc(src, index) {
     if (!src) return `video_${index}`;
     const clean = src.split('?')[0].split('#')[0];
-    const filename = clean.split('/').pop() || `video_${index}`;
-    return filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = path.basename(clean);
+    const baseName = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return baseName || `video_${index}`;
   }
 }
 

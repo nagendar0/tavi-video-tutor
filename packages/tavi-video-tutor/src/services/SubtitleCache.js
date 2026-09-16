@@ -31,8 +31,20 @@ export const getCachedSubtitle = async (url) => {
       const transaction = db.transaction(STORE_NAME, 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.get(url);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
+      const cleanup = () => {
+        request.onsuccess = null;
+        request.onerror = null;
+      };
+      request.onsuccess = () => {
+        const res = request.result || null;
+        cleanup();
+        resolve(res);
+      };
+      request.onerror = () => {
+        const err = request.error;
+        cleanup();
+        reject(err);
+      };
     });
   } catch (err) {
     console.error('IndexedDB get error:', err);
@@ -47,8 +59,19 @@ export const setCachedSubtitle = async (url, vtt) => {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.put(vtt, url);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const cleanup = () => {
+        request.onsuccess = null;
+        request.onerror = null;
+      };
+      request.onsuccess = () => {
+        cleanup();
+        resolve();
+      };
+      request.onerror = () => {
+        const err = request.error;
+        cleanup();
+        reject(err);
+      };
     });
   } catch (err) {
     console.error('IndexedDB put error:', err);

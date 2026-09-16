@@ -199,6 +199,18 @@ export const getLanguageByCode = (code) => {
  * @param {string} code 
  * @returns {Object}
  */
+export const VERIFIED_TTS_LANGUAGES = new Set([
+  'af', 'ar', 'bn', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'tl',
+  'fi', 'fr', 'de', 'el', 'gu', 'he', 'hi', 'hu', 'is', 'id', 'it', 'ja', 'jv',
+  'kn', 'km', 'ko', 'lv', 'lt', 'ms', 'ml', 'mr', 'my', 'ne', 'no', 'pl',
+  'pt', 'pa', 'ro', 'ru', 'sr', 'si', 'sk', 'sl', 'es', 'su', 'sw', 'sv', 'ta',
+  'te', 'th', 'tr', 'uk', 'ur', 'vi'
+]);
+
+export const UNSUPPORTED_TRANSLATION_LANGUAGES = new Set([
+  'bi', 'ch', 'doi'
+]);
+
 export const resolveLanguageCapability = (code) => {
   const canonical = normalizeLanguageCode(code);
   if (!canonical) {
@@ -220,6 +232,10 @@ export const resolveLanguageCapability = (code) => {
 
   const meta = CODE_TO_LANG.get(canonical);
 
+  const ttsSupported = VERIFIED_TTS_LANGUAGES.has(canonical);
+  const translationSupported = !UNSUPPORTED_TRANSLATION_LANGUAGES.has(canonical);
+  const isSupported = translationSupported;
+
   // Standard TTS voice and locale resolution
   const ttsLocale = meta.bcp47 || `${canonical}-${canonical.toUpperCase()}`;
   const translationCode = canonical;
@@ -239,14 +255,14 @@ export const resolveLanguageCapability = (code) => {
     translationProvider: 'mymemory',
     translationFallbackProvider: 'nllb',
     voiceId,
-    supported: true,
-    translationSupported: true,
-    translationSupport: true,
-    ttsProvider: 'node-tts',
-    ttsSupported: true,
-    ttsSupport: true,
-    speakerAwareCapability: true,
-    subtitleCapability: true,
+    supported: isSupported,
+    translationSupported,
+    translationSupport: translationSupported,
+    ttsProvider: ttsSupported ? 'node-tts' : null,
+    ttsSupported,
+    ttsSupport: ttsSupported,
+    speakerAwareCapability: ttsSupported,
+    subtitleCapability: translationSupported,
     preferredVoices: {
       female: [`${canonical}_voice_1`, `${ttsLocale}-Female`],
       male: [`${canonical}_voice_2`, `${ttsLocale}-Male`]

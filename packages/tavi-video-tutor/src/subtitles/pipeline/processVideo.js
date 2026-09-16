@@ -72,14 +72,28 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
     try {
       const audioStart = Date.now();
       const resolvedVideo = resolveDirectMediaSource(videoEntry, workspace);
+      let mediaPathForFfmpeg = resolvedVideo.filePath;
+
       if (resolvedVideo.type === 'remote') {
-        await validateResolvedRemoteHost(resolvedVideo.filePath, options);
+        onProgress?.({ type: 'media-download', message: '→ Securely fetching remote media via pinned connection...' });
+        try {
+          const downloadedMedia = await resolveVideoSource(videoEntry, workspace, options);
+          mediaPathForFfmpeg = downloadedMedia.filePath;
+        } catch (downloadErr) {
+          if (options.allowTestFallback === true && process.env.NODE_ENV !== 'production') {
+            // Test fixture mode for non-existent dummy hosts (e.g. example.com)
+            mediaPathForFfmpeg = resolvedVideo.filePath;
+          } else {
+            throw downloadErr;
+          }
+        }
       }
+
       let probeInfo = null;
 
       try {
-        probeInfo = await probeMedia(resolvedVideo.filePath, { cwd: manifestStore.cwd });
-        const containerLabel = (probeInfo.container || path.extname(resolvedVideo.filePath).replace('.', '') || 'mp4').toUpperCase();
+        probeInfo = await probeMedia(mediaPathForFfmpeg, { cwd: manifestStore.cwd });
+        const containerLabel = (probeInfo.container || path.extname(mediaPathForFfmpeg).replace('.', '') || 'mp4').toUpperCase();
         const videoDesc = probeInfo.video ? `${probeInfo.video.codec.toUpperCase()} ${probeInfo.video.width}x${probeInfo.video.height} (${probeInfo.video.fps} fps)` : 'N/A';
         const audioDesc = probeInfo.hasAudio 
           ? `${probeInfo.audio.codec.toUpperCase()} ${probeInfo.audio.sampleRate}Hz ${probeInfo.audio.channelLayout}${probeInfo.audioStreams.length > 1 ? ` (${probeInfo.audioStreams.length} audio streams detected)` : ''}`
@@ -87,7 +101,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
 
         onProgress?.({
           type: 'media-probe-summary',
-          message: `\nInput:\n  ${path.basename(resolvedVideo.filePath || videoEntry.src)}\nContainer:\n  ${containerLabel}\nVideo:\n  ${videoDesc}\nAudio:\n  ${audioDesc}\n`
+          message: `\nInput:\n  ${path.basename(mediaPathForFfmpeg || videoEntry.src)}\nContainer:\n  ${containerLabel}\nVideo:\n  ${videoDesc}\nAudio:\n  ${audioDesc}\n`
         });
       } catch (_) {
         // Continue if probe fails on non-standard mock
@@ -105,21 +119,11 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       } else {
         const selectedAudioStreamIndex = videoEntry.audioStreamIndex !== undefined ? videoEntry.audioStreamIndex : options.audioStreamIndex;
 
-        try {
-          onProgress?.({ type: 'ffmpeg-read', message: '→ Reading video URL with FFmpeg' });
-          onProgress?.({ type: 'ffmpeg-extract', message: '→ Extracting audio stream' });
-          extractedAudio = await extractAudio(resolvedVideo.filePath, workspace, {
-            audioStreamIndex: selectedAudioStreamIndex,
-            allowTestFallback: options.allowTestFallback === true
-          });
-        } catch (directErr) {
-          onProgress?.({ type: 'ffmpeg-fallback', message: '→ Fallback to media download stream...' });
-          const fallbackVideo = await resolveVideoSource(videoEntry, workspace);
-          extractedAudio = await extractAudio(fallbackVideo.filePath, workspace, {
-            audioStreamIndex: selectedAudioStreamIndex,
-            allowTestFallback: options.allowTestFallback === true
-          });
-        }
+        onProgress?.({ type: 'ffmpeg-extract', message: '→ Extracting audio stream' });
+        extractedAudio = await extractAudio(mediaPathForFfmpeg, workspace, {
+          audioStreamIndex: selectedAudioStreamIndex,
+          allowTestFallback: options.allowTestFallback === true
+        });
         metrics.recordTiming('audioExtractionTime', Date.now() - audioStart);
 
         onProgress?.({
@@ -174,6 +178,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
   const sourceLang = normalizeLanguageCode(masterTranscript.sourceLanguage || videoEntry.sourceLanguage || videoEntry.language || 'en') || 'en';
   const masterSegments = masterTranscript.segments || masterTranscript.normalized?.segments || [];
   const generatedSubtitlesMap = {};
+  const failedSubtitleLangs = [];
   let newGeneratedCount = 0;
   let subCachedCount = 0;
 
@@ -216,12 +221,19 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       const vttString = generateWebVTT(segmentedTranslated);
       metrics.recordTiming('vttTime', Date.now() - vttStart);
 
+      const sourceVttContent = generatedSubtitlesMap[sourceLang] || null;
+      const vttValidation = validator.validateVttContent(vttString, targetLang, sourceLang, sourceVttContent);
+      if (!vttValidation.valid) {
+        throw new Error(`VTT_VALIDATION_FAILED for ${targetLang}: ${vttValidation.reason}`);
+      }
+
       generatedSubtitlesMap[targetLang] = vttString;
       newGeneratedCount++;
 
       const statusBadge = validationResult.status === 'PASS' ? '✓' : '⚠';
       onProgress?.({ type: 'lang-generated', lang: targetLang, message: `${statusBadge} Generated ${targetLang}.vtt [${validationResult.status}]` });
     } catch (err) {
+      failedSubtitleLangs.push({ lang: targetLang, error: err });
       onProgress?.({ type: 'lang-failed', lang: targetLang, message: `⚠ ${targetLang} (translation error: ${err.message})` });
     }
   };
@@ -230,6 +242,14 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
   for (let i = 0; i < requestedLanguages.length; i += concurrencyLimit) {
     const chunk = requestedLanguages.slice(i, i + concurrencyLimit);
     await Promise.all(chunk.map(lang => processLanguage(lang)));
+  }
+
+  if (options.strictSubtitles === true && failedSubtitleLangs.length > 0) {
+    throw new Error(`SUBTITLE_PROCESSING_FAILED: Subtitle generation failed for requested language '${failedSubtitleLangs[0].lang}': ${failedSubtitleLangs[0].error.message}`);
+  }
+
+  if (Object.keys(generatedSubtitlesMap).length === 0 && subCachedCount === 0 && requestedLanguages.length > 0 && failedSubtitleLangs.length > 0) {
+    throw new Error(`SUBTITLE_PROCESSING_FAILED: All requested subtitle languages failed: ${failedSubtitleLangs.map(f => f.lang).join(', ')}`);
   }
 
   metrics.recordTiming('translationTime', Date.now() - translationStart);
@@ -496,6 +516,8 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
             minSizeBytes: 500,
             expectedCodec: 'aac',
             decodeTest: true,
+            rejectSilence: true,
+            rejectTone: true,
             throwOnError: true
           });
 

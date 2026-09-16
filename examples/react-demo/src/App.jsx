@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AITutor } from 'tavi-video-tutor';
 import 'tavi-video-tutor/dist/style.css';
-import { transcribeVideoAudio, batchTranslateSubtitles } from '../../../packages/tavi-video-tutor/src/services/AITranscriber.js';
 
 const LANGUAGE_NAMES = {
   en: "English",

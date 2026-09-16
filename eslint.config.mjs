@@ -14,6 +14,7 @@ export default [
       '**/*.min.js',
       '**/*.min.css',
       '**/public/**',
+      '**/*.d.ts',
       '**/.ag-kit-backups/**',
       '**/.agents/**',
       '**/.vscode/**'
@@ -51,6 +52,8 @@ export default [
         Request: 'readonly',
         Response: 'readonly',
         AbortController: 'readonly',
+        AbortSignal: 'readonly',
+        Buffer: 'readonly',
         WebSocket: 'readonly',
         Worker: 'readonly',
         Event: 'readonly',

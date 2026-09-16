@@ -358,7 +358,9 @@ export class AITutorTranslationProvider extends TranslationProvider {
     try {
       return await this.memoryProvider.translateSegments(segments, sourceLanguage, targetLanguage);
     } catch (err) {
-      if (this.options.allowTestFallback) {
+      const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
+        this.options.__testOnlyExplicitFallback === true;
+      if (isExplicitTestMode) {
         return segments.map((s, idx) => ({
           id: s.id || `cue_${String(idx + 1).padStart(6, '0')}`,
           start: Number(s.start),

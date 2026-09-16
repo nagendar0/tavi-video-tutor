@@ -1,5 +1,15 @@
 {
+  "name": "ai-tutor-system-root",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm test --workspace=tavi-video-tutor",
+    "lint": "eslint packages/tavi-video-tutor/src examples/react-demo/src",
+    "audit": "npm audit --audit-level=high",
     "publish:package": "npm publish ./packages/tavi-video-tutor",
     "qa:subtitle": "npm --prefix packages/tavi-video-tutor run qa:subtitle"
   },
