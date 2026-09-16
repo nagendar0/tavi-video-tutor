@@ -8,8 +8,12 @@ console.log('============================================================');
 console.log('PACKAGE TARBALL CONSUMER SMOKE TEST');
 console.log('============================================================\n');
 
-const packageDir = path.resolve(process.cwd());
-assert.ok(fs.existsSync(path.join(packageDir, 'package.json')), 'Must be run within package directory');
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const packageDir = path.resolve(__dirname, '..');
+assert.ok(fs.existsSync(path.join(packageDir, 'package.json')), 'Must find package.json in package directory');
 
 // 1. Build package first
 console.log('[1/5] Building distribution bundle...');
