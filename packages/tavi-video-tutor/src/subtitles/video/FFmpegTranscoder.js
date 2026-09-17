@@ -115,7 +115,7 @@ export const transcodeRendition = async ({
       // Atomic rename from temp file to final target file
       try {
         fs.renameSync(tempOutputPath, outputPath);
-      } catch (e) {
+      } catch {
         // Fallback copy if cross-device link error
         fs.copyFileSync(tempOutputPath, outputPath);
         fs.unlinkSync(tempOutputPath);

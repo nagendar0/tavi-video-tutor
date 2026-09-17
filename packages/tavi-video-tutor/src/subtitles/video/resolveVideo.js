@@ -4,7 +4,7 @@ import net from 'net';
 import http from 'http';
 import https from 'https';
 import { promises as dns } from 'dns';
-import { Readable, Transform } from 'stream';
+import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
 /**

@@ -50,7 +50,6 @@ class LazySubtitleManager {
       return { cues: this.cache.get(url), fromCache: true };
     }
 
-    const startTime = performance.now();
     this.fetchCount++;
     this.fetchedUrls.push(url);
     this.networkHistory.push({ url, time: Date.now() });
@@ -209,7 +208,7 @@ test('TEST J: Main thread -> No long task >50ms', async () => {
   const manager = new LazySubtitleManager();
 
   const start = performance.now();
-  const result = await manager.loadSubtitle('/aitutor/subtitles/video1/fr.vtt');
+  await manager.loadSubtitle('/aitutor/subtitles/video1/fr.vtt');
   const elapsed = performance.now() - start;
 
   assert.ok(elapsed < 50, `Main thread task duration must be <50ms (measured ${elapsed.toFixed(2)} ms)`);

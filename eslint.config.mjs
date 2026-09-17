@@ -82,11 +82,23 @@ export default [
         exports: 'writable',
         module: 'readonly',
         require: 'readonly',
-        global: 'readonly'
+        global: 'readonly',
+        self: 'readonly',
+        FileReader: 'readonly',
+        Audio: 'readonly',
+        queueMicrotask: 'readonly'
       }
     },
     rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrors: 'all',
+          caughtErrorsIgnorePattern: '^_'
+        }
+      ],
       'no-undef': 'warn',
       'no-console': 'off'
     }

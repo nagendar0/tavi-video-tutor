@@ -1,6 +1,4 @@
 import { NodeTTSProvider } from '../tts/NodeTTSProvider.js';
-import { alignAudioSegment } from '../audio/alignAudioSegment.js';
-import { stitchAudioSegments } from '../audio/stitchAudioSegments.js';
 import { SpeakerDiarizer } from '../audio/diarization/SpeakerDiarizer.js';
 import { VoiceAllocator } from '../audio/voice/VoiceAllocator.js';
 import { SpeakerVoiceCache } from '../audio/voice/SpeakerVoiceCache.js';
@@ -11,7 +9,7 @@ import { TimelineMixer } from '../audio/mixer/TimelineMixer.js';
 import { validateGeneratedAudio } from '../audio/validateAudio.js';
 
 import { TempWorkspace } from '../storage/tempWorkspace.js';
-import { resolveDirectMediaSource, resolveVideoSource, validateResolvedRemoteHost } from '../video/resolveVideo.js';
+import { resolveDirectMediaSource, resolveVideoSource } from '../video/resolveVideo.js';
 import { extractAudio } from '../audio/extractAudio.js';
 import { probeMedia } from '../video/MediaProbe.js';
 import { WhisperProvider } from '../transcription/WhisperProvider.js';
@@ -103,7 +101,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
           type: 'media-probe-summary',
           message: `\nInput:\n  ${path.basename(mediaPathForFfmpeg || videoEntry.src)}\nContainer:\n  ${containerLabel}\nVideo:\n  ${videoDesc}\nAudio:\n  ${audioDesc}\n`
         });
-      } catch (_) {
+      } catch {
         // Continue if probe fails on non-standard mock
       }
 

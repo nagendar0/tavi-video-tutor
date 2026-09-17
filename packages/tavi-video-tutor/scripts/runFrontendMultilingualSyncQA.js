@@ -17,7 +17,7 @@ if (!fs.existsSync(qaDir)) {
 let puppeteerModule = null;
 try {
   puppeteerModule = await import('puppeteer');
-} catch (e) {
+} catch {
   const localPuppeteerPath = path.resolve(demoDir, 'node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js');
   if (fs.existsSync(localPuppeteerPath)) {
     puppeteerModule = await import(pathToFileURL(localPuppeteerPath).href);

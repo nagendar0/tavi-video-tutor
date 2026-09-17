@@ -7,11 +7,11 @@ export const transcribeVideoAudio = async (videoUrl, onProgress) => {
   try {
     const dynamicImport = new Function('specifier', 'return import(specifier)');
     transformersModule = await dynamicImport('@huggingface/transformers');
-  } catch (_) {
+  } catch {
     try {
       const dynamicImport = new Function('specifier', 'return import(specifier)');
       transformersModule = await dynamicImport('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3');
-    } catch (e) {
+    } catch {
       throw new Error('In-browser transcription requires @huggingface/transformers. Run pre-transcription with "npx aitutor generate" or install @huggingface/transformers.');
     }
   }
@@ -153,7 +153,7 @@ export const batchTranslateSubtitles = async (baseVtt, targetLanguages, onProgre
       } else {
         result[lang.code] = baseVtt;
       }
-    } catch (err) {
+    } catch {
       result[lang.code] = baseVtt;
     }
 

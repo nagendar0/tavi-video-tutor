@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { pathToFileURL } from 'url';
 import { AITUTOR_LANGUAGES } from '../languages/registry.js';
 

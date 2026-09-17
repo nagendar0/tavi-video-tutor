@@ -8,7 +8,6 @@ import { AITUTOR_LANGUAGES, getLanguageByCode } from '../src/subtitles/languages
 import { isRTL, getLanguageDirection } from '../src/subtitles/languages/direction.js';
 import { mapAITutorCodeToProvider } from '../src/subtitles/languages/providerMappings.js';
 import { TranscriptCache } from '../src/subtitles/transcript/transcriptCache.js';
-import { AITutorTranslationProvider } from '../src/subtitles/translation/TranslationProvider.js';
 import { WhisperProvider } from '../src/subtitles/transcription/WhisperProvider.js';
 import { ManifestStore } from '../src/subtitles/cache/manifest.js';
 import { processSingleVideo } from '../src/subtitles/pipeline/processVideo.js';

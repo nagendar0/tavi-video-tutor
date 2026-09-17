@@ -1,4 +1,3 @@
-import { checkFFmpegAvailable } from '../audio/extractAudio.js';
 import { AITUTOR_LANGUAGES } from '../languages/registry.js';
 import { runPreflight, formatPreflightTable, formatDoctorReport } from './preflight.js';
 

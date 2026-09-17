@@ -10,7 +10,6 @@ import { WhisperProvider } from '../src/subtitles/transcription/WhisperProvider.
 import { AITutorTranslationProvider } from '../src/subtitles/translation/TranslationProvider.js';
 import { ManifestStore, computeFingerprint } from '../src/subtitles/cache/manifest.js';
 import { loadConfig, VideoEntry } from '../src/subtitles/config/loadConfig.js';
-import { processSingleVideo } from '../src/subtitles/pipeline/processVideo.js';
 import { processAllVideos } from '../src/subtitles/pipeline/processVideos.js';
 
 test('1. WebVTT Generator — Timestamp Formatting & Escaping', () => {

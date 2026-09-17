@@ -1,7 +1,6 @@
 import assert from 'node:assert';
 import { resolveSubtitleVisibility, resolveSubtitleSources } from '../src/subtitles/resolver/subtitleResolver.js';
 import { resolveQualitySources } from '../src/subtitles/resolver/qualityResolver.js';
-import { getLanguageByCode, AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
 
 console.log('============================================================');
 console.log('AITUTOR FRONTEND REGRESSIONS QA TEST SUITE (TEST A - TEST T)');
@@ -294,10 +293,10 @@ runTest('TEST R', '100 quality switches leak zero memory or listener resources',
     { label: '480p', src: '/lesson-480.mp4' }
   ];
 
-  let currentSrc = '/lesson-1080.mp4';
+  let _currentSrc = '/lesson-1080.mp4';
   for (let i = 0; i < 100; i++) {
     const q = qualities[i % 3];
-    currentSrc = q.src;
+    _currentSrc = q.src;
     resolveQualitySources({ qualities });
   }
 

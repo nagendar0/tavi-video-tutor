@@ -1,4 +1,4 @@
-import { AITutorTranslationProvider, MyMemoryTranslationProvider } from './TranslationProvider.js';
+import { AITutorTranslationProvider } from './TranslationProvider.js';
 import { LocalNllbProvider } from './LocalNllbProvider.js';
 import { normalizeLanguageCode } from '../languages/registry.js';
 

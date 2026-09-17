@@ -74,7 +74,6 @@ const drawCanvasSubtitles = (
   const baseFontSize = cssFontSize;
   const fontFamily = DEFAULT_FONT_STACK;
   const fontSpec = `600 ${baseFontSize}px ${fontFamily}`;
-  const lineHeightMultiplier = 1.45;
 
   ctx.save();
   ctx.font = fontSpec;
@@ -92,7 +91,7 @@ console.log('🧪 Running Universal Subtitle Visual QA Across ALL 109 Languages.
 let totalRegistryCount = AITUTOR_LANGUAGES.length;
 let automatedVerifiedCount = 0;
 
-AITUTOR_LANGUAGES.forEach((lang, idx) => {
+AITUTOR_LANGUAGES.forEach(lang => {
   const ctx = new MockCanvasRenderingContext2D(1280, 720);
   const sampleText = `${lang.nativeName} — Subtitle Test (${lang.name})`;
   const res = drawCanvasSubtitles(ctx, 1280, 720, sampleText, lang.code);

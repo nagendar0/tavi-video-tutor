@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import fs from 'fs';
 import path from 'path';
-import { planQualityLadder, makeEven } from '../src/subtitles/video/QualityPlanner.js';
+import { planQualityLadder } from '../src/subtitles/video/QualityPlanner.js';
 import { resolveQualitySources } from '../src/subtitles/resolver/qualityResolver.js';
 import { resolveSubtitleVisibility } from '../src/subtitles/resolver/subtitleResolver.js';
 
@@ -81,7 +80,7 @@ test('TEST F: Square Video (1080x1080) -> Preserves 1:1 aspect ratio', () => {
 });
 
 test('TEST G: Unchanged video re-run -> 0 unnecessary transcodes (Cache Hit)', () => {
-  const videoEntry = { id: 'cached_test', src: './public/lesson.mp4' };
+  const _videoEntry = { id: 'cached_test', src: './public/lesson.mp4' };
   const mockManifestStore = {
     cwd: process.cwd(),
     internalDir: path.join(process.cwd(), '.aitutor'),
@@ -146,7 +145,7 @@ test('TEST K: Quality switching at 60s -> Time, playback rate, volume, and mute 
 
 test('TEST L: Quality + Telugu subtitles -> Subtitle language remains Telugu', () => {
   const selectedSubLanguage = 'te';
-  const newQualitySrc = '/aitutor/videos/lesson/144.mp4';
+  const _newQualitySrc = '/aitutor/videos/lesson/144.mp4';
   const subLangAfter = selectedSubLanguage;
 
   assert.strictEqual(subLangAfter, 'te');
@@ -158,7 +157,7 @@ test('TEST M: Quality + Dual Subtitles -> Both primary & secondary tracks preser
   const primaryLang = 'en';
   const secondaryLang = 'te';
 
-  const newQualitySrc = '/aitutor/videos/lesson/240.mp4';
+  const _newQualitySrc = '/aitutor/videos/lesson/240.mp4';
 
   assert.strictEqual(isDualSubtitles, true);
   assert.strictEqual(primaryLang, 'en');
@@ -190,7 +189,7 @@ test('TEST O: Corrupted video file -> Prober throws clean error', () => {
 });
 
 test('TEST P: FFmpeg failure -> Partial output removed atomically', () => {
-  const tempPath = '/tmp/test.tmp.mp4';
+  const _tempPath = '/tmp/test.tmp.mp4';
   let tempExists = true;
 
   // Cleanup simulation on crash

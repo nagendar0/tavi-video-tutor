@@ -2,11 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
 import { TranslationValidator } from '../src/subtitles/translation/TranslationValidator.js';
-import { ProtectedTerms } from '../src/subtitles/translation/ProtectedTerms.js';
 
 test('Multilingual 109-Language QA Validation', () => {
   const validator = new TranslationValidator();
-  const protectedTerms = new ProtectedTerms();
 
   const sourceCue = {
     start: 0.5,

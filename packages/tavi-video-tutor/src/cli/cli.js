@@ -482,7 +482,7 @@ export const runAudioStatus = async (options = {}, cwd = process.cwd()) => {
   return { videosCount: videos.length, totalGeneratedTracks };
 };
 
-export const runStatus = async (options = {}, cwd = process.cwd()) => {
+export const runStatus = async (_options = {}, cwd = process.cwd()) => {
   console.log(`\nAITutor Subtitle Status\n─────────────────────────────\n`);
   const manifestStore = new ManifestStore(cwd);
   const transcriptCache = new TranscriptCache(cwd);
@@ -529,7 +529,7 @@ export const runStatus = async (options = {}, cwd = process.cwd()) => {
   return { videosCount: videos.length };
 };
 
-export const runValidate = async (options = {}, cwd = process.cwd()) => {
+export const runValidate = async (_options = {}, cwd = process.cwd()) => {
   console.log(`\nAITutor Subtitle Validation\n─────────────────────────────\n`);
   const manifestStore = new ManifestStore(cwd);
   const manifest = manifestStore.loadManifest();
@@ -682,6 +682,7 @@ export const runGenerate = async (options = {}, cwd = process.cwd()) => {
 };
 
 export const main = async (args = process.argv.slice(2), cwd = process.cwd()) => {
+  const firstArg = args[0] || '';
   const force = args.includes('--force');
   const keepTemp = args.includes('--keep-temp') || args.includes('--keepTemp');
   const noQuality = args.includes('--no-quality') || args.includes('--noQuality');

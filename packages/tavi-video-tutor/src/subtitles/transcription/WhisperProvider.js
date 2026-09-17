@@ -142,7 +142,7 @@ export const downloadWhisperModel = async (modelName = 'Xenova/whisper-base', op
 };
 
 export class TranscriptionProvider {
-  async transcribe(audioInput, videoEntry) {
+  async transcribe(_audioInput, _videoEntry) {
     throw new Error('TranscriptionProvider.transcribe must be implemented by subclass.');
   }
 }

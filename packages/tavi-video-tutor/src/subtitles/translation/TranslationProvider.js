@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { AITUTOR_LANGUAGES, getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
+import { getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
 import { mapAITutorCodeToProvider } from '../languages/providerMappings.js';
 
 // Text-level persistent & in-memory translation cache
@@ -48,11 +48,11 @@ const makeCacheKey = (text, srcLang, tgtLang, providerId = 'mymemory', modelId =
 };
 
 export class TranslationProvider {
-  supports(sourceLanguage, targetLanguage) {
+  supports(_sourceLanguage, _targetLanguage) {
     throw new Error('TranslationProvider.supports must be implemented.');
   }
 
-  async translateSegments(segments, sourceLanguage, targetLanguage) {
+  async translateSegments(_segments, _sourceLanguage, _targetLanguage) {
     throw new Error('TranslationProvider.translateSegments must be implemented.');
   }
 }
@@ -94,7 +94,7 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     this.circuitBreakerResetTime = 0;
   }
 
-  recordFailure(err) {
+  recordFailure(_err) {
     this.consecutiveFailures++;
     if (this.consecutiveFailures >= this.circuitBreakerThreshold) {
       this.circuitBreakerResetTime = Date.now() + this.circuitBreakerCooldownMs;

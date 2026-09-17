@@ -235,7 +235,7 @@ async function testLanguage(langObj) {
         vttStatus = 'FAIL';
         qavttFailCount++;
       }
-    } catch (err) {
+    } catch {
       vttStatus = 'FAIL';
       qavttFailCount++;
     }

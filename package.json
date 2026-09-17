@@ -14,11 +14,13 @@
     "qa:subtitle": "npm --prefix packages/tavi-video-tutor run qa:subtitle"
   },
   "devDependencies": {
-    "eslint": "^10.8.0",
+    "eslint": "^10.10.0",
     "prettier": "3.9.4"
   },
   "dependencies": {
+    "error-lens": "^1.0.2",
     "intellisense": "^0.0.1",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "prettier-vscode": "^1.0.0"
   }
 }

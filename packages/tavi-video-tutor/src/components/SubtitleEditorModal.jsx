@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { parseWebVTT } from './SubtitleEngine.jsx';
 
 const formatSeconds = (sec) => {
@@ -113,7 +113,7 @@ export const SubtitleEditorModal = ({
   };
 
   const handleDeleteTrack = () => {
-    if (confirm(`Delete all subtitles for language "${selectedLang.toUpperCase()}"?`)) {
+    if (window.confirm(`Delete all subtitles for language "${selectedLang.toUpperCase()}"?`)) {
       onUpdateSubtitles?.(selectedLang, null);
     }
   };

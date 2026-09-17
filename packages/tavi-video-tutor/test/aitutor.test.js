@@ -6,7 +6,6 @@ import os from 'os';
 
 import { formatVttTimestamp, generateWebVTT } from '../src/cli/vttGenerator.js';
 import { computeHash, loadConfig, runGenerate, runClean } from '../src/cli/cli.js';
-import { resolveManifestSubtitle } from '../src/services/manifestStore.js';
 import { WhisperProvider } from '../src/subtitles/transcription/WhisperProvider.js';
 import { AITutorTranslationProvider } from '../src/subtitles/translation/TranslationProvider.js';
 

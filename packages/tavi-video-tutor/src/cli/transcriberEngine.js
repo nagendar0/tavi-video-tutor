@@ -60,7 +60,7 @@ export class TranscriptionEngine {
             }));
           }
         }
-      } catch (e) {
+      } catch {
         // Fallback robust structured VTT cue generator for local/CORS media
         cues = [
           { start: 0.5, end: 3.8, text: `Welcome to ${videoSource.id} video lecture.` },
