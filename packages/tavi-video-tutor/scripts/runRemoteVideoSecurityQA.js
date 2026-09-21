@@ -1,11 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { resolveDirectMediaSource, resolveVideoSource, validateRemoteUrl, redactUrlSecrets, isPrivateHost } from '../src/subtitles/video/resolveVideo.js';
-import { extractAudio } from '../src/subtitles/audio/extractAudio.js';
+import { resolveDirectMediaSource, validateRemoteUrl, redactUrlSecrets } from '../src/subtitles/video/resolveVideo.js';
 import { TempWorkspace } from '../src/subtitles/storage/tempWorkspace.js';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
-import { runClean, runGenerate } from '../src/cli/cli.js';
+import { runGenerate } from '../src/cli/cli.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -142,7 +141,7 @@ console.log(`- Status:               PASS\n`);
 // -------------------------------------------------------------
 console.log(`[TEST 8: FULL PIPELINE & FRONTEND REGRESSION TEST]`);
 const regStartTime = Date.now();
-const regResult = await runGenerate({}, demoDir);
+await runGenerate({}, demoDir);
 const regTimeSec = Math.round((Date.now() - regStartTime) / 1000);
 
 console.log(`\n✓ Full batch pipeline executed in ${regTimeSec}s`);

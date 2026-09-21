@@ -737,6 +737,17 @@ export const main = async (args = process.argv.slice(2), cwd = process.cwd()) =>
     }
   }
 
+  let ttsProviderVal = undefined;
+  const ttsIdx = args.indexOf('--tts-provider');
+  if (ttsIdx !== -1 && args[ttsIdx + 1] && !args[ttsIdx + 1].startsWith('-')) {
+    ttsProviderVal = args[ttsIdx + 1];
+  } else {
+    const ttsEq = args.find(a => a.startsWith('--tts-provider=') || a.startsWith('--ttsProvider='));
+    if (ttsEq) {
+      ttsProviderVal = ttsEq.split('=')[1];
+    }
+  }
+
   if (args.includes('--help') || args.includes('-h') || firstArg === 'help') {
     console.log(`
 AITutor CLI — Automated Multilingual Subtitle & Audio Dubbing Engine
@@ -760,6 +771,7 @@ Options:
   --no-quality             Skip video quality rendition ladder transcoding
   --keep-temp              Keep temporary extraction workspace files
   --audio-languages <csv>  Comma-separated list of audio languages or "all"
+  --tts-provider <mode>    TTS engine: system (default), neural, auto
   --help, -h               Show this help message
   --version, -v            Show AITutor package version
 `);
@@ -817,6 +829,7 @@ Options:
         audioLanguages: audioLanguagesVal,
         speakerMode: speakerModeVal,
         speakerConcurrency: speakerConcurrencyVal,
+        ttsProvider: ttsProviderVal,
         yes,
         nonInteractive
       }, cwd);

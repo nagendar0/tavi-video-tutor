@@ -130,6 +130,8 @@ export const loadConfig = async (cwd = process.cwd()) => {
   const transcription = rawConfig.subtitles?.transcription || {};
   const translation = rawConfig.subtitles?.translation || {};
   const audio = rawConfig.audio || {};
+  const tts = rawConfig.audio?.tts || rawConfig.tts || {};
+  const ttsProvider = rawConfig.audio?.tts?.provider || rawConfig.ttsProvider || rawConfig.tts?.provider || 'system';
   const glossary = Array.isArray(rawConfig.subtitles?.glossary) ? rawConfig.subtitles.glossary : [];
 
   return {
@@ -140,6 +142,8 @@ export const loadConfig = async (cwd = process.cwd()) => {
     transcription,
     translation,
     audio,
+    tts,
+    ttsProvider,
     glossary,
     videos
   };

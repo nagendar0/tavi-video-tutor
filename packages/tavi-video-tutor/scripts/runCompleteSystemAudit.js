@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
 import { TranslationRouter } from '../src/subtitles/translation/TranslationRouter.js';
-import { LocalNllbProvider, FLORES_200_MAPPING } from '../src/subtitles/translation/LocalNllbProvider.js';
+import { FLORES_200_MAPPING } from '../src/subtitles/translation/LocalNllbProvider.js';
 import { validateRemoteUrl, redactUrlSecrets } from '../src/subtitles/video/resolveVideo.js';
 import { TerminologyGlossary } from '../src/subtitles/transcript/glossary.js';
 import { SubtitleSegmenter } from '../src/subtitles/segmentation/SubtitleSegmenter.js';
@@ -356,8 +356,10 @@ const auditJsonReport = {
     totalFiles: testFiles.length,
     totalTests: totalTestsDiscovered,
     executedTests: totalTestsDiscovered,
-    passed: totalTestsDiscovered,
-    failed: 0,
+    passed: unitTestSuccess ? totalTestsDiscovered : 0,
+    failed: unitTestSuccess ? 0 : totalTestsDiscovered,
+    status: unitTestSuccess ? "PASS" : "FAIL",
+    summary: unitTestOutput.slice(0, 300).trim(),
     breakdown: testBreakdown
   },
   hybridTranslation: {
@@ -389,7 +391,7 @@ Generated: ${new Date().toISOString()}
 - **Test Files Discovered**: ${testFiles.length}
 - **Total Test Cases**: ${totalTestsDiscovered}
 - **Tests Executed**: ${totalTestsDiscovered}
-- **Passing Tests**: ${totalTestsDiscovered} (100% PASS)
+- **Passing Tests**: ${unitTestSuccess ? totalTestsDiscovered : 0} (${unitTestSuccess ? '100% PASS' : 'FAILED'})
 
 ## Hybrid Translation Architecture Verification
 - **Online Provider**: MyMemory Neural API (**109 / 109** coverage)

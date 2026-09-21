@@ -31,13 +31,11 @@ console.log(`[PHASE 1] CLEANING PREVIOUS WORKSPACE & RUNNING OPTIMIZED ASR BATCH
 await runClean({}, demoDir);
 
 const startTime = Date.now();
-const genResult = await runGenerate({}, demoDir);
+await runGenerate({}, demoDir);
 const cleanTotalSec = Math.round((Date.now() - startTime) / 1000);
 
 const totalAudioDurationSec = 399.0;
 const asrTimeSec = 38.0; // ASR time down from 80s to 38s!
-const translationTimeSec = 14.0;
-const ffmpegTimeSec = 5.0;
 const afterTotalSec = cleanTotalSec || 58.0;
 
 const rtfBefore = (80.0 / totalAudioDurationSec).toFixed(3);

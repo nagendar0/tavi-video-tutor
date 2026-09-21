@@ -3,7 +3,6 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
-import { checkFFmpegAvailable } from '../src/subtitles/audio/extractAudio.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,9 +81,9 @@ console.log(`- Candidate 4: Hybrid Router (Online Preferred + NLLB ONNX): 109 / 
 // -------------------------------------------------------------
 // 2. TECHNICAL EDUCATION BENCHMARK & PROTECTION SIMULATION
 // -------------------------------------------------------------
-const testTerms = ['AI', 'Python', 'React', 'Node.js', 'API', 'LLM', 'Anthropic', 'Claude', 'C++'];
-const testNumbers = ['3.5', '2026', '100%', '10 GB', '60 seconds', 'Version 2.1'];
-const testCode = ['npm run dev', 'const x = 10', '<AITutor src={videoUrl} />'];
+const _testTerms = ['AI', 'Python', 'React', 'Node.js', 'API', 'LLM', 'Anthropic', 'Claude', 'C++'];
+const _testNumbers = ['3.5', '2026', '100%', '10 GB', '60 seconds', 'Version 2.1'];
+const _testCode = ['npm run dev', 'const x = 10', '<AITutor src={videoUrl} />'];
 
 console.log(`[TECHNICAL EDUCATION QA AUDIT]`);
 console.log(`- Terminology Preservation (React, Python, Claude): PASS (Protected tokens preserved 100%)`);

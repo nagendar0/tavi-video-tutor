@@ -48,6 +48,11 @@
       "import": "./src/subtitles/resolver/qualityResolver.js",
       "default": "./src/subtitles/resolver/qualityResolver.js"
     },
+    "./tts": {
+      "types": "./src/subtitles/tts/index.d.ts",
+      "import": "./src/subtitles/tts/index.js",
+      "default": "./src/subtitles/tts/index.js"
+    },
     "./dist/style.css": "./dist/tavi-video-tutor.css",
     "./dist/tavi-video-tutor.css": "./dist/tavi-video-tutor.css",
     "./style.css": "./dist/tavi-video-tutor.css",
@@ -75,6 +80,9 @@
     "h264-transcoding"
   ],
   "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",

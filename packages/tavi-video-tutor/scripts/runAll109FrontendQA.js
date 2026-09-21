@@ -108,6 +108,7 @@ AITUTOR_LANGUAGES.forEach(langObj => {
     language: langObj.name,
     nativeName: langObj.nativeName,
     direction,
+    vttInSubtitles: vttExistsInSubtitles,
     vttLoaded: isVttValid,
     timelineValid: isVttValid,
     frontendTested: true,

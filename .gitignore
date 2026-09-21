@@ -33,5 +33,6 @@ Thumbs.db
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Temporary test audio
-dummy.wav
+# Temporary test audio & consumer directories
+*.wav
+fresh-consumer-audio-test/

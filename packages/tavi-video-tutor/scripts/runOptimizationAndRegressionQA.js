@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { fileURLToPath } from 'url';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
 import { runClean, runGenerate } from '../src/cli/cli.js';
@@ -31,7 +30,7 @@ console.log(`[PHASE 1] CLEANING PREVIOUS CACHE & GENERATING FRESH OPTIMIZED BATC
 await runClean({}, demoDir);
 
 const startTime = Date.now();
-const genResult = await runGenerate({}, demoDir);
+await runGenerate({}, demoDir);
 const cleanTotalSec = Math.round((Date.now() - startTime) / 1000);
 
 const afterTotalSec = cleanTotalSec || 171; // Clean batch runtime down from 547s to 171s!

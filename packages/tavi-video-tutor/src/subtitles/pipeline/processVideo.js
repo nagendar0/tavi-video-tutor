@@ -1,4 +1,5 @@
-import { NodeTTSProvider } from '../tts/NodeTTSProvider.js';
+import { TTSProvider } from '../tts/TTSProvider.js';
+import { createTTSProvider } from '../tts/ttsFactory.js';
 import { SpeakerDiarizer } from '../audio/diarization/SpeakerDiarizer.js';
 import { VoiceAllocator } from '../audio/voice/VoiceAllocator.js';
 import { SpeakerVoiceCache } from '../audio/voice/SpeakerVoiceCache.js';
@@ -32,7 +33,9 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
   const normalizer = options.normalizer || new TranscriptNormalizer({ glossaryTerms: options.glossary });
   const segmenter = options.segmenter || new SubtitleSegmenter(options.segmentationOptions);
   const validator = options.validator || new TranslationValidator({ customProtectedTerms: options.glossary });
-  const ttsProvider = options.ttsProvider || new NodeTTSProvider(options.ttsOptions || options);
+  const ttsProvider = (options.ttsProvider instanceof TTSProvider)
+    ? options.ttsProvider
+    : createTTSProvider(options.ttsProvider ? { provider: options.ttsProvider, ...(options.ttsOptions || options) } : (options.ttsOptions || options));
 
   const rawLanguages = Array.isArray(videoEntry.languages) ? videoEntry.languages : ['en'];
   const rawAudioLanguages = options.audioLanguages || videoEntry.audioLanguages || [];
@@ -59,7 +62,7 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
   let retainedExtractionWorkspace = null;
   const isMasterCached = transcriptCache.hasMasterTranscript(videoEntry.id, currentFingerprint);
 
-  if (isMasterCached && !options.force) {
+  if (isMasterCached && (!options.force || options.keepMasterTranscript)) {
     onProgress?.({ type: 'transcript-cached', message: '✓ Master transcript cached' });
     masterTranscript = transcriptCache.loadMasterTranscript(videoEntry.id, currentFingerprint);
   } else {
@@ -286,6 +289,8 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
       ? masterTranscript.raw.segments
       : masterSegments;
 
+    const cachedSpeakerMeta = manifestStore.loadSpeakerMetadata(videoEntry.id);
+
     if (speakerMode === 'single') {
       diarizationResult = {
         detectedSpeakerCount: 1,
@@ -302,6 +307,24 @@ export const processSingleVideo = async (videoEntry, manifestStore, options = {}
           language: sourceLang
         })),
         overlappingIntervals: [],
+        speakerTimelineMap: {}
+      };
+    } else if (cachedSpeakerMeta && cachedSpeakerMeta.fingerprint === currentFingerprint && cachedSpeakerMeta.speakers) {
+      diarizationResult = {
+        detectedSpeakerCount: cachedSpeakerMeta.detectedSpeakerCount || 1,
+        speakers: cachedSpeakerMeta.speakers,
+        segments: speechSourceSegments.map((s, idx) => ({
+          segmentId: s.id || `seg_${String(idx + 1).padStart(6, '0')}`,
+          speakerId: s.speakerId || 'spk_000001',
+          startTime: s.start !== undefined ? s.start : (s.startTime || 0),
+          endTime: s.end !== undefined ? s.end : (s.endTime || 1),
+          duration: (s.end !== undefined ? s.end : (s.endTime || 1)) - (s.start !== undefined ? s.start : (s.startTime || 0)),
+          originalText: s.text || s.originalText || '',
+          text: s.text || s.originalText || '',
+          confidence: s.confidence || 1.0,
+          language: sourceLang
+        })),
+        overlappingIntervals: cachedSpeakerMeta.overlappingIntervals || [],
         speakerTimelineMap: {}
       };
     } else {

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
 import { runClean, runGenerate } from '../src/cli/cli.js';
 
@@ -16,18 +16,6 @@ const ensureQaDir = () => {
   }
 };
 ensureQaDir();
-
-// Dynamically import puppeteer if available
-let puppeteerModule = null;
-try {
-  puppeteerModule = await import('puppeteer');
-} catch (e) {
-  const localPuppeteerPath = path.resolve(demoDir, 'node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js');
-  if (fs.existsSync(localPuppeteerPath)) {
-    puppeteerModule = await import(pathToFileURL(localPuppeteerPath).href);
-  }
-}
-const puppeteer = puppeteerModule ? (puppeteerModule.default || puppeteerModule) : null;
 
 // -------------------------------------------------------------
 // DYNAMIC REGISTRY DETERMINATION
@@ -197,7 +185,7 @@ console.log(`  ✓ Failed video reported clearly without creating fake subtitles
 // -------------------------------------------------------------
 ensureQaDir();
 
-const videoReports = videosConfig.map((v, idx) => ({
+const videoReports = videosConfig.map(v => ({
   id: v.id,
   src: v.src,
   duration: v.duration,

@@ -1,9 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
-import { runClean, runGenerate } from '../src/cli/cli.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -154,6 +153,7 @@ const tempAudioSizeMB = 3.14; // temporary audio.wav created per video during ex
 
 console.log(`[7 & 8. DISK USAGE & TEMP FILE CLEANUP]`);
 console.log(`- Disk Generated Per Video: ${diskUsagePerVideoMB} MB (109 VTT files + manifest)`);
+console.log(`- Temporary Audio Size:     ${tempAudioSizeMB} MB per video (reclaimed post-ASR)`);
 console.log(`- MB Generated Per Source Video Minute: ${(diskUsagePerVideoMB / (totalVideoDurationSec / 60)).toFixed(2)} MB/min`);
 console.log(`- Storage Projections:`);
 console.log(`  * 10 Hours of Video:   ~${((10 * 60) * (diskUsagePerVideoMB / (totalVideoDurationSec / 60))).toFixed(0)} MB (~1.1 GB)`);

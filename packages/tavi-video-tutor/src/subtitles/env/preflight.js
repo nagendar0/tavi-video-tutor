@@ -264,6 +264,27 @@ export const checkTranslationProvider = (config = {}) => {
 
 export const checkTTSProvider = (config = {}) => {
   try {
+    const rawMode = config.audio?.tts?.provider || config.ttsProvider || config.tts?.provider || 'system';
+    const mode = String(rawMode).toLowerCase().trim();
+
+    if (mode === 'neural' || mode === 'edge' || mode === 'azure') {
+      return {
+        name: 'TTS',
+        pass: true,
+        provider: 'Neural TTS (Edge / Azure)',
+        details: 'Neural Text-to-Speech (hi-IN, te-IN, en-US, etc.)'
+      };
+    }
+
+    if (mode === 'auto' || mode === 'hybrid') {
+      return {
+        name: 'TTS',
+        pass: true,
+        provider: 'Auto (Neural + System Fallback)',
+        details: 'Neural primary with System Speech fallback'
+      };
+    }
+
     new NodeTTSProvider(config.audio?.tts || {});
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';

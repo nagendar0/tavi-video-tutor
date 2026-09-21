@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AITUTOR_LANGUAGES } from '../src/subtitles/languages/registry.js';
 import { runClean, runGenerate } from '../src/cli/cli.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -89,7 +88,7 @@ await runGenerate({}, demoDir);
 // -------------------------------------------------------------
 console.log(`[TEST 5: CACHE SECOND RUN AFTER AUDIO DELETION]`);
 const cacheStartTime = Date.now();
-const cacheResult = await runGenerate({}, demoDir);
+await runGenerate({}, demoDir);
 const cacheTimeSec = Math.round((Date.now() - cacheStartTime) / 1000);
 
 console.log(`- Second Run Execution Time: ${cacheTimeSec}s`);

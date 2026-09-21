@@ -59,7 +59,12 @@ export const processAllVideos = async (options = {}, cwd = process.cwd()) => {
     // 1. Subtitle & Audio Dub Pipeline Execution
     try {
       let masterWasCached = false;
-      const res = await processSingleVideo(video, manifestStore, { ...options, audioLanguages: effectiveAudioLangs }, (evt) => {
+      const res = await processSingleVideo(video, manifestStore, {
+        ttsProvider: options.ttsProvider || loadedConfig.ttsProvider || loadedConfig.audio?.tts?.provider,
+        ttsOptions: options.ttsOptions || loadedConfig.tts || loadedConfig.audio?.tts,
+        ...options,
+        audioLanguages: effectiveAudioLangs
+      }, (evt) => {
         if (typeof evt === 'string') {
           console.log(evt);
         } else {
