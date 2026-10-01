@@ -14,7 +14,7 @@
     "qa:subtitle": "npm --prefix packages/tavi-video-tutor run qa:subtitle"
   },
   "devDependencies": {
-    "eslint": "^10.10.0",
+    "eslint": "^10.11.0",
     "prettier": "3.9.4"
   },
   "dependencies": {
