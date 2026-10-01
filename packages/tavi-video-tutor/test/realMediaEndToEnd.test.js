@@ -84,8 +84,20 @@ test('Real-Media Pipeline: Full lifecycle integration with committed fixture', a
     assert.equal(audioValidation.channels, 1);
     assert.equal(audioValidation.sampleRate, 16000);
 
-    // 5. Real Translation: Translate transcript segment via TranslationRouter
-    const router = new TranslationRouter({ mode: 'online' });
+    // 5. Translation stage: route through online adapter with deterministic provider response
+    const router = new TranslationRouter({
+      mode: 'online',
+      fetchFn: async () => ({
+        status: 200,
+        ok: true,
+        async json() {
+          return {
+            responseStatus: 200,
+            responseData: { translatedText: 'Bienvenidos a esta lección educativa' }
+          };
+        }
+      })
+    });
     const sourceSegments = [
       { start: 0.5, end: 3.5, text: 'Welcome to this educational lesson' }
     ];
