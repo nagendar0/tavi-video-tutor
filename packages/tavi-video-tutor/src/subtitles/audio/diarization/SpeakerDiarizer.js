@@ -139,7 +139,7 @@ export class SpeakerDiarizer {
 
     // 6. Build Speaker Identity Profiles
     const speakerProfiles = [];
-    for (const [clusterId, speakerId] of clusterToSpeakerMap.entries()) {
+    for (const speakerId of clusterToSpeakerMap.values()) {
       const speakerSegs = diarizedSegments.filter(s => s.speakerId === speakerId);
       const totalDuration = speakerSegs.reduce((sum, s) => sum + s.duration, 0);
 

@@ -1,6 +1,6 @@
 # AITutor
 
-AITutor is an open-source, zero-dependency React video player and Socratic AI tutor engine with native canvas rendering, audio dub sync, automated 109-language WebVTT subtitle generation, and an automated multi-resolution video quality transcoding pipeline. It combines FFmpeg audio extraction, Whisper speech recognition, transcript normalization, cue segmentation, multilingual translation, and H.264 video quality ladder generation into a unified developer SDK.
+AITutor is an open-source React video player and Socratic AI tutor engine with no native AI runtime dependencies for the browser player, native canvas rendering, audio dub sync, automated WebVTT subtitle generation across 109 language registry definitions (with 13 neural TTS dubbing languages), and an automated multi-resolution video quality transcoding pipeline. It combines FFmpeg audio extraction, Whisper speech recognition, transcript normalization, cue segmentation, multilingual translation, and H.264 video quality ladder generation into a unified developer SDK.
 
 ```jsx
 import { AITutor } from "tavi-video-tutor";
@@ -70,7 +70,7 @@ export default function VideoLesson() {
 - **React Video Tutor Component**: Custom HTML5 video player with subtitle rendering, audio dub sync, automatic video quality ladder selection (`144p` to `1080p`), canvas rendering, and modal editing.
 - **Automated Video Quality Transcoding Pipeline**: Multi-resolution H.264/AAC quality ladder generation (`720p`, `480p`, `360p`, `240p`, `144p`) with aspect ratio preservation and no-upscaling guarantee.
 - **Automated Subtitle Pipeline**: End-to-end processing from video file to Whisper speech-to-text, transcript normalization, cue segmentation, and WebVTT generation.
-- **109-Language Registry**: Standardized language metadata and WebVTT generation for 109 global languages with full Right-to-Left (RTL) support for Arabic, Hebrew, Urdu, etc.
+- **109-Language Registry**: Standardized language metadata definitions for 109 global languages (13 languages with neural TTS capability present in the registry, 95 currently unsupported/unverified for production TTS, 1 partial entry) with full Right-to-Left (RTL) support for Arabic, Hebrew, Urdu, etc.
 - **Hybrid Online/Offline Translation**: High-speed online translation with automatic offline local NLLB (`@xenova/transformers`) fallback.
 - **Content-Aware Media Identity**: Smart cache fingerprinting based on canonical path, size, modification timestamp, and sampled binary content chunks (head + middle + tail 64KB).
 - **Four-Tier Subtitle Priority**: Smart resolver supporting User Uploaded > Developer Manual > Generated > Demo Fallback tracks per language.
@@ -115,34 +115,47 @@ WebVTT File Generator (en.vtt, te.vtt...)                      │
 
 ---
 
-## 4. REQUIREMENTS
+## 4. REQUIREMENTS & DEPENDENCY ARCHITECTURE
 
+### Base Package
+- **Production Dependencies**: `ws` (`^8.18.0`) is the sole production runtime dependency of the package (used for server-side / CLI Edge TTS synthesis).
 - **Node.js**: `v18.0.0` or higher.
 - **npm**: `v9.0.0` or higher.
-- **React**: `^18.0.0` or `^19.0.0` (Peer dependency).
-- **FFmpeg**: System `ffmpeg` binary on PATH or specified via `process.env.FFMPEG_PATH`. (Windows: `winget install Gyan.FFmpeg`, macOS: `brew install ffmpeg`, Linux: `sudo apt install ffmpeg`).
 - **Browsers**: Any modern browser supporting HTML5 Video and ES2022 JavaScript (Chrome, Firefox, Safari, Edge).
+
+### Optional Peer Dependencies
+- **React & React-DOM**: `^18.0.0 || ^19.0.0` (Optional peer dependencies; required only if rendering the `<AITutor />` browser video player component in a React application).
+- **@huggingface/transformers**: `^4.2.0` (Optional peer dependency; required only for CLI speech-to-text / Whisper transcription and local NLLB translation via `npx aitutor generate`). The browser player bundle does NOT load or require this runtime.
+
+### External System Dependencies
+- **FFmpeg & FFprobe**: Required for CLI audio extraction, media probing, and multi-resolution video quality ladder transcoding. Must be on system PATH or configured via `process.env.FFMPEG_PATH` and `process.env.FFPROBE_PATH`. (Windows: `winget install Gyan.FFmpeg`, macOS: `brew install ffmpeg`, Linux: `sudo apt install ffmpeg`).
+
+### Optional Native Models & Runtimes
+- **Local Whisper Model**: Required for offline speech-to-text (e.g. `onnx-community/whisper-tiny`).
+- **Local NLLB Model**: Required for offline translation (`Xenova/nllb-200-distilled-600M`).
+- **Local TTS Engines**: Platform-supported local synthesis (Windows OneCore/SAPI, Piper, Kokoro, Meta MMS).
 
 ---
 
 ## 5. INSTALLATION
 
-### Step 1 — Create or Open a React Project
-```bash
-# Example with Vite React
-npm create vite@latest my-tutor-app -- --template react
-cd my-tutor-app
-```
-
-### Step 2 — Install AITutor
+### Base Package Installation (React Video Player SDK & CLI utilities)
 ```bash
 npm install tavi-video-tutor
 ```
 
-### Step 3 — Install Peer Dependencies
-Ensure `react` and `react-dom` are installed in your project:
+### For React Web Applications (Peer Dependencies)
+If using the React video player component `<AITutor />`, ensure React is installed:
 ```bash
 npm install react react-dom
+```
+
+### For Subtitle Generation & Whisper Speech-to-Text (Optional Runtime)
+To enable local speech-to-text and offline NLLB translation in the CLI (`npx aitutor generate`), install the optional peer dependency:
+```bash
+npm install @huggingface/transformers
+# or run interactive environment setup:
+npx aitutor setup
 ```
 
 ---
@@ -197,7 +210,7 @@ Or create `aitutor.config.mjs` manually in your project root:
 ```javascript
 export default {
   subtitles: {
-    languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages (or 'all' for 109 languages)
+    languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages (or 'all' for all 109 registry languages)
     quality: 'balanced',                 // 'fast' | 'balanced' | 'high'
     glossary: ['React', 'AITutor']       // Protected domain terms
   },
@@ -351,17 +364,20 @@ Users can control subtitle display via the player UI controls or keyboard shortc
 
 ## 11. LANGUAGE CAPABILITY MATRIX & REGISTRY
 
-AITutor provides a standardized multi-tier capability matrix across **109 global languages**:
+AITutor provides a standardized multi-tier capability matrix across **109 global language definitions**. Registry presence is not marketed as verified production support; actual production capabilities strictly reflect verified evidence:
 
 | Capability | Supported Languages | Verification Status | Fallback / Notes |
 | :--- | :--- | :--- | :--- |
 | **Subtitle Transcription (ASR)** | All Whisper-supported languages (auto-detected) | Verified via Whisper neural ASR | Default English if undetected |
 | **Online Subtitle Translation** | **109 / 109 languages** | Production ready | Cloud translation providers |
 | **Offline Subtitle Translation** | **106 / 109 languages** | Production ready via local NLLB-200 | `bi`, `ch`, `doi` require online translation |
-| **Neural Audio Dubbing (TTS)** | **58 verified languages** | Production verified real speech synthesis | Throws `AUDIO_NOT_AVAILABLE_FOR_LANGUAGE` if unsupported |
+| **Neural Audio Dubbing (TTS)** | **13 verified languages in registry** | Production verified real speech synthesis | Throws `AUDIO_NOT_AVAILABLE_FOR_LANGUAGE` if unsupported |
 
-### Verified Neural Audio Dubbing Languages (58 Languages):
-`af`, `ar`, `az`, `bg`, `bn`, `bs`, `ca`, `cs`, `cy`, `da`, `de`, `el`, `en`, `es`, `et`, `fa`, `fi`, `fr`, `gl`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `is`, `it`, `ja`, `ka`, `kk`, `kn`, `ko`, `lt`, `lv`, `mk`, `ml`, `mr`, `ms`, `ne`, `nl`, `no`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `sr`, `sv`, `sw`, `ta`, `te`, `th`, `tr`, `uk`, `ur`, `vi`, `zh`.
+### Language Registry Evidence Breakdown:
+- **109 Language Registry Definitions**: Standardized ISO-639-2/3, BCP-47 locales, and text direction metadata.
+- **13 Languages with Neural TTS Capability in Registry**: `en`, `hi`, `te`, `ta`, `bn`, `mr`, `gu`, `kn`, `ml`, `es`, `fr`, `de`, `ja`.
+- **95 Languages Unsupported / Unverified for Production TTS Claim**: Remaining registry entries lack verified neural voice mappings or verified production TTS synthesis.
+- **1 Partial Language Entry (`zh`)**: Subtitle translation tested, but lacks registered neural TTS voice mapping.
 
 > **Production Invariant**: AITutor **never claims** a language has audio dubbing support unless verified, genuine speech synthesis is functional for that locale. When TTS cannot generate real speech for a requested language, it raises an explicit `AUDIO_NOT_AVAILABLE_FOR_LANGUAGE` error rather than synthesizing flat tones, silence, or fake audio.
 
@@ -679,21 +695,23 @@ export default {
 
 Execute the CLI using `npx aitutor`:
 
-| Command | Description | Example |
-| :--- | :--- | :--- |
-| `npx aitutor` / `npx aitutor generate` | Run preflight check and generate subtitles/qualities for configured videos | `npx aitutor --force` |
-| `npx aitutor doctor` | Run environment preflight checks without starting media processing | `npx aitutor doctor` |
-| `npx aitutor setup` | Interactive environment setup wizard to install missing dependencies/models | `npx aitutor setup` |
-| `npx aitutor status` | Display cache status, transcripts, and generated tracks | `npx aitutor status` |
-| `npx aitutor validate` | Audit generated WebVTT headers and manifest integrity | `npx aitutor validate` |
-| `npx aitutor clean` | Clean all generated public/internal subtitles and manifests | `npx aitutor clean --video lesson_1` |
+| Command | Scope & Capabilities | Required External / Optional Runtimes | Model Requirements | Network Required | Offline Possible |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `npx aitutor init` | Base package: Generates `aitutor.config.mjs` and starter directory structure | None (Node.js only) | None | No | Yes |
+| `npx aitutor doctor` | Base package: Diagnoses environment, FFmpeg, Whisper provider, model caches | None (Runs inspection only) | None to run | No | Yes |
+| `npx aitutor status` | Base package: Inspects cached models, transcripts, audio dubs, and manifest entries | None | None | No | Yes |
+| `npx aitutor validate` | Base package: Audits generated WebVTT cue syntax and manifest integrity | None | None | No | Yes |
+| `npx aitutor clean` | Base package: Deletes generated subtitles, audio tracks, and manifests | None | None | No | Yes |
+| `npx aitutor setup` | Base package: Interactive environment setup wizard | Invokes system package managers (`winget`) and `npm` | Downloads requested models | Yes (if installing/downloading) | Yes (local check only) |
+| `npx aitutor generate` / `npx aitutor` | Full pipeline: Audio extraction, speech-to-text, translation, TTS dubbing, transcoding | **External system dependency**: FFmpeg/FFprobe<br>**Optional runtime**: `@huggingface/transformers` | **Cached model**: Whisper ASR (`whisper-tiny`), NLLB translation, TTS voice | Yes (for online API or model download)<br>No (if offline mode with cached models) | Yes (with cached models, optional runtime & system FFmpeg) |
 
 ### Command Flags:
 - `--no-quality`: Skip video quality rendition transcoding during subtitle generation pipeline run.
 - `--force`: Ignore existing cache and force full re-transcription & translation.
 - `--keep-temp`: Retain temporary audio extraction workspace for debugging.
-- `--video <id>`: Target specific video ID for cleanup.
+- `--video <id>`: Target specific video ID for generation or cleanup.
 - `--audio-languages <langs>`: Filter or specify target audio dubbing languages (e.g. `--audio-languages en,hi,te`).
+- `--offline`: Strictly enforce offline execution; refuse cloud endpoints.
 - `--yes`, `-y`: Automatically confirm prompts in preflight remediation / setup.
 
 ---
@@ -965,7 +983,7 @@ npx aitutor audio clear [languages] [--video <id>]
 
 | Command | Scope | Description | Practical Example |
 | :--- | :--- | :--- | :--- |
-| `npx aitutor generate --audio-languages all` | Global / Build | Generate AI-dubbed audio for all 109 registry languages | `npx aitutor generate --audio-languages all` |
+| `npx aitutor generate --audio-languages all` | Global / Build | Attempt AI-dubbed audio generation across 109 registry languages (13 neural TTS languages currently supported in registry) | `npx aitutor generate --audio-languages all` |
 | `npx aitutor generate --audio-languages <langs>` | Targeted / Build | Generate audio dubs only for specified comma-separated languages | `npx aitutor generate --audio-languages en,hi,te` |
 | `npx aitutor generate --audio-languages <lang> --force` | Targeted / Rebuild | Force re-transcription and re-synthesis, ignoring existing cache | `npx aitutor generate --audio-languages hi --force` |
 | `npx aitutor generate --video <id> --audio-languages <langs>` | Video Targeted | Generate audio dubs exclusively for a designated video ID | `npx aitutor generate --video lesson_1 --audio-languages hi,te` |
@@ -982,13 +1000,13 @@ npx aitutor audio clear [languages] [--video <id>]
 
 ### 💡 4. STEP-BY-STEP EXAMPLES FOR EVERY AUDIO COMMAND
 
-#### Example 1: Generate AI Audio Dubs for All 109 Languages
+#### Example 1: Batch Audio Dub Processing Across Registry Languages
 ```bash
 npx aitutor generate --audio-languages all
 ```
-- **When to use**: When you want full worldwide localization across all 109 supported languages.
-- **What happens**: Transcribes the video speech once using Whisper, translates the cues into all 109 languages, synthesizes neural TTS speech, aligns segment timestamps, and outputs synchronized `.m4a` files into `public/aitutor/audio/<videoId>/<lang>.m4a`.
-- **Manifest**: Populates `public/aitutor/manifest.json` with all 109 languages.
+- **When to use**: When generating dubs across all language registry definitions (production neural TTS is supported for 13 registry languages; unsupported languages reject synthesis with explicit errors rather than fake audio).
+- **What happens**: Transcribes video speech via Whisper, translates cues, synthesizes audio where verified neural voices exist, aligns segment timestamps, and outputs synchronized `.m4a` files into `public/aitutor/audio/<videoId>/<lang>.m4a`.
+- **Manifest**: Populates `public/aitutor/manifest.json` with generated language tracks.
 
 ---
 
@@ -1050,7 +1068,7 @@ npx aitutor audio status
     hi       हिन्दी           [Cached] -> /aitutor/audio/lesson_1/hi.m4a
     te       తెలుగు           [Cached] -> /aitutor/audio/lesson_1/te.m4a
 
-  Registry Capacity:   109 supported languages available for dubbing
+  Registry Capacity:   109 language definitions in registry (13 with neural TTS capability)
   ─────────────────────────────
   ```
 

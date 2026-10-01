@@ -1,6 +1,6 @@
 # AITutor
 
-AITutor is an open-source, zero-dependency React video player and Socratic AI tutor engine with native canvas rendering, audio dub sync, automated 109-language WebVTT subtitle generation, and an automated multi-resolution video quality transcoding pipeline. It combines FFmpeg audio extraction, Whisper speech recognition, transcript normalization, cue segmentation, multilingual translation, and H.264 video quality ladder generation into a unified developer SDK.
+AITutor is an open-source, zero-dependency React video player and Socratic AI tutor engine with native canvas rendering, audio dub sync, automated WebVTT subtitle generation across 109 language registry definitions (with 13 neural TTS dubbing languages), and an automated multi-resolution video quality transcoding pipeline. It combines FFmpeg audio extraction, Whisper speech recognition, transcript normalization, cue segmentation, multilingual translation, and H.264 video quality ladder generation into a unified developer SDK.
 
 ```jsx
 import { AITutor } from "tavi-video-tutor";
@@ -66,7 +66,7 @@ export default function VideoLesson() {
 - **React Video Tutor Component**: Custom HTML5 video player with subtitle rendering, audio dub sync, automatic video quality ladder selection (`144p` to `1080p`), canvas rendering, and modal editing.
 - **Automated Video Quality Transcoding Pipeline**: Multi-resolution H.264/AAC quality ladder generation (`720p`, `480p`, `360p`, `240p`, `144p`) with aspect ratio preservation and no-upscaling guarantee.
 - **Automated Subtitle Pipeline**: End-to-end processing from video file to Whisper speech-to-text, transcript normalization, cue segmentation, and WebVTT generation.
-- **109-Language Registry**: Standardized language metadata and WebVTT generation for 109 global languages with full Right-to-Left (RTL) support for Arabic, Hebrew, Urdu, etc.
+- **109-Language Registry**: Standardized language metadata definitions for 109 global languages (13 languages with neural TTS capability present in the registry, 95 currently unsupported/unverified for production TTS, 1 partial entry) with full Right-to-Left (RTL) support for Arabic, Hebrew, Urdu, etc.
 - **Hybrid Online/Offline Translation**: High-speed online translation with automatic offline local NLLB (`@xenova/transformers`) fallback.
 - **Content-Aware Media Identity**: Smart cache fingerprinting based on canonical path, size, modification timestamp, and sampled binary content chunks (head + middle + tail 64KB).
 - **Four-Tier Subtitle Priority**: Smart resolver supporting User Uploaded > Developer Manual > Generated > Demo Fallback tracks per language.
@@ -193,7 +193,7 @@ Or create `aitutor.config.mjs` manually in your project root:
 ```javascript
 export default {
   subtitles: {
-    languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages (or 'all' for 109 languages)
+    languages: ['en', 'es', 'hi', 'te'], // Target subtitle languages (or 'all' for all 109 registry languages)
     quality: 'balanced',                 // 'fast' | 'balanced' | 'high'
     glossary: ['React', 'AITutor']       // Protected domain terms
   },
@@ -345,13 +345,16 @@ Users can control subtitle display via the player UI controls or keyboard shortc
 
 ---
 
-## 11. 109 SUPPORTED LANGUAGES
+## 11. LANGUAGE REGISTRY & CAPABILITY EVIDENCE MATRIX
 
-AITutor provides a built-in registry of **109 global languages**:
+AITutor provides a standardized registry of **109 global language definitions**. Registry presence is not marketed as verified production support; actual production capabilities strictly reflect verified evidence:
 
-- **Online Translation Coverage**: **109 / 109 languages** supported via translation providers.
-- **Native Offline NLLB Coverage**: **106 / 109 languages** supported locally via `@xenova/transformers`.
-- **Unsupported Offline Languages**: `bi` (Bislama), `ch` (Chamorro), `doi` (Dogri).
+- **109 Language Registry Definitions**: Standardized ISO-639-2/3, BCP-47 locales, and text direction metadata.
+- **13 Languages with Neural TTS Capability in Registry**: Verified Microsoft Neural TTS voice mappings for `en`, `hi`, `te`, `ta`, `bn`, `mr`, `gu`, `kn`, `ml`, `es`, `fr`, `de`, `ja`.
+- **95 Languages Unsupported / Unverified for Production TTS Claim**: Remaining registry entries lack verified neural voice mappings or verified production TTS synthesis.
+- **1 Partial Language Entry (`zh`)**: Subtitle translation tested, but lacks registered neural TTS voice mapping.
+- **Online Translation Coverage**: **109 / 109 languages** defined in the registry.
+- **Native Offline NLLB Coverage**: **106 / 109 languages** supported locally via `@xenova/transformers` (unsupported offline: `bi`, `ch`, `doi`).
 
 <details>
 <summary><strong>Click to View Complete 109 Language Code Registry</strong></summary>
@@ -935,7 +938,7 @@ npx aitutor audio clear [languages] [--video <id>]
 
 | Command | Scope | Description | Practical Example |
 | :--- | :--- | :--- | :--- |
-| `npx aitutor generate --audio-languages all` | Global / Build | Generate AI-dubbed audio for all 109 registry languages | `npx aitutor generate --audio-languages all` |
+| `npx aitutor generate --audio-languages all` | Global / Build | Attempt AI-dubbed audio generation across 109 registry languages (13 neural TTS languages currently supported in registry) | `npx aitutor generate --audio-languages all` |
 | `npx aitutor generate --audio-languages <langs>` | Targeted / Build | Generate audio dubs only for specified comma-separated languages | `npx aitutor generate --audio-languages en,hi,te` |
 | `npx aitutor generate --audio-languages <lang> --force` | Targeted / Rebuild | Force re-transcription and re-synthesis, ignoring existing cache | `npx aitutor generate --audio-languages hi --force` |
 | `npx aitutor generate --video <id> --audio-languages <langs>` | Video Targeted | Generate audio dubs exclusively for a designated video ID | `npx aitutor generate --video lesson_1 --audio-languages hi,te` |
@@ -952,13 +955,13 @@ npx aitutor audio clear [languages] [--video <id>]
 
 ### 💡 4. STEP-BY-STEP EXAMPLES FOR EVERY AUDIO COMMAND
 
-#### Example 1: Generate AI Audio Dubs for All 109 Languages
+#### Example 1: Batch Audio Dub Processing Across Registry Languages
 ```bash
 npx aitutor generate --audio-languages all
 ```
-- **When to use**: When you want full worldwide localization across all 109 supported languages.
-- **What happens**: Transcribes the video speech once using Whisper, translates the cues into all 109 languages, synthesizes neural TTS speech, aligns segment timestamps, and outputs synchronized `.m4a` files into `public/aitutor/audio/<videoId>/<lang>.m4a`.
-- **Manifest**: Populates `public/aitutor/manifest.json` with all 109 languages.
+- **When to use**: When generating dubs across all language registry definitions (production neural TTS is supported for 13 registry languages; unsupported languages reject synthesis with explicit errors rather than fake audio).
+- **What happens**: Transcribes video speech via Whisper, translates cues, synthesizes audio where verified neural voices exist, aligns segment timestamps, and outputs synchronized `.m4a` files into `public/aitutor/audio/<videoId>/<lang>.m4a`.
+- **Manifest**: Populates `public/aitutor/manifest.json` with generated language tracks.
 
 ---
 
@@ -1020,7 +1023,7 @@ npx aitutor audio status
     hi       हिन्दी           [Cached] -> /aitutor/audio/lesson_1/hi.m4a
     te       తెలుగు           [Cached] -> /aitutor/audio/lesson_1/te.m4a
 
-  Registry Capacity:   109 supported languages available for dubbing
+  Registry Capacity:   109 language definitions in registry (13 with neural TTS capability)
   ─────────────────────────────
   ```
 

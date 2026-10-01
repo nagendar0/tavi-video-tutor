@@ -18,7 +18,7 @@ export class TTSProvider {
    * @param {Object} [options] - Optional override parameters (voice, pitch, speed, outputPath)
    * @returns {Promise<{ audioPath: string, duration: number, format: string }>}
    */
-  async synthesize(text, language, options = {}) {
+  async synthesize(text, language, _options = {}) {
     throw new Error('TTSProvider.synthesize() must be implemented by subclass.');
   }
 
@@ -27,7 +27,7 @@ export class TTSProvider {
    * @param {string} language 
    * @returns {boolean}
    */
-  supportsLanguage(language) {
+  supportsLanguage(_language) {
     return true;
   }
 }

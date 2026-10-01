@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { AudioController } from '../services/AudioController.js';
 import { normalizeAudioUrl } from '../subtitles/resolver/audioResolver.js';
 

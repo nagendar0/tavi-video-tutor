@@ -20,12 +20,20 @@ const CHROMIUM_MAJOR_VERSION = '143';
 const CHROMIUM_FULL_VERSION = '143.0.3650.75';
 const SEC_MS_GEC_VERSION = `1-${CHROMIUM_FULL_VERSION}`;
 
+import { TaviTTSError } from '../errors/index.js';
+
 /**
  * Custom Typed Error for TTS operations.
  */
-export class TTSError extends Error {
+export class TTSError extends TaviTTSError {
   constructor(code, message, details = {}) {
-    super(`[${code}] ${message}`);
+    super(`[${code}] ${message}`, {
+      name: 'TTSError',
+      code,
+      provider: 'edge',
+      details,
+      cause: details.cause || null
+    });
     this.name = 'TTSError';
     this.code = code;
     this.details = details;
@@ -73,9 +81,12 @@ export function generateSecMsGec(clockSkewSeconds = 0) {
 export class EdgeTTSProvider extends TTSProvider {
   constructor(options = {}) {
     super(options);
+    this.providerId = 'edge';
+    this.engine = 'edge';
     this.timeoutMs = options.timeoutMs || options.timeout || 12000;
     this.maxRetries = options.maxRetries !== undefined ? options.maxRetries : 3;
     this.clockSkewSeconds = 0;
+    this.networkPolicy = options.networkPolicy || null;
   }
 
   /**
@@ -117,6 +128,10 @@ export class EdgeTTSProvider extends TTSProvider {
    * @returns {Promise<{ audioPath: string, duration: number, format: string, voiceId: string }>}
    */
   async synthesize(text, language, options = {}) {
+    if (options.offline === true) {
+      throw new TTSError('OFFLINE_PROVIDER_FORBIDDEN', 'Edge Neural TTS requires network access and cannot be used in offline mode.');
+    }
+
     const normLang = normalizeLanguageCode(language);
     if (!normLang) {
       throw new TTSError('TTS_LANGUAGE_UNAVAILABLE', `Invalid or unrecognized language code: '${language}'`);
@@ -228,11 +243,20 @@ export class EdgeTTSProvider extends TTSProvider {
   /**
    * Internal WebSocket worker to transmit SSML and receive binary audio frames.
    */
-  async executeSynthesisWebSocket(ssml, targetMp3Path, options = {}) {
+  async executeSynthesisWebSocket(ssml, targetMp3Path, _options = {}) {
     return new Promise((resolve, reject) => {
       const gec = generateSecMsGec(this.clockSkewSeconds);
       const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
       const muid = crypto.randomBytes(16).toString('hex').toUpperCase();
+
+      const policy = _options.networkPolicy || this.networkPolicy;
+      if (policy) {
+        try {
+          policy.assertAllowed(url, { provider: this.providerId, stage: 'websocket_connect' });
+        } catch (policyErr) {
+          return reject(policyErr);
+        }
+      }
 
       let ws = null;
       let timer = null;
@@ -258,7 +282,13 @@ export class EdgeTTSProvider extends TTSProvider {
         if (!completed) {
           completed = true;
           cleanup();
-          reject(new TTSError('TTS_NETWORK_ERROR', `Neural TTS request timed out after ${this.timeoutMs}ms.`));
+          const canonicalCode = _options.canonicalError ? 'NETWORK_TIMEOUT' : 'TTS_NETWORK_ERROR';
+          const err = new TTSError(canonicalCode, `Neural TTS request timed out after ${this.timeoutMs}ms.`, {
+            canonicalCode: 'NETWORK_TIMEOUT',
+            isTimeout: true
+          });
+          err.canonicalCode = 'NETWORK_TIMEOUT';
+          reject(err);
         }
       }, this.timeoutMs);
 

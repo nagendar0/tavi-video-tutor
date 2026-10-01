@@ -23,19 +23,32 @@ import { TranslationValidator, SCRIPT_RANGE_MAP } from '../translation/Translati
 import { generateWebVTT, secondsToVttTimestamp } from '../vtt/generateVtt.js';
 import { computeMediaFingerprint } from '../cache/manifest.js';
 import { normalizeLanguageCode, resolveLanguageCapability } from '../languages/registry.js';
+import { runPreflight } from '../env/preflight.js';
+import { TaviPreflightError } from '../errors/index.js';
 import path from 'path';
 import fs from 'fs';
 
 export const processSingleVideo = async (videoEntry, manifestStore, options = {}, onProgress) => {
+  if (options.enforcePreflight === true || options.preflight === true) {
+    const preflightRes = await runPreflight(options, manifestStore?.cwd || process.cwd());
+    if (!preflightRes.passed) {
+      throw new TaviPreflightError(`Preflight check failed: ${preflightRes.missing.map(m => m.name).join(', ')}`, {
+        preflight: preflightRes,
+        details: { missing: preflightRes.missing },
+        action: preflightRes.missing[0]?.action || 'Fulfill missing requirements before continuing.'
+      });
+    }
+  }
+
   const metrics = new MetricsCollector();
   const transcriptCache = options.transcriptCache || new TranscriptCache(manifestStore.cwd);
   const translator = options.translator || new TranslationRouter(options.translationOptions || options);
   const normalizer = options.normalizer || new TranscriptNormalizer({ glossaryTerms: options.glossary });
   const segmenter = options.segmenter || new SubtitleSegmenter(options.segmentationOptions);
   const validator = options.validator || new TranslationValidator({ customProtectedTerms: options.glossary });
-  const ttsProvider = (options.ttsProvider instanceof TTSProvider)
+  const ttsProvider = (options.ttsProvider && (options.ttsProvider instanceof TTSProvider || typeof options.ttsProvider.synthesize === 'function'))
     ? options.ttsProvider
-    : createTTSProvider(options.ttsProvider ? { provider: options.ttsProvider, ...(options.ttsOptions || options) } : (options.ttsOptions || options));
+    : createTTSProvider(typeof options.ttsProvider === 'string' ? { provider: options.ttsProvider, ...(options.ttsOptions || options) } : (options.ttsOptions || options));
 
   const rawLanguages = Array.isArray(videoEntry.languages) ? videoEntry.languages : ['en'];
   const rawAudioLanguages = options.audioLanguages || videoEntry.audioLanguages || [];

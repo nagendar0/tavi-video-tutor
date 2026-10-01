@@ -12,8 +12,7 @@
 export const STANDARD_HEIGHTS = [2160, 1440, 1080, 720, 480, 360, 240, 144];
 
 export const makeEven = (num) => {
-  const rounded = Math.round(num);
-  const even = rounded % 2 === 0 ? rounded : rounded - 1;
+  const even = Math.round(num / 2) * 2;
   return Math.max(2, even);
 };
 

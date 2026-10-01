@@ -4,7 +4,7 @@ export const defaultProviderLanguageMap = {
   tl: 'fil'
 };
 
-export const mapAITutorCodeToProvider = (code, providerName = 'default') => {
+export const mapAITutorCodeToProvider = (code, _providerName = 'default') => {
   if (!code) return code;
   const clean = String(code).toLowerCase();
   return defaultProviderLanguageMap[clean] || clean;

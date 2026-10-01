@@ -1,6 +1,64 @@
 import fs from 'fs';
 import { spawnSync } from 'child_process';
 import { getFFmpegBinaryPath, getFFprobeBinaryPath } from './extractAudio.js';
+import { TaviAudioError } from '../errors/index.js';
+
+/**
+ * Reads or probes the actual duration of an audio file in seconds.
+ * 
+ * @param {string} filePath 
+ * @param {string} [ffprobeBin] 
+ * @returns {number} Measured duration in seconds, or 0 if unmeasurable
+ */
+export function getAudioDuration(filePath, ffprobeBin) {
+  if (!filePath || typeof filePath !== 'string' || !fs.existsSync(filePath)) {
+    return 0;
+  }
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size === 0) return 0;
+  } catch (_) {
+    return 0;
+  }
+
+  // 1. Probing via ffprobe
+  const probe = ffprobeBin || getFFprobeBinaryPath();
+  const probeProc = spawnSync(probe, [
+    '-v', 'error',
+    '-show_entries', 'format=duration:stream=duration',
+    '-of', 'json',
+    filePath
+  ], { encoding: 'utf8', windowsHide: true });
+
+  if (probeProc.status === 0 && probeProc.stdout) {
+    try {
+      const parsed = JSON.parse(probeProc.stdout);
+      const streamDur = parsed.streams?.[0]?.duration;
+      const formatDur = parsed.format?.duration;
+      const d = parseFloat(streamDur || formatDur || '0');
+      if (!isNaN(d) && d > 0) {
+        return Number(d.toFixed(4));
+      }
+    } catch (_) {}
+  }
+
+  // 2. Direct PCM WAV header parse fallback
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const header = Buffer.alloc(44);
+    fs.readSync(fd, header, 0, 44, 0);
+    fs.closeSync(fd);
+    if (header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WAVE') {
+      const byteRate = header.readUInt32LE(28);
+      const dataSize = header.readUInt32LE(40);
+      if (byteRate > 0 && dataSize > 0) {
+        return Number((dataSize / byteRate).toFixed(4));
+      }
+    }
+  } catch (_) {}
+
+  return 0;
+}
 
 /**
  * Validates a generated audio file (e.g. .m4a AAC) against production quality invariants:
@@ -31,7 +89,12 @@ export function validateGeneratedAudio(filePath, options = {}) {
   const fail = (code, message, details = {}) => {
     const result = { valid: false, code, message, ...details };
     if (throwOnError) {
-      const err = new Error(`AUDIO_VALIDATION_FAILED [${code}]: ${message}`);
+      const errCode = code.startsWith('AUDIO_') ? code : 'AUDIO_OUTPUT_INVALID';
+      const err = new TaviAudioError(`AUDIO_VALIDATION_FAILED [${code}]: ${message}`, {
+        code: errCode,
+        stage: 'audio_validation',
+        details: { validationCode: code, ...details }
+      });
       err.code = code;
       err.details = details;
       throw err;

@@ -1,26 +1,85 @@
-import { AITutorTranslationProvider } from './TranslationProvider.js';
-import { LocalNllbProvider } from './LocalNllbProvider.js';
+// @ts-check
+import { LocalNllbAdapter } from './LocalNllbAdapter.js';
+import { ExternalTranslationAdapter } from './ExternalTranslationAdapter.js';
 import { normalizeLanguageCode } from '../languages/registry.js';
+import { TranslationError, TRANSLATION_ERROR_CODES } from './TranslationError.js';
 
+/**
+ * Hardened TranslationRouter.
+ * Routes translation requests to dedicated LocalNllbAdapter or ExternalTranslationAdapter.
+ * Strictly avoids silent fallback when explicit providers or offline modes are configured.
+ */
 export class TranslationRouter {
+  /**
+   * @param {Object} [options={}]
+   * @param {string} [options.mode] - 'offline' | 'online' | 'auto'
+   * @param {string} [options.provider] - Explicit provider selection ('nllb' | 'mymemory')
+   * @param {boolean} [options.offline=false] - Enforce offline execution
+   * @param {boolean} [options.allowFallback] - Explicitly enable or disable provider fallback
+   * @param {LocalNllbAdapter} [options.localAdapter] - Custom local adapter
+   * @param {ExternalTranslationAdapter} [options.externalAdapter] - Custom external adapter
+   * @param {any} [options.localProvider] - Legacy alias for local adapter
+   * @param {any} [options.onlineProvider] - Legacy alias for external adapter
+   */
   constructor(options = {}) {
     this.options = options;
-    this.mode = options.mode || options.provider || 'auto'; // 'auto' | 'online' | 'offline'
-    this.onlineProvider = options.onlineProvider || new AITutorTranslationProvider(options);
-    this.localProvider = options.localProvider || new LocalNllbProvider(options);
+
+    if (options.offline || options.mode === 'offline' || options.provider === 'nllb') {
+      this.mode = 'offline';
+    } else if (options.mode === 'online' || options.provider === 'mymemory') {
+      this.mode = 'online';
+    } else {
+      this.mode = options.mode || 'auto';
+    }
+
+    this.provider = options.provider || null;
+
+    this.localAdapter = options.localAdapter || options.localProvider || new LocalNllbAdapter(options);
+    this.externalAdapter = options.externalAdapter || options.onlineProvider || new ExternalTranslationAdapter(options);
+
+    // Fallback is strictly disabled by default when explicit provider or offline mode is chosen.
+    // For legacy auto mode (without explicit provider), allowFallback defaults to true for backwards compatibility
+    // unless explicitly disabled.
+    if (options.allowFallback !== undefined) {
+      this.allowFallback = Boolean(options.allowFallback);
+    } else if (this.provider || this.mode === 'offline' || this.mode === 'online') {
+      this.allowFallback = false;
+    } else {
+      this.allowFallback = true;
+    }
   }
 
+  /**
+   * Checks whether the given language pair is supported by the active routing configuration.
+   * 
+   * @param {string} sourceLang 
+   * @param {string} targetLang 
+   * @returns {boolean}
+   */
   supports(sourceLang, targetLang) {
     const srcClean = normalizeLanguageCode(sourceLang) || String(sourceLang || 'en').toLowerCase().trim();
     const tgtClean = normalizeLanguageCode(targetLang) || String(targetLang || 'en').toLowerCase().trim();
     if (srcClean === tgtClean) return true;
-    if (this.mode === 'offline') {
-      return this.localProvider.supports(srcClean, tgtClean);
+
+    if (this.mode === 'offline' || this.provider === 'nllb') {
+      return this.localAdapter.supports(srcClean, tgtClean);
     }
-    return this.onlineProvider.supports(srcClean, tgtClean) || this.localProvider.supports(srcClean, tgtClean);
+    if (this.provider === 'mymemory' || this.mode === 'online') {
+      return this.externalAdapter.supports(srcClean, tgtClean);
+    }
+    return this.externalAdapter.supports(srcClean, tgtClean) || this.localAdapter.supports(srcClean, tgtClean);
   }
 
-  async translateSegments(segments, sourceLang, targetLang) {
+  /**
+   * Translates subtitle segments according to routing mode and provider configuration.
+   * 
+   * @param {Array<Object>} segments - Subtitle cues
+   * @param {string} sourceLang - Source language code
+   * @param {string} targetLang - Target language code
+   * @param {Object} [options={}] - Request-level overrides
+   * @returns {Promise<Array<Object>>} Translated cues
+   */
+  async translateSegments(segments, sourceLang, targetLang, options = {}) {
     const srcClean = normalizeLanguageCode(sourceLang) || String(sourceLang || 'en').toLowerCase().trim();
     const tgtClean = normalizeLanguageCode(targetLang) || String(targetLang || 'en').toLowerCase().trim();
 
@@ -28,74 +87,54 @@ export class TranslationRouter {
       return segments.map((s, idx) => ({
         ...s,
         id: s.id || s.segmentId || `cue_${String(idx + 1).padStart(6, '0')}`,
-        start: Number(s.start !== undefined ? s.start : s.startTime),
-        end: Number(s.end !== undefined ? s.end : s.endTime),
-        text: s.text || s.originalText,
-        originalText: s.originalText || s.text,
-        translatedText: s.text || s.originalText
+        start: s.start !== undefined ? Number(s.start) : Number(s.startTime || 0),
+        end: s.end !== undefined ? Number(s.end) : Number(s.endTime || 0),
+        text: s.text || s.originalText || '',
+        originalText: s.originalText || s.text || '',
+        translatedText: s.text || s.originalText || ''
       }));
     }
 
-    let translated = null;
-
-    // Explicit Offline Mode
-    if (this.mode === 'offline') {
-      if (!this.localProvider.supports(srcClean, tgtClean)) {
-        throw new Error(`UNSUPPORTED_OFFLINE: Offline translation unavailable for language '${targetLang}' (Unsupported by local NLLB-200 model).`);
+    // 1. Strict Offline Routing
+    if (this.mode === 'offline' || options.offline || this.options.offline) {
+      if (!this.localAdapter.supports(srcClean, tgtClean)) {
+        throw new TranslationError(
+          `UNSUPPORTED_OFFLINE: Offline translation unavailable for language '${targetLang}' (Unsupported by local NLLB-200 model).`,
+          TRANSLATION_ERROR_CODES.TRANSLATION_LANGUAGE_UNSUPPORTED,
+          { provider: 'nllb', targetLanguage: targetLang, sourceLanguage: sourceLang }
+        );
       }
-      console.log(`[TranslationRouter] Offline Mode Active → Routing ${targetLang} to Local NLLB Provider`);
-      translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
-    } else {
-      // Auto Mode: Online Preferred → Local Fallback
-      try {
-        if (this.mode !== 'offline') {
-          const onlineResult = await this.onlineProvider.translateSegments(segments, srcClean, tgtClean);
-          if (onlineResult && Array.isArray(onlineResult) && onlineResult.length > 0) {
-            translated = onlineResult;
-          }
-        }
-      } catch (onlineErr) {
-        if (this.mode === 'online') {
-          throw onlineErr;
-        }
-
-        console.warn(`\n⚠ Online translation provider unavailable for ${targetLang}: ${onlineErr.message}`);
-
-        if (this.localProvider.supports(srcClean, tgtClean)) {
-          console.log(`→ Switching to Local NLLB Fallback for ${targetLang}...`);
-          translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
-        } else {
-          throw new Error(`TRANSLATION NOT AVAILABLE FOR <${targetLang}> [UNSUPPORTED_OFFLINE]: Online translation failed (${onlineErr.message}) and language '${targetLang}' is unsupported by local NLLB-200 fallback model.`);
-        }
-      }
-
-      // Fallback if online provider returned empty
-      if (!translated && this.localProvider.supports(srcClean, tgtClean)) {
-        translated = await this.localProvider.translateSegments(segments, srcClean, tgtClean);
-      }
+      return await this.localAdapter.translateSegments(segments, srcClean, tgtClean, options);
     }
 
-    if (!translated) {
-      throw new Error(`TRANSLATION NOT AVAILABLE FOR <${targetLang}>: No translation provider available for pair ${sourceLang} -> ${targetLang}`);
+    // 2. Explicit NLLB Provider
+    if (this.provider === 'nllb' || options.provider === 'nllb') {
+      return await this.localAdapter.translateSegments(segments, srcClean, tgtClean, options);
     }
 
+    // 3. Explicit External Provider (Online)
+    if (this.provider === 'mymemory' || options.provider === 'mymemory' || this.mode === 'online') {
+      return await this.externalAdapter.translateSegments(segments, srcClean, tgtClean, options);
+    }
 
-    // Preserve speaker identity and timeline invariants from source segments
-    return translated.map((t, idx) => {
-      const orig = segments[idx] || {};
-      const targetText = String(t.translatedText || t.text || '').trim();
-      const sourceText = String(orig.originalText || orig.text || '').trim();
+    // 4. Auto Mode: With or without fallback
+    if (!this.allowFallback) {
+      // Zero fallback mode: attempt primary local provider if available, or external if specified
+      if (this.localAdapter.supports(srcClean, tgtClean)) {
+        return await this.localAdapter.translateSegments(segments, srcClean, tgtClean, options);
+      }
+      return await this.externalAdapter.translateSegments(segments, srcClean, tgtClean, options);
+    }
 
-      return {
-        ...orig,
-        ...t,
-        speakerId: orig.speakerId || t.speakerId,
-        segmentId: orig.segmentId || t.segmentId || t.id,
-        originalText: sourceText,
-        translatedText: targetText,
-        text: targetText || (srcClean === tgtClean ? sourceText : '')
-      };
-    });
+    // Legacy auto mode with explicit fallback allowed
+    try {
+      return await this.externalAdapter.translateSegments(segments, srcClean, tgtClean, options);
+    } catch (onlineErr) {
+      if (this.localAdapter.supports(srcClean, tgtClean)) {
+        return await this.localAdapter.translateSegments(segments, srcClean, tgtClean, options);
+      }
+      throw onlineErr;
+    }
   }
 }
 

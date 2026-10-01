@@ -79,8 +79,16 @@ const youtubeTranscriptPlugin = () => ({
   }
 });
 
+const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+
 export default defineConfig({
   plugins: [react(), youtubeTranscriptPlugin()],
+  resolve: {
+    alias: [
+      { find: /^tavi-video-tutor\/dist\/(style|tavi-video-tutor)\.css$/, replacement: path.resolve(__dirname, '../../packages/tavi-video-tutor/src/styles/ai-tutor.css') },
+      { find: /^tavi-video-tutor$/, replacement: path.resolve(__dirname, '../../packages/tavi-video-tutor/src/index.js') }
+    ]
+  },
   server: {
     port: 5180
   }

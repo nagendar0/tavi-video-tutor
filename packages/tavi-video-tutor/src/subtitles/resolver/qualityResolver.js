@@ -10,7 +10,6 @@
  */
 
 const EMPTY_ARRAY = Object.freeze([]);
-const EMPTY_OBJECT = Object.freeze([]);
 
 function normalizeQualities(list) {
   if (!Array.isArray(list)) return [];
@@ -195,11 +194,6 @@ export function resolveQualityAvailability({
       reason: 'Video quality selector disabled by developer config (qualities={false}).'
     };
   }
-
-  const hasManifestOrConfigOrHls = (Array.isArray(hlsQualities) && hlsQualities.length > 0) ||
-    (config?.qualities && Array.isArray(config.qualities) && config.qualities.length > 0) ||
-    (config?.file?.qualities && Array.isArray(config.file.qualities) && config.file.qualities.length > 0) ||
-    (Array.isArray(manifestQualities) && manifestQualities.length > 0);
 
   let mode = 'all';
   let isStringFilter = false;

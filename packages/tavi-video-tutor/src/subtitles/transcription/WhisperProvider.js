@@ -105,7 +105,7 @@ export const isWhisperModelCached = async (modelName = 'Xenova/whisper-base') =>
     candidateDirs.push(path.join(process.cwd(), 'node_modules', '@huggingface', 'transformers', '.cache', ...modelName.split('/')));
     candidateDirs.push(path.join(process.cwd(), 'node_modules', '@xenova', 'transformers', '.cache', ...modelName.split('/')));
 
-    // Also check relative to packages/tavi-video-tutor
+    // Also check relative to package root
     try {
       const currentDir = path.dirname(fileURLToPath(import.meta.url));
       candidateDirs.push(path.resolve(currentDir, '../../../node_modules/@huggingface/transformers/.cache', ...modelName.split('/')));

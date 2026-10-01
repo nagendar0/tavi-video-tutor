@@ -36,3 +36,8 @@ Thumbs.db
 # Temporary test audio & consumer directories
 *.wav
 fresh-consumer-audio-test/
+clean-consumer-test/
+package/
+**/package/
+.gemini/
+.agents/tasks/

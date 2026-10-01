@@ -53,6 +53,36 @@
       "import": "./src/subtitles/tts/index.js",
       "default": "./src/subtitles/tts/index.js"
     },
+    "./policy": {
+      "types": "./src/subtitles/policy/PolicyEngine.d.ts",
+      "import": "./src/subtitles/policy/index.js",
+      "default": "./src/subtitles/policy/index.js"
+    },
+    "./network": {
+      "types": "./src/subtitles/network/index.d.ts",
+      "import": "./src/subtitles/network/index.js",
+      "default": "./src/subtitles/network/index.js"
+    },
+    "./cache": {
+      "types": "./src/subtitles/cache/ModelCacheManager.d.ts",
+      "import": "./src/subtitles/cache/index.js",
+      "default": "./src/subtitles/cache/index.js"
+    },
+    "./errors": {
+      "types": "./src/subtitles/errors/index.d.ts",
+      "import": "./src/subtitles/errors/index.js",
+      "default": "./src/subtitles/errors/index.js"
+    },
+    "./models": {
+      "types": "./src/subtitles/models/modelRegistry.d.ts",
+      "import": "./src/subtitles/models/modelRegistry.js",
+      "default": "./src/subtitles/models/modelRegistry.js"
+    },
+    "./languages": {
+      "types": "./src/subtitles/languages/capabilityResolver.d.ts",
+      "import": "./src/subtitles/languages/capabilityResolver.js",
+      "default": "./src/subtitles/languages/capabilityResolver.js"
+    },
     "./dist/style.css": "./dist/tavi-video-tutor.css",
     "./dist/tavi-video-tutor.css": "./dist/tavi-video-tutor.css",
     "./style.css": "./dist/tavi-video-tutor.css",

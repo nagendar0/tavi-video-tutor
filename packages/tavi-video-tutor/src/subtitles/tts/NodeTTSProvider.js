@@ -10,11 +10,12 @@ import { normalizeLanguageCode, resolveLanguageCapability } from '../languages/r
 export class NodeTTSProvider extends TTSProvider {
   constructor(options = {}) {
     super(options);
+    this.providerId = 'system';
+    this.engine = 'system';
     // Synthetic tones/silence are strictly prohibited in production paths.
     // They may only be enabled in test environments with both an environment flag and an explicit test option.
     const isTestEnv = process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test';
     this.allowSyntheticFallback = isTestEnv && (options.allowSyntheticFallback === true || options.__testOnlyExplicitFallback === true);
-    this.onlineFallback = options.onlineFallback ?? true;
   }
 
   /**
@@ -31,8 +32,8 @@ export class NodeTTSProvider extends TTSProvider {
   }
 
   /**
-   * Synthesize text to WAV file using system speech tool, online TTS,
-   * or FFmpeg audio synthesis fallback.
+   * Synthesize text to WAV file using native system speech tool (Windows SAPI, macOS say, Linux espeak)
+   * or FFmpeg audio synthesis in explicit test mode.
    * 
    * @param {string} text 
    * @param {string} language 
@@ -46,7 +47,7 @@ export class NodeTTSProvider extends TTSProvider {
     const outputPath = path.join(outputDir, filename);
 
     const normLang = normalizeLanguageCode(language) || String(language || 'en').toLowerCase().trim();
-    const cap = resolveLanguageCapability(normLang);
+    const _cap = resolveLanguageCapability(normLang);
     const sanitizedText = (text || '').trim();
     
     if (!sanitizedText) {
@@ -78,23 +79,10 @@ export class NodeTTSProvider extends TTSProvider {
         }
       }
     } catch (_sysErr) {
-      // System speech failed or unsupported for this language, proceed to online/fallback
+      // System speech failed or unsupported for this language
     }
 
-    // 2. Try High-Fidelity Online TTS Fallback
-    if (this.onlineFallback && options.offline !== true) {
-      try {
-        const onlineRes = await this.synthesizeOnlineTTS(sanitizedText, normLang, outputPath, options);
-        if (onlineRes && fs.existsSync(onlineRes.audioPath)) {
-          const val = validateGeneratedAudio(onlineRes.audioPath, { rejectSilence: true, rejectTone: true, decodeTest: true });
-          if (val.valid) return onlineRes;
-        }
-      } catch (_onlineErr) {
-        // Online TTS failed or offline
-      }
-    }
-
-    // 3. Test-only synthetic fallback (strictly guarded: impossible to activate in production)
+    // 2. Test-only synthetic fallback (strictly guarded: impossible to activate in production)
     const isExplicitTestMode = (process.env.AITUTOR_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') &&
       (this.allowSyntheticFallback || options.__testOnlyExplicitFallback === true);
 
@@ -119,7 +107,7 @@ export class NodeTTSProvider extends TTSProvider {
   async synthesizeWindowsSpeech(text, langCode, outputPath, options = {}) {
     const b64 = Buffer.from(text, 'utf8').toString('base64');
     const gender = (options.gender || '').toLowerCase(); // 'female' | 'male'
-    const voicePreference = options.voiceId || '';
+    const _voicePreference = options.voiceId || '';
     const cap = resolveLanguageCapability(langCode);
     const langName = (cap?.displayName || '').toLowerCase();
 
@@ -241,7 +229,7 @@ Write-Output ($selectedToken.GetDescription().Trim())
   /**
    * macOS Speech Synthesis via `say` command.
    */
-  async synthesizeDarwinSpeech(text, langCode, outputPath, options = {}) {
+  async synthesizeDarwinSpeech(text, langCode, outputPath, _options = {}) {
     try {
       const voicesList = execSync('say -v ?', { encoding: 'utf8' });
       const lines = voicesList.split('\n');
@@ -274,7 +262,7 @@ Write-Output ($selectedToken.GetDescription().Trim())
   /**
    * Linux Speech Synthesis via `espeak-ng` or `espeak`.
    */
-  async synthesizeLinuxSpeech(text, langCode, outputPath, options = {}) {
+  async synthesizeLinuxSpeech(text, langCode, outputPath, _options = {}) {
     try {
       const result = spawnSync('espeak-ng', ['-v', langCode, '-w', outputPath, text], {
         stdio: 'ignore',
@@ -287,69 +275,6 @@ Write-Output ($selectedToken.GetDescription().Trim())
         return { audioPath: outputPath, duration: dur || 2.0, format: 'wav', voiceId: `espeak_${langCode}` };
       }
     } catch (_) {}
-    return null;
-  }
-
-  /**
-   * High-Fidelity Online TTS Synthesis with chunking and audio conversion.
-   */
-  async synthesizeOnlineTTS(text, langCode, outputPath, options = {}) {
-    const ffmpeg = getFFmpegBinaryPath();
-    const tempMp3 = outputPath.replace(/\.wav$/i, '.mp3');
-
-    // Online TTS URL
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${langCode}&client=tw-ob`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      signal: AbortSignal.timeout(8000)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Online TTS HTTP ${response.status}`);
-    }
-
-    const arrayBuf = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuf);
-
-    if (buffer.length < 500) {
-      throw new Error('Online TTS response too small or invalid');
-    }
-
-    fs.writeFileSync(tempMp3, buffer);
-
-    // Transcode MP3 to WAV using FFmpeg
-    try {
-      const transcodeProc = spawnSync(ffmpeg, [
-        '-y',
-        '-i', tempMp3,
-        '-ar', '44100',
-        '-ac', '2',
-        '-c:a', 'pcm_s16le',
-        outputPath
-      ], { windowsHide: true });
-
-      if (transcodeProc.status !== 0 && transcodeProc.error) {
-        throw new Error(`Online TTS transcode failed: ${transcodeProc.error.message}`);
-      }
-    } finally {
-      if (fs.existsSync(tempMp3)) {
-        try { fs.unlinkSync(tempMp3); } catch (_) {}
-      }
-    }
-
-    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
-      const dur = this.getAudioDuration(outputPath);
-      return {
-        audioPath: outputPath,
-        duration: dur || 2.0,
-        format: 'wav',
-        voiceId: `${langCode}-online-neural`
-      };
-    }
-
     return null;
   }
 

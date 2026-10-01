@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AITutor } from 'tavi-video-tutor';
 import 'tavi-video-tutor/dist/style.css';
 
@@ -114,6 +114,48 @@ const LANGUAGE_NAMES = {
   ks: "Kashmiri",
 };
 
+const NATIVE_NAMES = {
+  hi: "हिन्दी",
+  te: "తెలుగు",
+  es: "Español",
+  ja: "日本語",
+  fr: "Français",
+  de: "Deutsch",
+  zh: "中文",
+  ru: "Русский",
+  pt: "Português",
+  it: "Italiano",
+  ar: "العربية",
+  bn: "বাংলা",
+  pa: "ਪੰਜਾਬੀ",
+  mr: "मराठी",
+  ta: "தமிழ்",
+  ur: "اردو",
+  ko: "한국어",
+  nl: "Nederlands"
+};
+
+const ISO639_2 = {
+  hi: "hin",
+  te: "tel",
+  es: "spa",
+  ja: "jpn",
+  fr: "fra",
+  de: "deu",
+  zh: "zho",
+  ru: "rus",
+  pt: "por",
+  it: "ita",
+  ar: "ara",
+  bn: "ben",
+  pa: "pan",
+  mr: "mar",
+  ta: "tam",
+  ur: "urd",
+  ko: "kor",
+  nl: "nld"
+};
+
 const LANGUAGES = Object.keys(LANGUAGE_NAMES).map(code => ({
   code,
   name: LANGUAGE_NAMES[code] || code.toUpperCase()
@@ -131,10 +173,23 @@ function SearchableLanguageDropdown({ selectedValue, onChange }) {
   const filteredLanguages = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return LANGUAGES;
-    return LANGUAGES.filter(lang => 
-      lang.name.toLowerCase().includes(query) || 
-      lang.code.toLowerCase().includes(query)
-    );
+    const norm = (s) => (s || '').replace(/\u0928\u094D/g, '\u0902').toLowerCase();
+    const normQ = norm(query);
+
+    return LANGUAGES.filter(lang => {
+      const code = (lang.code || '').toLowerCase();
+      const name = (lang.name || '').toLowerCase();
+      const native = (NATIVE_NAMES[lang.code] || '').toLowerCase();
+      const iso2 = (ISO639_2[lang.code] || '').toLowerCase();
+
+      return (
+        code.includes(query) ||
+        name.includes(query) ||
+        iso2.includes(query) ||
+        native.includes(query) ||
+        norm(native).includes(normQ)
+      );
+    });
   }, [searchQuery]);
 
   return (
@@ -229,27 +284,57 @@ function SearchableLanguageDropdown({ selectedValue, onChange }) {
           display: 'flex',
           flexDirection: 'column',
           gap: '8px',
-          maxHeight: '320px',
+          maxHeight: '380px',
           overflow: 'hidden'
         }}>
-          <input
-            type="text"
-            placeholder="Search language..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoFocus
-            style={{
-              width: '100%',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              fontSize: '13px',
-              color: '#fff',
-              outline: 'none',
-              boxSizing: 'border-box'
-            }}
-          />
+          {LANGUAGES.length > 5 && (
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                type="text"
+                placeholder="Search language..."
+                aria-label="Search language"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  padding: '8px 30px 8px 12px',
+                  fontSize: '13px',
+                  color: '#fff',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#9ca3af',
+                    fontSize: '16px',
+                    lineHeight: '1',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
 
           <div 
             className="custom-scrollbar"
@@ -353,53 +438,19 @@ function App() {
   const [selectedLang, setSelectedLang] = useState('en');
   const [generatedVtt, setGeneratedVtt] = useState(null);
   const [customSubtitles, setCustomSubtitles] = useState({});
-  const [autoGenProgress, setAutoGenProgress] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-
   useEffect(() => {
     setGeneratedVtt(null);
-    setAutoGenProgress('');
   }, [videoSrc]);
 
   const activeSubtitles = useMemo(() => {
     return customSubtitles;
   }, [customSubtitles]);
 
-  const handleAutoGenerateAllSubtitles = async () => {
-    setIsGenerating(true);
-    setAutoGenProgress('Initializing AI Speech-to-Text Transcriber...');
-    try {
-      const baseVtt = await transcribeVideoAudio(videoSrc, (p) => {
-        setAutoGenProgress(p.message || 'Transcribing audio...');
-      });
-
-      setCustomSubtitles(prev => ({ ...prev, en: baseVtt }));
-      setSelectedLang('en');
-
-      const targetLangs = LANGUAGES;
-      await batchTranslateSubtitles(baseVtt, targetLangs, (p, langCode, vtt) => {
-        setAutoGenProgress(p.message);
-        if (langCode && vtt) {
-          setCustomSubtitles(prev => ({
-            ...prev,
-            [langCode]: vtt
-          }));
-        }
-      });
-
-      // Clear progress message after completion so it hides automatically
-      setAutoGenProgress('');
-      setGeneratedVtt(baseVtt);
-    } catch (err) {
-      setAutoGenProgress('Error: ' + err.message);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Mock audio voice dub (Google Assistant test ambient sound)
+  // Valid local demo audio fixtures for multilingual speech dubbing
   const sampleAudioDubs = {
-    hi: 'https://actions.google.com/sounds/v1/ambiences/morning_birds.ogg'
+    hi: '/demo-audio/demo-hi.m4a',
+    te: '/demo-audio/demo-te.m4a',
+    es: '/demo-audio/demo-es.m4a'
   };
 
   const handleSelectPreset = (index) => {

@@ -7,8 +7,9 @@ import { TranscriptCache } from '../subtitles/transcript/transcriptCache.js';
 import { runPreflight, formatPreflightTable, formatDoctorReport } from '../subtitles/env/preflight.js';
 import { remediateMissing } from '../subtitles/env/remediator.js';
 import { AITUTOR_LANGUAGES } from '../subtitles/languages/registry.js';
+import { formatErrorCli, formatErrorJson, getExitCodeForError } from '../subtitles/errors/index.js';
 
-export { computeFingerprint as computeHash, loadConfig, runPreflight, formatPreflightTable, formatDoctorReport };
+export { computeFingerprint as computeHash, loadConfig, runPreflight, formatPreflightTable, formatDoctorReport, formatErrorCli, formatErrorJson, getExitCodeForError };
 
 export const runInit = async (options = {}, cwd = process.cwd()) => {
   console.log(`\nAITutor — Initializing Starter Configuration\n─────────────────────────────\n`);
@@ -475,7 +476,7 @@ export const runAudioStatus = async (options = {}, cwd = process.cwd()) => {
       }
     }
 
-    console.log(`\nRegistry Capacity:   ${AITUTOR_LANGUAGES.length} supported languages available for dubbing`);
+    console.log(`\nRegistry Capacity:   ${AITUTOR_LANGUAGES.length} language definitions in registry (13 with neural TTS capability)`);
     console.log(`Last updated:        ${entry?.updatedAt || 'Not generated yet'}\n─────────────────────────────\n`);
   }
 
@@ -837,8 +838,12 @@ Options:
         process.exitCode = 1;
       }
     } catch (err) {
-      console.error(`\nAITutor Generation Error:\n${err.message}\n`);
-      process.exitCode = 1;
+      if (args.includes('--json')) {
+        console.error(formatErrorJson(err));
+      } else {
+        console.error(`\nAITutor Generation Error:\n${formatErrorCli(err)}\n`);
+      }
+      process.exitCode = getExitCodeForError(err);
     }
   } else {
     console.log(`Usage: aitutor [init|generate|doctor|setup|status|audio|validate|clean] [--video <id>] [--audio-languages en,hi,te|all] [--force] [--no-quality] [--keep-temp] [--yes]`);

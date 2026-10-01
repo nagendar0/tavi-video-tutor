@@ -1,4 +1,4 @@
-// Comprehensive 109-language metadata with ISO-639-2/3, BCP-47 locales, and capability definitions
+// Comprehensive 109-language registry definitions with ISO-639-2/3, BCP-47 locales, and capability definitions (13 neural TTS, 95 unsupported/unverified for production TTS claim, 1 partial)
 export const AITUTOR_LANGUAGES = [
   { code: "af", iso639_2: "afr", bcp47: "af-ZA", name: "Afrikaans", nativeName: "Afrikaans" },
   { code: "sq", iso639_2: "sqi", bcp47: "sq-AL", name: "Albanian", nativeName: "Shqip" },
@@ -197,7 +197,11 @@ export const getLanguageByCode = (code) => {
  * and voice allocations.
  * 
  * @param {string} code 
- * @returns {Object}
+/**
+ * Legacy locale set for basic speech resolution.
+ * NOTE: Production neural TTS voice support is defined in neuralVoiceRegistry.js,
+ * which currently supports 13 verified neural languages, with 95 unsupported/unverified
+ * for production neural TTS and 1 partial language entry (zh).
  */
 export const VERIFIED_TTS_LANGUAGES = new Set([
   'af', 'ar', 'bn', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'tl',
@@ -210,6 +214,23 @@ export const VERIFIED_TTS_LANGUAGES = new Set([
 export const UNSUPPORTED_TRANSLATION_LANGUAGES = new Set([
   'bi', 'ch', 'doi'
 ]);
+
+import {
+  CapabilityResolver,
+  resolveCapability,
+  listAllCapabilities
+} from './capabilityResolver.js';
+import {
+  ModelRegistry,
+  getModel,
+  getCanonicalModel,
+  getAlternativeModels,
+  findModelsForLanguage,
+  getAllModels,
+  getLanguageModelEntry,
+  getAllLanguageModelEntries,
+  getModelInventoryStats
+} from '../models/modelRegistry.js';
 
 export const resolveLanguageCapability = (code) => {
   const canonical = normalizeLanguageCode(code);
@@ -226,6 +247,10 @@ export const resolveLanguageCapability = (code) => {
       ttsSupport: false,
       speakerAwareCapability: false,
       subtitleCapability: false,
+      technicalCapability: 'NONE',
+      canonicalEngine: null,
+      canonicalModel: null,
+      alternativeModels: [],
       error: 'UNSUPPORTED_LANGUAGE'
     };
   }
@@ -235,6 +260,9 @@ export const resolveLanguageCapability = (code) => {
   const ttsSupported = VERIFIED_TTS_LANGUAGES.has(canonical);
   const translationSupported = !UNSUPPORTED_TRANSLATION_LANGUAGES.has(canonical);
   const isSupported = translationSupported;
+
+  // Technical capability report from ModelRegistry
+  const techReport = resolveCapability(canonical);
 
   // Standard TTS voice and locale resolution
   const ttsLocale = meta.bcp47 || `${canonical}-${canonical.toUpperCase()}`;
@@ -266,7 +294,13 @@ export const resolveLanguageCapability = (code) => {
     preferredVoices: {
       female: [`${canonical}_voice_1`, `${ttsLocale}-Female`],
       male: [`${canonical}_voice_2`, `${ttsLocale}-Male`]
-    }
+    },
+    // Phase 1 technical capability additions
+    technicalCapability: techReport.technicalCapability,
+    canonicalEngine: techReport.canonicalEngine,
+    canonicalModel: techReport.canonicalModel,
+    alternativeModels: techReport.alternativeModels,
+    technicalReport: techReport
   };
 };
 
@@ -279,4 +313,33 @@ export const resolveLanguageCapability = (code) => {
 export const getAllLanguageCapabilities = () => {
   return AITUTOR_LANGUAGES.map(lang => resolveLanguageCapability(lang.code));
 };
+
+// Re-export Phase 1 CapabilityResolver and ModelRegistry APIs
+export {
+  CapabilityResolver,
+  resolveCapability,
+  listAllCapabilities,
+  ModelRegistry,
+  getModel,
+  getCanonicalModel,
+  getAlternativeModels,
+  findModelsForLanguage,
+  getAllModels,
+  getLanguageModelEntry,
+  getAllLanguageModelEntries,
+  getModelInventoryStats
+};
+
+// Re-export Phase 2 PolicyEngine APIs
+export {
+  PolicyEngine,
+  PolicyError,
+  POLICY_PROFILES,
+  EXECUTION_MODES,
+  POLICY_STATUS,
+  defaultPolicyEngine,
+  evaluatePolicy
+} from '../policy/PolicyEngine.js';
+
+
 

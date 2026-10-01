@@ -1,5 +1,58 @@
 import { normalizeAudioUrl } from '../subtitles/resolver/audioResolver.js';
 
+export const AUDIO_ERROR_CODES = Object.freeze({
+  LOAD_FAILED: 'AUDIO_TRACK_LOAD_FAILED',
+  TIMEOUT: 'AUDIO_TRACK_TIMEOUT',
+  DECODE_FAILED: 'AUDIO_TRACK_DECODE_FAILED',
+  UNAVAILABLE: 'AUDIO_TRACK_UNAVAILABLE',
+  NETWORK_ERROR: 'AUDIO_TRACK_NETWORK_ERROR'
+});
+
+export function mapAudioErrorCode(err, defaultMsg = 'Failed to load audio track.') {
+  if (!err) {
+    return {
+      code: AUDIO_ERROR_CODES.LOAD_FAILED,
+      message: defaultMsg
+    };
+  }
+
+  let code = err.code || AUDIO_ERROR_CODES.LOAD_FAILED;
+  let message = err.message || defaultMsg;
+
+  if (typeof err.code === 'number') {
+    if (err.code === 1) {
+      code = AUDIO_ERROR_CODES.LOAD_FAILED;
+      message = 'Audio loading was aborted.';
+    } else if (err.code === 2) {
+      code = AUDIO_ERROR_CODES.NETWORK_ERROR;
+      message = 'Network error while loading audio track.';
+    } else if (err.code === 3) {
+      code = AUDIO_ERROR_CODES.DECODE_FAILED;
+      message = 'Failed to decode audio track format.';
+    } else if (err.code === 4) {
+      code = AUDIO_ERROR_CODES.UNAVAILABLE;
+      message = 'Audio track format is unsupported or file unavailable.';
+    }
+  } else if (code === AUDIO_ERROR_CODES.LOAD_FAILED) {
+    const lower = String(message || '').toLowerCase();
+    if (err.name === 'TimeoutError' || lower.includes('timeout')) {
+      code = AUDIO_ERROR_CODES.TIMEOUT;
+      message = 'Audio track request timed out.';
+    } else if (err.name === 'NetworkError' || lower.includes('network') || lower.includes('fetch')) {
+      code = AUDIO_ERROR_CODES.NETWORK_ERROR;
+      message = 'Network error while loading audio track.';
+    } else if (lower.includes('decode') || err.name === 'EncodingError') {
+      code = AUDIO_ERROR_CODES.DECODE_FAILED;
+      message = 'Failed to decode audio track.';
+    } else if (lower.includes('404') || lower.includes('not supported') || lower.includes('unavailable') || lower.includes('not found')) {
+      code = AUDIO_ERROR_CODES.UNAVAILABLE;
+      message = 'Audio track is unavailable.';
+    }
+  }
+
+  return { code, message };
+}
+
 /**
  * PRODUCTION-GRADE AUDIO PLAYBACK CONTROLLER
  * 
@@ -25,6 +78,8 @@ export class AudioController {
     this.isSeeking = false;
     this.syncIntervalId = null;
     this.playPromise = null;
+    this._wasVideoPlayingBeforeAudioLoad = false;
+    this.sourceLanguage = options.sourceLanguage || 'en';
 
     this.volume = (typeof options.volume === 'number') ? options.volume : 1;
     this.isMuted = Boolean(options.isMuted);
@@ -34,12 +89,15 @@ export class AudioController {
 
     this.state = {
       mode: 'original',
-      language: options.sourceLanguage || 'en',
+      language: this.sourceLanguage,
+      requestedLanguage: null,
       sourceUrl: null,
       normalizedUrl: null,
-      trackId: `original:${options.sourceLanguage || 'en'}`,
+      trackId: `original:${this.sourceLanguage}`,
       generation: 0,
-      status: 'idle', // 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'switching' | 'error' | 'stopped'
+      status: 'idle', // 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'stopped'
+      audioStatus: 'idle', // 'idle' | 'loading' | 'playing' | 'error'
+      audioError: null,
       error: null
     };
 
@@ -73,6 +131,10 @@ export class AudioController {
     this._detachVideo();
     this.videoElement = video;
     if (this.videoElement) {
+      this.videoElement.__audioElement = this.audioElement;
+      if (typeof window !== 'undefined') {
+        window.__aitutor_audio = this.audioElement;
+      }
       this._bindVideoEvents();
       this.enforceMuteInvariant();
     }
@@ -145,10 +207,14 @@ export class AudioController {
 
   _onAudioCanPlay() {
     if (this.state.mode === 'dub' && (this.state.status === 'loading' || this.state.status === 'switching')) {
+      const v = this.videoElement;
+      const isVideoPlaying = Boolean(v && !v.paused && !v.ended);
       this.state.status = 'ready';
+      this.state.audioStatus = isVideoPlaying ? 'loading' : 'idle';
+      this.enforceMuteInvariant();
       this._notify();
 
-      if (this.videoElement && !this.videoElement.paused && !this.videoElement.ended) {
+      if (isVideoPlaying) {
         this._startDubPlayback(this.currentGeneration);
       }
     }
@@ -157,6 +223,7 @@ export class AudioController {
   _onAudioPlaying() {
     if (this.state.mode === 'dub') {
       this.state.status = 'playing';
+      this.state.audioStatus = 'playing';
       this.enforceMuteInvariant();
       this._notify();
     }
@@ -165,6 +232,7 @@ export class AudioController {
   _onAudioPause() {
     if (this.state.mode === 'dub' && this.state.status === 'playing') {
       this.state.status = 'paused';
+      this.state.audioStatus = 'idle';
       this._notify();
     }
   }
@@ -172,20 +240,26 @@ export class AudioController {
   _onAudioWaiting() {
     if (this.state.mode === 'dub' && this.state.status === 'playing') {
       this.state.status = 'loading';
+      this.state.audioStatus = 'loading';
       this._notify();
     }
   }
 
-  _onAudioError(e) {
+  _onAudioError(_e) {
     if (this.state.mode === 'dub') {
-      const err = this.audioElement?.error || new Error('Dub audio element error');
-      this.handlePlaybackError(err, this.currentGeneration);
+      const mediaErr = this.audioElement?.error;
+      const errInfo = mapAudioErrorCode(mediaErr, 'Dub audio element encountered an error');
+      const err = new Error(errInfo.message);
+      err.code = errInfo.code;
+      err.mediaError = mediaErr;
+      this.handlePlaybackError(err, this.currentGeneration, this.state.language);
     }
   }
 
   _onAudioEnded() {
     if (this.state.mode === 'dub') {
       this.state.status = 'ready';
+      this.state.audioStatus = 'idle';
       this._notify();
     }
   }
@@ -262,12 +336,15 @@ export class AudioController {
       // Switch to Original Audio
       this.state = {
         mode: 'original',
-        language: trackDescriptor?.language || 'original',
+        language: trackDescriptor?.language || this.sourceLanguage || 'original',
+        requestedLanguage: null,
         sourceUrl: null,
         normalizedUrl: null,
-        trackId: trackDescriptor?.trackId || `original:${trackDescriptor?.language || 'en'}`,
+        trackId: trackDescriptor?.trackId || `original:${trackDescriptor?.language || this.sourceLanguage || 'en'}`,
         generation: token,
         status: (this.videoElement && !this.videoElement.paused) ? 'playing' : 'ready',
+        audioStatus: 'idle',
+        audioError: null,
         error: null
       };
 
@@ -292,23 +369,29 @@ export class AudioController {
     }
 
     // PHASE A — PREPARE (DUB MODE)
+    const targetLanguage = trackDescriptor.language;
     const normalizedUrl = trackDescriptor.normalizedUrl || normalizeAudioUrl(trackDescriptor.url);
-    const trackId = trackDescriptor.trackId || `dub:${trackDescriptor.language}:${normalizedUrl}`;
+    const trackId = trackDescriptor.trackId || `dub:${targetLanguage}:${normalizedUrl}`;
 
     this.state = {
       mode: 'dub',
-      language: trackDescriptor.language,
+      language: targetLanguage,
+      requestedLanguage: targetLanguage,
       sourceUrl: trackDescriptor.url,
       normalizedUrl,
       trackId,
       generation: token,
-      status: 'switching',
+      status: 'loading',
+      audioStatus: 'loading',
+      audioError: null,
       error: null
     };
     this._notify();
 
     if (!this.audioElement) {
-      this.handlePlaybackError(new Error('Audio API not available in this environment'), token);
+      const err = new Error('Audio API not available in this environment');
+      err.code = AUDIO_ERROR_CODES.UNAVAILABLE;
+      this.handlePlaybackError(err, token, targetLanguage);
       return;
     }
 
@@ -316,6 +399,8 @@ export class AudioController {
     const v = this.videoElement;
 
     try {
+      this._stopSyncLoop();
+
       a.pause();
       a.playbackRate = this.playbackRate;
       a.muted = this.isMuted;
@@ -349,14 +434,15 @@ export class AudioController {
         return; // Discard stale load
       }
 
-      // PHASE B — COMMIT
-      this.state.status = (v && !v.paused && !v.ended) ? 'playing' : 'ready';
+      const isVideoNowPlaying = Boolean(v && !v.paused && !v.ended);
+      this.state.status = 'ready';
+      this.state.audioStatus = isVideoNowPlaying ? 'loading' : 'idle';
       this.enforceMuteInvariant();
       this._startSyncLoop();
       this._notify();
 
       this._logTelemetry('ACTIVATED', {
-        language: trackDescriptor.language,
+        language: targetLanguage,
         source: trackDescriptor.source || 'generated',
         url: trackDescriptor.url,
         trackId,
@@ -364,101 +450,164 @@ export class AudioController {
         token
       });
 
-      if (v && !v.paused && !v.ended) {
+      if (isVideoNowPlaying) {
         this._startDubPlayback(token);
       }
 
     } catch (err) {
       if (this.currentGeneration !== token) return;
       console.warn('[AudioController] Error during track switch:', err);
-      this.handlePlaybackError(err, token, prevTrack);
+      this.handlePlaybackError(err, token, targetLanguage);
     }
   }
 
-  _waitForMediaReady(audio, token, timeoutMs = 4000) {
+  _waitForMediaReady(audio, token, timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
-      if (audio.readyState >= 3) { // HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA
+      if (audio.readyState >= 1 && !audio.seeking) { // HAVE_METADATA or higher and not seeking
         return resolve();
       }
 
       let timer = null;
 
-      const onCanPlay = () => {
+      const onReady = () => {
         cleanup();
         resolve();
       };
 
-      const onError = (e) => {
+      const onError = (_e) => {
         cleanup();
-        reject(audio.error || new Error('Failed to load audio track'));
+        const errInfo = mapAudioErrorCode(audio.error, 'Failed to load audio track');
+        const err = new Error(errInfo.message);
+        err.code = errInfo.code;
+        err.mediaError = audio.error;
+        reject(err);
       };
 
       const cleanup = () => {
         if (timer) clearTimeout(timer);
-        audio.removeEventListener('canplay', onCanPlay);
+        audio.removeEventListener('loadedmetadata', onReady);
+        audio.removeEventListener('canplay', onReady);
+        audio.removeEventListener('loadeddata', onReady);
+        audio.removeEventListener('seeked', onReady);
+        audio.removeEventListener('canplaythrough', onReady);
         audio.removeEventListener('error', onError);
       };
 
-      audio.addEventListener('canplay', onCanPlay);
+      audio.addEventListener('loadedmetadata', onReady);
+      audio.addEventListener('canplay', onReady);
+      audio.addEventListener('loadeddata', onReady);
+      audio.addEventListener('seeked', onReady);
+      audio.addEventListener('canplaythrough', onReady);
       audio.addEventListener('error', onError);
 
       timer = setTimeout(() => {
         cleanup();
-        // If readyState is at least HAVE_METADATA, allow proceeding
         if (audio.readyState >= 1) {
           resolve();
         } else {
-          reject(new Error(`Timeout (${timeoutMs}ms) waiting for audio track readiness`));
+          const timeoutErr = new Error(`Audio track loading timed out after ${timeoutMs}ms.`);
+          timeoutErr.code = AUDIO_ERROR_CODES.TIMEOUT;
+          reject(timeoutErr);
         }
       }, timeoutMs);
     });
   }
 
   _startDubPlayback(token) {
-    if (!this.audioElement || this.state.mode !== 'dub') return;
+    if (!this.audioElement || this.state.mode !== 'dub' || this._isPlayPending) return;
     const a = this.audioElement;
     const v = this.videoElement;
 
-    if (v) {
+    if (v && !a.seeking) {
       const drift = Math.abs(v.currentTime - a.currentTime);
-      if (drift > 0.08) {
+      if (drift > 0.15) {
         a.currentTime = v.currentTime;
       }
     }
 
     this.enforceMuteInvariant();
 
-    const p = a.play();
-    if (p && typeof p.catch === 'function') {
-      p.then(() => {
-        if (this.currentGeneration === token && this.state.mode === 'dub') {
-          this.state.status = 'playing';
-          this._notify();
-        }
-      }).catch(err => {
-        if (this.currentGeneration !== token) return;
-        if (err.name === 'NotAllowedError') {
-          // Autoplay policy restriction - user must interact
-          this.state.status = 'paused';
-          this._notify();
-        } else if (err.name === 'AbortError') {
-          // Rapid interruption - expected
-        } else {
-          this.handlePlaybackError(err, token);
-        }
-      });
+    if (a.paused) {
+      this._isPlayPending = true;
+      const p = a.play();
+      if (p && typeof p.catch === 'function') {
+        return p.then(() => {
+          this._isPlayPending = false;
+          if (this.currentGeneration === token && this.state.mode === 'dub') {
+            this.state.status = 'playing';
+            this.state.audioStatus = 'playing';
+            this._notify();
+          }
+        }).catch(err => {
+          this._isPlayPending = false;
+          if (this.currentGeneration !== token) return;
+          if (err.name === 'NotAllowedError') {
+            // Autoplay policy restriction - user must interact
+            this.state.status = 'paused';
+            this.state.audioStatus = 'idle';
+            this._notify();
+          } else if (err.name === 'AbortError') {
+            // Rapid interruption - expected
+          } else {
+            this.handlePlaybackError(err, token, this.state.language);
+          }
+        });
+      } else {
+        this._isPlayPending = false;
+      }
+    } else if (this.state.audioStatus !== 'playing') {
+      this.state.status = 'playing';
+      this.state.audioStatus = 'playing';
+      this._notify();
     }
   }
 
-  handlePlaybackError(err, token, rollbackTrack = null) {
+  handlePlaybackError(err, token, targetLanguage = null) {
     if (this.currentGeneration !== token) return;
-    this.state.error = err;
-    this.state.status = 'error';
-    this._notify();
 
-    // Rollback to original audio safely so video is never left silently muted
-    console.warn('[AudioController] Falling back to original audio due to playback failure:', err.message);
-    this.switchTrack({ mode: 'original', language: 'original' });
+    const failedLang = targetLanguage || this.state.requestedLanguage || this.state.language;
+    const { code, message } = mapAudioErrorCode(err, 'Failed to load audio track.');
+
+    const audioError = {
+      language: failedLang,
+      code,
+      message
+    };
+
+    console.warn(`[AudioController] Audio dub error for "${failedLang}" [${code}]: ${message}`);
+
+    // If video was temporarily paused waiting for audio, resume safely
+    if (this._wasVideoPlayingBeforeAudioLoad && this.videoElement) {
+      this._wasVideoPlayingBeforeAudioLoad = false;
+      this.videoElement.play().catch(() => {});
+    }
+
+    // Stop dub audio element and sync loop
+    this._stopSyncLoop();
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.removeAttribute('src');
+      this.audioElement.load();
+    }
+
+    // SAFETY RECOVERY: Original audio safely restored on the video element,
+    // BUT explicit error state and requested language are preserved for the UI!
+    this.state = {
+      mode: 'original',
+      language: 'original',
+      requestedLanguage: failedLang,
+      sourceUrl: null,
+      normalizedUrl: null,
+      trackId: `original:${this.sourceLanguage || 'en'}`,
+      generation: token,
+      status: 'error',
+      audioStatus: 'error',
+      audioError,
+      error: audioError
+    };
+
+    this.enforceMuteInvariant();
+    this._notify();
   }
 
   handleVideoPlay() {
@@ -481,6 +630,7 @@ export class AudioController {
     if (this.state.mode === 'dub' && this.audioElement) {
       this.audioElement.pause();
       this.state.status = 'paused';
+      this.state.audioStatus = 'idle';
       this._notify();
     }
   }
@@ -526,7 +676,7 @@ export class AudioController {
 
   _startSyncLoop() {
     this._stopSyncLoop();
-    this.syncIntervalId = setInterval(() => this.syncClock(), 120);
+    this.syncIntervalId = setInterval(() => this.syncClock(), 300);
   }
 
   _stopSyncLoop() {
@@ -548,28 +698,35 @@ export class AudioController {
     const v = this.videoElement;
     const a = this.audioElement;
 
-    if (v.paused || v.seeking || a.seeking || a.readyState < 2) {
+    if (v.paused || a.paused || v.seeking || a.seeking || a.readyState < 2) {
       return;
     }
 
     const drift = Math.abs(v.currentTime - a.currentTime);
 
-    // Bounded correction strategy:
-    // 1. < 50ms: do nothing (imperceptible, preserves audio pitch and prevents clicks)
+    // 1. In sync (< 50ms): reset to authoritative playback rate if skewed
     if (drift < 0.05) {
+      if (a.playbackRate !== this.playbackRate) {
+        a.playbackRate = this.playbackRate;
+      }
       return;
     }
 
-    // 2. Moderate drift (50ms - 250ms): gentle rate-skew catch-up
-    if (drift <= 0.25) {
+    // 2. Moderate drift (50ms - 500ms): gentle rate-skew catch-up without audio drops
+    if (drift <= 0.50) {
       const isDubAhead = a.currentTime > v.currentTime;
-      const skew = isDubAhead ? 0.96 : 1.04;
+      const skew = isDubAhead ? 0.95 : 1.05;
       a.playbackRate = this.playbackRate * skew;
       this.onDriftCorrect?.(v.currentTime, drift);
       return;
     }
 
-    // 3. Large drift (> 250ms): hard seek alignment
+    // 3. Large drift (> 500ms): hard seek alignment with 1-second throttle
+    const now = Date.now();
+    if (this._lastHardSeekTime && now - this._lastHardSeekTime < 1000) {
+      return;
+    }
+    this._lastHardSeekTime = now;
     a.playbackRate = this.playbackRate;
     a.currentTime = v.currentTime;
     this.onDriftCorrect?.(v.currentTime, drift);
@@ -599,6 +756,7 @@ export class AudioController {
 
   destroy() {
     this.currentGeneration++;
+    this._wasVideoPlayingBeforeAudioLoad = false;
     this._stopSyncLoop();
     this._detachVideo();
 
@@ -619,6 +777,7 @@ export class AudioController {
 
     this.listeners.clear();
     this.state.status = 'stopped';
+    this.state.audioStatus = 'idle';
   }
 }
 

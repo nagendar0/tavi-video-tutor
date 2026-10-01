@@ -553,7 +553,30 @@
       }
     },
     "fingerprint": "ef0c886f184fbfed",
-    "updatedAt": "2026-08-04T14:47:11.214Z"
+    "updatedAt": "2026-08-04T14:47:11.214Z",
+    "audioLanguages": {
+      "en": {
+        "src": "/demo-audio/demo-en.m4a",
+        "language": "en",
+        "source": true,
+        "label": "English (Original)"
+      },
+      "hi": {
+        "src": "/demo-audio/demo-hi.m4a",
+        "language": "hi",
+        "label": "Hindi"
+      },
+      "te": {
+        "src": "/demo-audio/demo-te.m4a",
+        "language": "te",
+        "label": "Telugu"
+      },
+      "es": {
+        "src": "/demo-audio/demo-es.m4a",
+        "language": "es",
+        "label": "Spanish"
+      }
+    }
   },
   "sample-local": {
     "id": "sample-local",
@@ -1109,7 +1132,30 @@
       }
     },
     "fingerprint": "bd36a90eaa9d592d",
-    "updatedAt": "2026-08-04T15:09:54.669Z"
+    "updatedAt": "2026-08-04T15:09:54.669Z",
+    "audioLanguages": {
+      "en": {
+        "src": "/demo-audio/demo-en.m4a",
+        "language": "en",
+        "source": true,
+        "label": "English (Original)"
+      },
+      "hi": {
+        "src": "/demo-audio/demo-hi.m4a",
+        "language": "hi",
+        "label": "Hindi"
+      },
+      "te": {
+        "src": "/demo-audio/demo-te.m4a",
+        "language": "te",
+        "label": "Telugu"
+      },
+      "es": {
+        "src": "/demo-audio/demo-es.m4a",
+        "language": "es",
+        "label": "Spanish"
+      }
+    }
   },
   "math-edu": {
     "id": "math-edu",

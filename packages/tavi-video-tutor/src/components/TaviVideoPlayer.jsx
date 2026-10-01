@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { parseWebVTT, SubtitleRenderer } from './SubtitleEngine.jsx';
-import { useAudioDubSync } from './AudioDubSync.jsx';
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { parseWebVTT } from './SubtitleEngine.jsx';
 import { useAudioController } from '../v2/hooks/useAudioController.js';
 import { getCachedSubtitle, setCachedSubtitle } from '../services/SubtitleCache.js';
 import { SubtitleEditorModal } from './SubtitleEditorModal.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
-import { resolveSubtitleSources, resolveSubtitleVisibility, resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
-import { resolveQualitySources, resolveQualityAvailability } from '../subtitles/resolver/qualityResolver.js';
-import { resolveAudioAvailability, resolveActiveAudioTrack, normalizeAudioUrl } from '../subtitles/resolver/audioResolver.js';
+import { resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';
+import { resolveQualityAvailability } from '../subtitles/resolver/qualityResolver.js';
+import { resolveAudioAvailability, resolveActiveAudioTrack } from '../subtitles/resolver/audioResolver.js';
 import { getLanguageByCode } from '../subtitles/languages/registry.js';
+import { matchesLanguageQuery } from '../subtitles/languages/languageMatcher.js';
 
+export { matchesLanguageQuery };
 
 const LANGUAGE_NAMES = {
   en: "English",
@@ -482,13 +483,7 @@ const CheckIcon = () => (
   </svg>
 );
 
-const UploadIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', color: '#818cf8', flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
-  </svg>
-);
+
 
 const CCIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -544,7 +539,7 @@ export const TaviVideoPlayer = forwardRef(({
   manifestSourceLanguage: manifestSourceLanguageProp,
   sourceLanguage: sourceLanguageProp,
   demoSubtitles: demoSubtitlesProp,
-  resolvedSubtitles: resolvedSubtitlesProp,
+  resolvedSubtitles: _resolvedSubtitlesProp,
   resolvedAudioTracks = {},
   subtitleAvailability: subtitleAvailabilityProp,
   audioAvailability,
@@ -581,7 +576,7 @@ export const TaviVideoPlayer = forwardRef(({
   const pendingMutedRef = useRef(null);
   const pendingPlaybackRateRef = useRef(null);
   const isDraggingRef = useRef(false);
-  const clickTimeoutRef = useRef(null);
+  const _clickTimeoutRef = useRef(null);
 
   // Helper functions for LocalStorage Student Preference Persistence
   const loadSavedPref = (key, fallback) => {
@@ -619,7 +614,10 @@ export const TaviVideoPlayer = forwardRef(({
   const [isMuted, setIsMuted] = useState(() => loadSavedPref('isMuted', false));
   const [playbackRate, setPlaybackRate] = useState(() => loadSavedPref('playbackRate', 1));
   const [hoverTooltip, setHoverTooltip] = useState(null);
-  const [isBuffering, setIsBuffering] = useState(false);
+  const [isVideoBuffering, setIsVideoBuffering] = useState(false);
+  const isBuffering = isVideoBuffering;
+  const setIsBuffering = setIsVideoBuffering;
+  const [audioErrorMessage, setAudioErrorMessage] = useState('');
   const [mediaError, setMediaError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [areControlsVisible, setAreControlsVisible] = useState(true);
@@ -646,6 +644,9 @@ export const TaviVideoPlayer = forwardRef(({
   const [aiTranscriptionProgress, setAiTranscriptionProgress] = useState(0);
   const [aiTranscriptionStatusText, setAiTranscriptionStatusText] = useState('');
   const [subtitlesSearchQuery, setSubtitlesSearchQuery] = useState('');
+  const [audioSearchQuery, setAudioSearchQuery] = useState('');
+  const audioSearchInputRef = useRef(null);
+  const selectedAudioItemRef = useRef(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   const lastActiveSubLangRef = useRef(defaultSubLanguage && defaultSubLanguage !== 'none' ? defaultSubLanguage : 'en');
@@ -762,12 +763,12 @@ export const TaviVideoPlayer = forwardRef(({
   const hasAvailableSubtitles = subtitleAvailability.hasAvailableSubtitles;
   const isSubtitleEnabled = subtitleAvailability.enabled;
   const combinedSubtitles = subtitleAvailability.resolvedTracks;
-  const subtitlesSourceMetadata = subtitleAvailability.sourceByLanguage;
-  const visibleSubLanguages = subtitleAvailability.visibleLanguages;
+  const _subtitlesSourceMetadata = subtitleAvailability.sourceByLanguage;
+  const _visibleSubLanguages = subtitleAvailability.visibleLanguages;
   const availableSubLangs = subtitleAvailability.availableLanguages;
 
   // Process tracks prop or config.file.tracks if supplied by developer
-  const effectiveTracks = useMemo(() => {
+  const _effectiveTracks = useMemo(() => {
     if (Array.isArray(tracks) && tracks.length > 0) return tracks;
     if (config?.file?.tracks && Array.isArray(config.file.tracks)) return config.file.tracks;
     return null;
@@ -828,7 +829,7 @@ export const TaviVideoPlayer = forwardRef(({
     }
   }, [generatedTracks, onTracksChange]);
 
-  const sortedAndFilteredLangs = useMemo(() => {
+  const allAvailableSubtitleLangs = useMemo(() => {
     if (!hasAvailableSubtitles || !isSubtitleEnabled) return [];
 
     let codesToExpose = [];
@@ -848,7 +849,7 @@ export const TaviVideoPlayer = forwardRef(({
 
     const langObjects = Array.from(allCodes).map(code => {
       if (code === 'none') return { code, name: 'Off' };
-      if (localSubtitles[code]) return { code, name: `📄 ${code}` };
+      if (localSubtitles[code]) return { code, name: `📄 ${code}`, isLocal: true };
       const reg = getLanguageByCode(code);
       let displayName = LANGUAGE_NAMES[code] || code.toUpperCase();
       if (reg) {
@@ -858,19 +859,32 @@ export const TaviVideoPlayer = forwardRef(({
           displayName = reg.name;
         }
       }
-      return { code, name: displayName };
+      return {
+        code,
+        name: displayName,
+        englishName: reg?.name || LANGUAGE_NAMES[code] || code,
+        nativeName: reg?.nativeName || '',
+        iso639_2: reg?.iso639_2 || ''
+      };
     });
 
     const allLangs = langObjects.filter(lang => lang.code !== 'none' && !localSubtitles[lang.code]);
     allLangs.sort((a, b) => a.name.localeCompare(b.name));
+    return allLangs;
+  }, [combinedSubtitles, hasAvailableSubtitles, isSubtitleEnabled, subtitles, localSubtitles]);
 
-    const query = subtitlesSearchQuery.trim().toLowerCase();
-    if (!query) return allLangs;
-    return allLangs.filter(lang => 
-      lang.name.toLowerCase().includes(query) || 
-      lang.code.toLowerCase().includes(query)
+  const sortedAndFilteredLangs = useMemo(() => {
+    if (!subtitlesSearchQuery.trim()) return allAvailableSubtitleLangs;
+    return allAvailableSubtitleLangs.filter(lang => 
+      matchesLanguageQuery(subtitlesSearchQuery, {
+        code: lang.code,
+        name: lang.englishName,
+        nativeName: lang.nativeName,
+        iso639_2: lang.iso639_2,
+        label: lang.name
+      })
     );
-  }, [combinedSubtitles, hasAvailableSubtitles, isSubtitleEnabled, visibleSubLanguages, subtitles, subtitlesSearchQuery, localSubtitles]);
+  }, [allAvailableSubtitleLangs, subtitlesSearchQuery]);
 
   // Sync controlled subtitle language prop (subLanguage) when explicitly provided by developer
   useEffect(() => {
@@ -886,7 +900,7 @@ export const TaviVideoPlayer = forwardRef(({
   const [hlsQualities, setHlsQualities] = useState([]);
 
   // Animation frame ref
-  const animationFrameRef = useRef(null);
+  const _animationFrameRef = useRef(null);
 
   // YouTube Style Gestures State
   const [leftSkipActive, setLeftSkipActive] = useState(false);
@@ -1030,7 +1044,7 @@ export const TaviVideoPlayer = forwardRef(({
   const [secondaryCues, setSecondaryCues] = useState([]);
   const subtitleCacheRef = useRef({});
   const inFlightSubtitlesRef = useRef({});
-  const isTranscribingRef = useRef(false);
+  const _isTranscribingRef = useRef(false);
 
   // Asynchronous subtitle loader (handles both URL fetching and raw content with in-flight deduplication)
   const loadSubtitles = async (contentOrUrl) => {
@@ -1126,8 +1140,8 @@ export const TaviVideoPlayer = forwardRef(({
   };
 
   const [isTranslating, setIsTranslating] = useState(false);
-  const [isLoadingSubtitles, setIsLoadingSubtitles] = useState(false);
-  const [subtitleStatusText, setSubtitleStatusText] = useState('Loading subtitles...');
+  const [_isLoadingSubtitles, setIsLoadingSubtitles] = useState(false);
+  const [_subtitleStatusText, setSubtitleStatusText] = useState('Loading subtitles...');
   const fetchPrimarySeqRef = useRef(0);
   const loadedPrimaryLangRef = useRef(null);
   const loadedPrimarySrcRef = useRef(null);
@@ -1380,8 +1394,8 @@ export const TaviVideoPlayer = forwardRef(({
     return rates.length > 0 ? rates : [0.5, 1, 1.25, 1.5, 2];
   }, [playbackRates]);
 
-  const speedMin = useMemo(() => Math.min(0.25, ...speedPresets), [speedPresets]);
-  const speedMax = useMemo(() => Math.max(3, ...speedPresets), [speedPresets]);
+  const _speedMin = useMemo(() => Math.min(0.25, ...speedPresets), [speedPresets]);
+  const _speedMax = useMemo(() => Math.max(3, ...speedPresets), [speedPresets]);
 
   // Audio Dubbing Track resolution & sync
   const effectiveAudioAvailability = useMemo(() => {
@@ -1431,14 +1445,37 @@ export const TaviVideoPlayer = forwardRef(({
     });
   }, [isAudioEnabled, effectiveAudioAvailability, selectedAudioLanguage, effectiveSourceLang, audioDubs, manifestAudioLanguagesProp, id, src]);
 
-  const { controller: audioController } = useAudioController({
+  const { controller: audioController, controllerState: audioControllerState } = useAudioController({
     videoRef: offscreenVideoRef,
     resolvedTrack: authoritativeResolvedTrack,
     volume,
     isMuted,
     playbackRate,
-    sourceLanguage: effectiveSourceLang
+    sourceLanguage: effectiveSourceLang,
+    onStateChange: (state) => {
+      if (state.status === 'error' && state.audioError) {
+        const failedLang = state.audioError.language;
+        const langMeta = getLanguageByCode(failedLang);
+        const langName = langMeta?.name || LANGUAGE_NAMES[failedLang] || (failedLang ? failedLang.toUpperCase() : 'Audio');
+        setAudioErrorMessage(`Could not load ${langName} audio.`);
+        // Per Socratic Gate answer A1: Reset selection to 'original' in the menu, but display explicit alert banner
+        setSelectedAudioLanguage('original');
+        savePref('selectedAudioLanguage', 'original');
+      }
+    }
   });
+
+  const isAudioBuffering = Boolean(
+    audioControllerState?.audioStatus === 'loading' || audioControllerState?.status === 'loading'
+  );
+
+  const audioLoadingLabel = useMemo(() => {
+    if (!isAudioBuffering) return '';
+    const lang = audioControllerState?.language || selectedAudioLanguage;
+    const langMeta = getLanguageByCode(lang);
+    const langName = langMeta?.name || LANGUAGE_NAMES[lang] || (lang ? lang.toUpperCase() : 'audio');
+    return `Loading ${langName} audio...`;
+  }, [isAudioBuffering, audioControllerState?.language, selectedAudioLanguage]);
 
   const activeAudioUrl = authoritativeResolvedTrack.mode === 'dub' ? authoritativeResolvedTrack.url : null;
 
@@ -1464,10 +1501,91 @@ export const TaviVideoPlayer = forwardRef(({
     return (track?.source || lang === effectiveSourceLang) ? `${defaultName} (Original)` : defaultName;
   };
 
+  // Available audio languages derived dynamically from activeAudioTrackMap & source language
+  const availableAudioOptions = useMemo(() => {
+    const options = [];
+
+    // 1. Source / Original language option
+    const origLangMeta = getLanguageByCode(effectiveSourceLang);
+    const origDefaultName = origLangMeta 
+      ? (origLangMeta.nativeName && origLangMeta.nativeName !== origLangMeta.name ? `${origLangMeta.nativeName} / ${origLangMeta.name}` : origLangMeta.name)
+      : (LANGUAGE_NAMES[effectiveSourceLang] || (effectiveSourceLang || '').toUpperCase());
+    const origLabel = `${origDefaultName} (Original)`;
+
+    options.push({
+      code: 'original',
+      langCode: effectiveSourceLang,
+      name: origLangMeta?.name || LANGUAGE_NAMES[effectiveSourceLang] || effectiveSourceLang,
+      nativeName: origLangMeta?.nativeName || '',
+      iso639_2: origLangMeta?.iso639_2 || '',
+      label: origLabel,
+      isOriginal: true
+    });
+
+    // 2. Additional configured / resolved audio tracks
+    const otherLangs = Object.keys(activeAudioTrackMap).filter(
+      lang => lang !== effectiveSourceLang && !activeAudioTrackMap[lang]?.source
+    );
+
+    for (const lang of otherLangs) {
+      const meta = getLanguageByCode(lang);
+      const track = activeAudioTrackMap[lang];
+      const displayLabel = getAudioLanguageLabel(lang);
+      options.push({
+        code: lang,
+        langCode: lang,
+        name: meta?.name || (typeof track === 'object' && track?.label) || LANGUAGE_NAMES[lang] || lang,
+        nativeName: meta?.nativeName || '',
+        iso639_2: meta?.iso639_2 || '',
+        label: displayLabel,
+        isOriginal: false
+      });
+    }
+
+    return options;
+  }, [activeAudioTrackMap, effectiveSourceLang]);
+
+  const filteredAudioOptions = useMemo(() => {
+    if (!audioSearchQuery.trim()) {
+      return availableAudioOptions;
+    }
+    return availableAudioOptions.filter(opt =>
+      matchesLanguageQuery(audioSearchQuery, {
+        code: opt.langCode,
+        name: opt.name,
+        nativeName: opt.nativeName,
+        iso639_2: opt.iso639_2,
+        label: opt.label
+      })
+    );
+  }, [availableAudioOptions, audioSearchQuery]);
+
+  // Autofocus audio search when appropriate (activeMenu === 'audio' and options > 5)
+  useEffect(() => {
+    if (activeMenu === 'audio' && availableAudioOptions.length > 5) {
+      const timer = setTimeout(() => {
+        audioSearchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [activeMenu, availableAudioOptions.length]);
+
+  // Keep selected audio language in view when dropdown opens
+  useEffect(() => {
+    if (activeMenu === 'audio') {
+      const timer = setTimeout(() => {
+        selectedAudioItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [activeMenu]);
+
   const handleAudioLanguageChange = (lang) => {
     const prev = selectedAudioLanguage;
+    setAudioErrorMessage('');
     setSelectedAudioLanguage(lang);
     savePref('selectedAudioLanguage', lang);
+    setAudioSearchQuery('');
     setActiveMenu('main');
     if (onAudioLanguageChange) {
       const isOrig = (lang === 'original' || lang === effectiveSourceLang || activeAudioTrackMap[lang]?.source);
@@ -1918,11 +2036,14 @@ export const TaviVideoPlayer = forwardRef(({
 
     video.ontimeupdate = () => {
       setCurrentTime(video.currentTime);
+      setIsBuffering(prev => (prev ? false : prev));
       onProgress?.({ playedSeconds: video.currentTime });
     };
 
     video.onwaiting = () => {
-      setIsBuffering(true);
+      if (video.readyState < 3) {
+        setIsBuffering(true);
+      }
     };
 
     video.oncanplay = () => {
@@ -2504,10 +2625,34 @@ export const TaviVideoPlayer = forwardRef(({
         style={{ pointerEvents: ytId ? 'none' : 'auto' }}
       />
 
-      {/* Buffering Overlay */}
-      {isBuffering && (
-        <div className="tavi-buffering-overlay">
+      {/* Buffering Overlay — Video Only */}
+      {isVideoBuffering && (
+        <div className="tavi-buffering-overlay" data-testid="video-buffering-overlay">
           <div className="tavi-spinner" />
+        </div>
+      )}
+
+      {/* Audio Loading Indicator — Non-intrusive audio status pill */}
+      {isAudioBuffering && (
+        <div className="tavi-audio-status-pill" data-testid="audio-loading-indicator">
+          <div className="tavi-audio-spinner" />
+          <span>{audioLoadingLabel}</span>
+        </div>
+      )}
+
+      {/* Audio Error Banner */}
+      {audioErrorMessage && (
+        <div className="tavi-audio-error-banner" data-testid="audio-error-banner" role="alert">
+          <span className="tavi-audio-error-icon">⚠️</span>
+          <span className="tavi-audio-error-text">{audioErrorMessage}</span>
+          <button 
+            type="button" 
+            className="tavi-audio-error-close" 
+            onClick={() => setAudioErrorMessage('')}
+            aria-label="Dismiss error"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -2696,8 +2841,10 @@ export const TaviVideoPlayer = forwardRef(({
             activeMenu === 'speed' 
               ? { width: '280px' } 
               : activeMenu === 'subtitles' 
-                ? { width: '260px', maxHeight: '340px', display: 'flex', flexDirection: 'column' } 
-                : {}
+                ? { width: '260px', maxHeight: '380px', display: 'flex', flexDirection: 'column' } 
+                : activeMenu === 'audio'
+                  ? { width: '280px', maxHeight: '380px', display: 'flex', flexDirection: 'column' }
+                  : {}
           }
         >
           {activeMenu === 'main' && (
@@ -2720,8 +2867,13 @@ export const TaviVideoPlayer = forwardRef(({
                   role="button"
                   tabIndex={0}
                   aria-label={`Audio language: ${getAudioLanguageLabel(selectedAudioLanguage)}`}
-                  onClick={() => setActiveMenu('audio')}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveMenu('audio')}
+                  onClick={() => { setActiveMenu('audio'); setAudioSearchQuery(''); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setActiveMenu('audio');
+                      setAudioSearchQuery('');
+                    }
+                  }}
                 >
                   <span>Audio Language</span>
                   <span className="value-label">
@@ -2945,35 +3097,88 @@ export const TaviVideoPlayer = forwardRef(({
           )}
 
           {activeMenu === 'subtitles' && (
-            <div className="settings-submenu" style={{ flex: 1, maxHeight: '320px', display: 'flex', flexDirection: 'column' }}>
-              <div className="submenu-header" onClick={() => setActiveMenu('main')}>
+            <div className="settings-submenu" style={{ flex: 1, maxHeight: '380px', display: 'flex', flexDirection: 'column' }}>
+              <div className="submenu-header" onClick={() => { setActiveMenu('main'); setSubtitlesSearchQuery(''); }}>
                 ‹ Subtitles/CC
               </div>
               
-              {/* Search input field */}
-              <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', boxSizing: 'border-box' }}>
-                <input
-                  type="text"
-                  placeholder="Search language..."
-                  value={subtitlesSearchQuery}
-                  onChange={(e) => setSubtitlesSearchQuery(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    width: '100%',
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '6px',
-                    padding: '6px 10px',
-                    fontSize: '12px',
-                    color: '#fff',
-                    outline: 'none',
-                    boxSizing: 'border-box'
+              {/* Search input field: only when languages > 5 */}
+              {allAvailableSubtitleLangs.length > 5 && (
+                <div 
+                  style={{ 
+                    padding: '8px 12px', 
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)', 
+                    boxSizing: 'border-box',
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 2
                   }}
-                />
-              </div>
+                >
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <input
+                      type="text"
+                      placeholder="Search language..."
+                      aria-label="Search language"
+                      value={subtitlesSearchQuery}
+                      onChange={(e) => setSubtitlesSearchQuery(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Escape') {
+                          if (subtitlesSearchQuery) {
+                            setSubtitlesSearchQuery('');
+                          } else {
+                            setActiveMenu('main');
+                          }
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '6px',
+                        padding: '6px 28px 6px 10px',
+                        fontSize: '12px',
+                        color: '#fff',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    {subtitlesSearchQuery && (
+                      <button
+                        type="button"
+                        aria-label="Clear search"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSubtitlesSearchQuery('');
+                        }}
+                        style={{
+                          position: 'absolute',
+                          right: '6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#9ca3af',
+                          fontSize: '16px',
+                          lineHeight: '1',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Scrollable list */}
-              <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1, minHeight: '140px', maxHeight: '200px', paddingBottom: '8px' }}>
+              <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1, minHeight: '140px', maxHeight: '300px', paddingBottom: '8px' }}>
                 {(!subtitlesSearchQuery || 'off'.includes(subtitlesSearchQuery.toLowerCase())) && (
                   <div
                     className={`submenu-item ${selectedSubLanguage === 'none' && !isDualSubtitles ? 'active' : ''}`}
@@ -3092,7 +3297,7 @@ export const TaviVideoPlayer = forwardRef(({
 
                 {sortedAndFilteredLangs.length === 0 && Object.keys(localSubtitles).length === 0 && embeddedTracks.length === 0 && (
                   <div style={{ padding: '16px 12px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>
-                    No subtitle languages found
+                    No languages found
                   </div>
                 )}
               </div>
@@ -3100,46 +3305,158 @@ export const TaviVideoPlayer = forwardRef(({
           )}
 
           {activeMenu === 'audio' && (
-            <div className="settings-submenu" role="menu" aria-label="Audio language settings">
+            <div 
+              className="settings-submenu" 
+              role="menu" 
+              aria-label="Audio language settings"
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', maxHeight: '380px', overflow: 'hidden' }}
+            >
               <div
                 className="submenu-header"
                 role="button"
                 tabIndex={0}
                 aria-label="Back to settings"
-                onClick={() => setActiveMenu('main')}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveMenu('main')}
+                onClick={() => { setActiveMenu('main'); setAudioSearchQuery(''); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    setActiveMenu('main');
+                    setAudioSearchQuery('');
+                  }
+                }}
               >
                 ‹ Back to Settings
               </div>
-              <div
-                className={`submenu-item ${(selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang) ? 'active' : ''}`}
-                role="menuitemradio"
-                aria-checked={selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang}
-                tabIndex={0}
-                onClick={() => handleAudioLanguageChange('original')}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleAudioLanguageChange('original')}
-              >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  {(selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang) && <CheckIcon />}
-                  <span>{getAudioLanguageLabel('original')}</span>
-                </div>
-              </div>
-              {Object.keys(activeAudioTrackMap).filter(lang => lang !== effectiveSourceLang && !activeAudioTrackMap[lang]?.source).map((lang) => (
-                <div
-                  key={lang}
-                  className={`submenu-item ${selectedAudioLanguage === lang ? 'active' : ''}`}
-                  role="menuitemradio"
-                  aria-checked={selectedAudioLanguage === lang}
-                  tabIndex={0}
-                  onClick={() => handleAudioLanguageChange(lang)}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleAudioLanguageChange(lang)}
+
+              {/* Sticky Search Header: Only show if available options > 5 */}
+              {availableAudioOptions.length > 5 && (
+                <div 
+                  style={{ 
+                    padding: '8px 12px', 
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)', 
+                    boxSizing: 'border-box',
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 2
+                  }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    {selectedAudioLanguage === lang && <CheckIcon />}
-                    <span>{getAudioLanguageLabel(lang)}</span>
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <input
+                      ref={audioSearchInputRef}
+                      type="text"
+                      placeholder="Search language..."
+                      aria-label="Search language"
+                      value={audioSearchQuery}
+                      onChange={(e) => setAudioSearchQuery(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Escape') {
+                          if (audioSearchQuery) {
+                            setAudioSearchQuery('');
+                          } else {
+                            setActiveMenu('main');
+                          }
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '6px',
+                        padding: '6px 28px 6px 10px',
+                        fontSize: '12px',
+                        color: '#fff',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    {audioSearchQuery && (
+                      <button
+                        type="button"
+                        aria-label="Clear search"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAudioSearchQuery('');
+                          audioSearchInputRef.current?.focus();
+                        }}
+                        style={{
+                          position: 'absolute',
+                          right: '6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#9ca3af',
+                          fontSize: '16px',
+                          lineHeight: '1',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Scrollable list: Exactly 5 rows visible at a time when > 5 languages */}
+              <div 
+                className="custom-scrollbar" 
+                tabIndex={-1}
+                style={{ 
+                  overflowY: availableAudioOptions.length > 5 ? 'auto' : 'hidden', 
+                  flex: availableAudioOptions.length > 5 ? '0 1 auto' : 'none',
+                  maxHeight: availableAudioOptions.length > 5 ? `${5 * 38}px` : 'none', 
+                  padding: 0,
+                  boxSizing: 'border-box'
+                }}
+              >
+                {filteredAudioOptions.map((opt) => {
+                  const isSelected = opt.isOriginal 
+                    ? (selectedAudioLanguage === 'original' || selectedAudioLanguage === effectiveSourceLang)
+                    : (selectedAudioLanguage === opt.code);
+
+                  return (
+                    <div
+                      key={opt.code}
+                      ref={isSelected ? selectedAudioItemRef : null}
+                      className={`submenu-item ${isSelected ? 'active' : ''}`}
+                      role="menuitemradio"
+                      aria-checked={isSelected}
+                      tabIndex={0}
+                      onClick={() => handleAudioLanguageChange(opt.code)}
+                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleAudioLanguageChange(opt.code)}
+                      style={{
+                        height: '38px',
+                        minHeight: '38px',
+                        maxHeight: '38px',
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '0 16px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
+                        {isSelected && <CheckIcon />}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {opt.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredAudioOptions.length === 0 && (
+                  <div style={{ padding: '16px 12px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>
+                    No languages found
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

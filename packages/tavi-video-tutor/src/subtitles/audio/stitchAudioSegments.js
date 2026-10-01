@@ -1,6 +1,6 @@
 import fs from 'fs';
-import path from 'path';
 import { TimelineMixer } from './mixer/TimelineMixer.js';
+import { TaviAudioError } from '../errors/index.js';
 
 /**
  * Stitch timestamp-aligned audio segments into a single full-length browser-compatible audio track (.m4a AAC).
@@ -19,7 +19,11 @@ export async function stitchAudioSegments(segments, outputPath, totalVideoDurati
   if (segments && segments.length > 0) {
     const validSegments = segments.filter(s => s && (s.audioPath || s.alignedAudioPath) && fs.existsSync(s.audioPath || s.alignedAudioPath));
     if (validSegments.length === 0) {
-      throw new Error('stitchAudioSegments: None of the provided segment audio files exist on disk.');
+      throw new TaviAudioError('stitchAudioSegments: None of the provided segment audio files exist on disk.', {
+        code: 'AUDIO_TIMELINE_INVALID',
+        stage: 'audio_stitching',
+        details: { totalSegments: segments.length }
+      });
     }
   }
 

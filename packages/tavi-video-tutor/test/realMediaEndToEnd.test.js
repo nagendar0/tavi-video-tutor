@@ -10,7 +10,7 @@ import { extractAudio, getFFmpegBinaryPath, getFFprobeBinaryPath } from '../src/
 import { planQualityLadder } from '../src/subtitles/video/QualityPlanner.js';
 import { transcodeRendition } from '../src/subtitles/video/FFmpegTranscoder.js';
 import { TranslationRouter } from '../src/subtitles/translation/TranslationRouter.js';
-import { NodeTTSProvider } from '../src/subtitles/tts/NodeTTSProvider.js';
+import { createTTSProvider } from '../src/subtitles/tts/ttsFactory.js';
 import { SpeakerDiarizer } from '../src/subtitles/audio/diarization/SpeakerDiarizer.js';
 import { validateGeneratedAudio } from '../src/subtitles/audio/validateAudio.js';
 import { generateWebVTT } from '../src/subtitles/vtt/generateVtt.js';
@@ -94,28 +94,36 @@ test('Real-Media Pipeline: Full lifecycle integration with committed fixture', a
     assert.ok(translatedSegments[0].text && translatedSegments[0].text.length > 0);
     assert.notEqual(translatedSegments[0].text.toLowerCase(), sourceSegments[0].text.toLowerCase(), 'Translation must differ from source English');
 
-    // 6. Real Speech Synthesis: Generate speech with NodeTTSProvider
-    const tts = new NodeTTSProvider();
-    let ttsResult = null;
-    try {
-      ttsResult = await tts.synthesize(translatedSegments[0].text, 'es', {
-        outputDir: tmpDir
-      });
-    } catch (_) {
-      // If OS speech engine does not have an installed Spanish voice, synthesize English
-      ttsResult = await tts.synthesize(sourceSegments[0].text, 'en', {
-        outputDir: tmpDir
-      });
-    }
+    // 6. Real Speech Synthesis: Generate speech with real Spanish neural TTS
+    const targetTTSLanguage = 'es';
+    const spanishText = translatedSegments[0].text;
+
+    // Invariant: TTS input MUST contain Spanish translated text, NOT source English
+    assert.ok(spanishText && spanishText.trim().length > 0, 'Spanish translation text must be present');
+    assert.notEqual(spanishText.toLowerCase(), sourceSegments[0].text.toLowerCase(), 'Spanish text must differ from English source');
+
+    const tts = createTTSProvider({ provider: 'neural' });
+    const actualTTSLanguage = targetTTSLanguage;
+    assert.equal(actualTTSLanguage, 'es', 'actualTTSLanguage must be explicitly Spanish (es)');
+
+    const ttsResult = await tts.synthesize(spanishText, targetTTSLanguage, {
+      outputDir: tmpDir
+    });
 
     assert.ok(ttsResult && ttsResult.audioPath, 'Speech synthesis must produce real audio file');
-    assert.ok(fs.existsSync(ttsResult.audioPath));
+    assert.ok(fs.existsSync(ttsResult.audioPath), 'Spanish audio file must exist on disk');
+    assert.equal(ttsResult.format, 'wav', 'Generated format must be wav');
+    assert.ok(ttsResult.voiceId && ttsResult.voiceId.startsWith('es-ES-'), `Spanish neural voice must be selected, got: ${ttsResult.voiceId}`);
 
     const ttsValidation = validateGeneratedAudio(ttsResult.audioPath, {
       decodeTest: true,
-      minDuration: 0.2
+      minDuration: 0.5,
+      rejectSilence: true,
+      rejectTone: true,
+      throwOnError: true
     });
     assert.equal(ttsValidation.valid, true);
+    assert.ok(ttsValidation.duration > 0.5, `Spanish audio duration must be > 0.5s, got: ${ttsValidation.duration}`);
 
     // 7. Speaker Diarization: Process real audio frames and assign speakers
     const diarizer = new SpeakerDiarizer({ maxSpeakers: 2 });

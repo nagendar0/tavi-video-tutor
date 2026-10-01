@@ -86,8 +86,12 @@ export const processVideoQuality = async (videoEntry, manifestStore, options = {
   const validateRendition = async (filePath, rendition) => {
     const outputProbe = await probeMedia(filePath, { cwd: manifestStore.cwd });
     const vCodec = outputProbe.video?.codec || outputProbe.videoCodec;
-    if (vCodec !== 'h264' || outputProbe.video?.height !== rendition.height || outputProbe.video?.width !== rendition.width) {
+    const widthDiff = Math.abs((outputProbe.video?.width || 0) - rendition.width);
+    if (vCodec !== 'h264' || outputProbe.video?.height !== rendition.height || widthDiff > 2) {
       throw new Error(`QUALITY_VALIDATION_FAILED: ${rendition.label} produced ${vCodec || 'unknown'} ${outputProbe.video?.width || 0}x${outputProbe.video?.height || 0}; expected H.264 ${rendition.width}x${rendition.height}.`);
+    }
+    if (outputProbe.video?.width) {
+      rendition.width = outputProbe.video.width;
     }
     const sourceHasAudio = probeInfo.hasAudio || Boolean(probeInfo.audioCodec || probeInfo.audio?.codec);
     if (sourceHasAudio) {

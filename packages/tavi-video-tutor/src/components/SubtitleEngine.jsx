@@ -1,5 +1,3 @@
-import React from 'react';
-
 // WebVTT timestamp parser: converts "00:01:23.450" into 83.45 seconds
 export const parseWebVTT = (rawText) => {
   if (typeof rawText !== 'string' || !rawText.trim()) return [];

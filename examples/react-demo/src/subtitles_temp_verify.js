@@ -1,4 +1,4 @@
-// Auto-generated subtitle translation database for 109 languages
+// Subtitle translation database across 109 language registry definitions
 // Generated on: 2026-07-16T11:05:00.000Z
 
 const translations = {

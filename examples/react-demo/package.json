@@ -11,12 +11,12 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tavi-video-tutor": "file:../../packages/tavi-video-tutor",
+    "tavi-video-tutor": "file:../../tavi-video-tutor-2.2.1.tgz",
     "youtube-transcript": "^1.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "puppeteer": "^25.4.0",
-    "vite": "^5.3.1"
+    "vite": "^8.3.0"
   }
 }

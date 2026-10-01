@@ -167,7 +167,6 @@ export class SubtitleSegmenter {
 
     for (let i = 0; i < rawWords.length; i++) {
       const token = rawWords[i];
-      const realTokenLength = map.has(token) ? map.get(token).length : token.length;
 
       // Test line 1 length using actual restored string length
       const testLine1 = line1 ? `${line1} ${token}` : token;

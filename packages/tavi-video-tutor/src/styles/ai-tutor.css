@@ -622,6 +622,92 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes tavi-fade-in {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Audio-specific Loading Indicator */
+.tavi-audio-status-pill {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #f1f5f9;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  animation: tavi-fade-in 0.2s ease-out;
+}
+
+.tavi-audio-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-left-color: #38bdf8;
+  border-radius: 50%;
+  animation: tavi-spin 0.8s linear infinite;
+}
+
+/* Audio-specific Error Banner */
+.tavi-audio-error-banner {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(30, 10, 10, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fecaca;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  animation: tavi-fade-in 0.25s ease-out;
+}
+
+.tavi-audio-error-icon {
+  font-size: 14px;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.tavi-audio-error-text {
+  line-height: 1.4;
+}
+
+.tavi-audio-error-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 0 0 8px;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 0.15s ease;
+}
+
+.tavi-audio-error-close:hover {
+  color: #ffffff;
+}
+
 /* YouTube Style Center Play/Pause Indicator */
 .tavi-center-action-flash {
   position: absolute;

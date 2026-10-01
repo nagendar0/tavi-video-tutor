@@ -1,6 +1,7 @@
-import { EdgeTTSProvider, TTSError, escapeXml } from './EdgeTTSProvider.js';
+import { TTSProvider } from './TTSProvider.js';
+import { TTSError, escapeXml } from './EdgeTTSProvider.js';
 import { normalizeLanguageCode } from '../languages/registry.js';
-import { resolveNeuralVoice } from './neuralVoiceRegistry.js';
+import { resolveNeuralVoice, isNeuralLanguageSupported } from './neuralVoiceRegistry.js';
 import { getFFmpegBinaryPath } from '../audio/extractAudio.js';
 import { validateGeneratedAudio } from '../audio/validateAudio.js';
 import fs from 'fs';
@@ -11,25 +12,43 @@ import { spawnSync } from 'child_process';
 /**
  * Azure Neural Text-to-Speech Provider.
  * 
- * Supports two operational tiers:
- * 1. Direct Azure Cognitive Services Speech API (when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are supplied).
- * 2. High-performance Edge Neural TTS fallback (when no Azure API key is configured).
- * 
- * Legal & Commercial Notice:
- * Direct Azure Speech API requires a valid Microsoft Azure subscription subject to Azure Cognitive Services terms.
- * Edge Read Aloud endpoints are provided by Microsoft Edge and subject to service availability and acceptable use.
+ * Complies strictly with Phase 8 Isolation Architecture:
+ * - Inherits directly from TTSProvider (zero inheritance from EdgeTTSProvider).
+ * - Direct Azure Cognitive Services Speech REST API.
+ * - Zero silent fallback to Edge, Google, or system speech.
+ * - Deterministic error classification:
+ *   * Missing credentials -> PROVIDER_AUTH_ERROR
+ *   * HTTP 401/403 -> PROVIDER_AUTH_ERROR
+ *   * HTTP 429 -> PROVIDER_QUOTA_EXCEEDED
+ *   * HTTP 5xx -> PROVIDER_SERVICE_UNAVAILABLE
+ *   * Network failure -> PROVIDER_UNAVAILABLE
+ *   * Offline mode -> OFFLINE_PROVIDER_FORBIDDEN
  */
-export class AzureNeuralTTSProvider extends EdgeTTSProvider {
+export class AzureNeuralTTSProvider extends TTSProvider {
   constructor(options = {}) {
     super(options);
+    this.providerId = 'azure-byok';
+    this.engine = 'azure';
     this.azureKey = options.azureKey || process.env.AZURE_SPEECH_KEY || null;
     this.azureRegion = options.azureRegion || process.env.AZURE_SPEECH_REGION || 'eastus';
+    this.timeoutMs = options.timeoutMs || options.timeout || 15000;
+    this.networkPolicy = options.networkPolicy || null;
   }
 
   /**
-   * Synthesize text into WAV audio.
-   * Routes to Azure Cognitive Services REST API if credentials exist,
-   * otherwise routes to Edge Neural TTS.
+   * Check whether this provider supports the given language code.
+   * 
+   * @param {string} language 
+   * @returns {boolean}
+   */
+  supportsLanguage(language) {
+    const norm = normalizeLanguageCode(language);
+    return isNeuralLanguageSupported(norm);
+  }
+
+  /**
+   * Synthesize text into WAV audio via direct Azure Cognitive Services Speech REST API.
+   * Strictly isolated: zero silent fallback to Edge or any other provider.
    * 
    * @param {string} text 
    * @param {string} language 
@@ -37,10 +56,15 @@ export class AzureNeuralTTSProvider extends EdgeTTSProvider {
    * @returns {Promise<{ audioPath: string, duration: number, format: string, voiceId: string }>}
    */
   async synthesize(text, language, options = {}) {
-    if (this.azureKey) {
-      return this.synthesizeWithAzureRest(text, language, options);
+    if (options.offline === true) {
+      throw new TTSError('OFFLINE_PROVIDER_FORBIDDEN', 'Azure Neural TTS requires network access and cannot be used in offline mode.');
     }
-    return super.synthesize(text, language, options);
+
+    if (!this.azureKey) {
+      throw new TTSError('PROVIDER_AUTH_ERROR', 'Azure Speech credentials missing. AZURE_SPEECH_KEY or options.azureKey is required.');
+    }
+
+    return this.synthesizeWithAzureRest(text, language, options);
   }
 
   /**
@@ -73,28 +97,61 @@ export class AzureNeuralTTSProvider extends EdgeTTSProvider {
 
     const endpoint = `https://${this.azureRegion}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
+    const policy = options.networkPolicy || this.networkPolicy;
+    if (policy) {
+      policy.assertAllowed(endpoint, { provider: this.providerId, stage: 'tts_synthesis' });
+    }
+
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Ocp-Apim-Subscription-Key': this.azureKey,
-          'Content-Type': 'application/ssml+xml',
-          'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
-          'User-Agent': 'TaviVideoTutor-AzureTTS'
-        },
-        body: ssml,
-        signal: AbortSignal.timeout(this.timeoutMs)
-      });
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Ocp-Apim-Subscription-Key': this.azureKey,
+            'Content-Type': 'application/ssml+xml',
+            'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+            'User-Agent': 'TaviVideoTutor-AzureTTS'
+          },
+          body: ssml,
+          signal: AbortSignal.timeout(this.timeoutMs)
+        });
+      } catch (netErr) {
+        if (netErr.code === 'OFFLINE_VIOLATION_BLOCKED' || netErr.code === 'SSRF_BLOCKED' || netErr.code === 'BLOCKED_PROTOCOL') {
+          throw netErr;
+        }
+        if (netErr.name === 'TimeoutError' || netErr.name === 'AbortError' || netErr.message?.includes('timed out')) {
+          throw new TTSError('NETWORK_TIMEOUT', `Azure Speech API request timed out after ${this.timeoutMs}ms`, { cause: netErr });
+        }
+        throw new TTSError('PROVIDER_UNAVAILABLE', `Azure Speech API network request failed: ${netErr.message}`, { cause: netErr });
+      }
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          throw new TTSError('TTS_AUTH_ERROR', `Azure Speech API Authentication failed (HTTP ${response.status}). Verify AZURE_SPEECH_KEY and AZURE_SPEECH_REGION.`);
+          throw new TTSError('PROVIDER_AUTH_ERROR', `Azure Speech API Authentication failed (HTTP ${response.status}). Verify AZURE_SPEECH_KEY and AZURE_SPEECH_REGION.`);
         }
-        throw new TTSError('TTS_SYNTHESIS_FAILED', `Azure Speech API error HTTP ${response.status}: ${await response.text()}`);
+        if (response.status === 429) {
+          throw new TTSError('PROVIDER_QUOTA_EXCEEDED', 'Azure Speech API rate limit / quota exceeded (HTTP 429).');
+        }
+        if (response.status >= 500 && response.status <= 599) {
+          const bodyText = await response.text().catch(() => '');
+          throw new TTSError('PROVIDER_SERVICE_UNAVAILABLE', `Azure Speech API service unavailable (HTTP ${response.status}): ${bodyText}`);
+        }
+        const bodyText = await response.text().catch(() => '');
+        throw new TTSError('TTS_SYNTHESIS_FAILED', `Azure Speech API error HTTP ${response.status}: ${bodyText}`);
+      }
+
+      const maxResponseSizeBytes = options.maxResponseSizeBytes || 50 * 1024 * 1024;
+      const contentLengthHeader = response.headers.get('content-length');
+      if (contentLengthHeader && parseInt(contentLengthHeader, 10) > maxResponseSizeBytes) {
+        throw new TTSError('RESPONSE_TOO_LARGE', `Azure Speech response size ${contentLengthHeader} bytes exceeds maximum limit.`);
       }
 
       const arrayBuf = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuf);
+      if (buffer.length > maxResponseSizeBytes) {
+        throw new TTSError('RESPONSE_TOO_LARGE', `Azure Speech response size ${buffer.length} bytes exceeds maximum limit.`);
+      }
       if (buffer.length < 500) {
         throw new TTSError('TTS_OUTPUT_INVALID', 'Azure Speech API returned empty or truncated audio stream.');
       }

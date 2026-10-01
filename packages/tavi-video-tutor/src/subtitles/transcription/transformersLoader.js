@@ -1,4 +1,4 @@
-import { fileURLToPath, pathToFileURL } from 'url';
+import { pathToFileURL } from 'url';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -98,7 +98,7 @@ export async function getTransformers(options = {}) {
 
   if (!rawModule || typeof rawModule.pipeline !== 'function') {
     throw new Error(
-      `AITutor CLI Speech-to-Text requires '@huggingface/transformers'. ` +
+      `AITutor CLI Speech-to-Text requires optional peer dependency '@huggingface/transformers'. ` +
       `Please install it with: npm install @huggingface/transformers ` +
       `or run "npx aitutor setup" to configure your environment automatically.`
     );

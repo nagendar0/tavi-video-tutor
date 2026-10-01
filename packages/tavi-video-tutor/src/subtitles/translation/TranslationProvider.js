@@ -1,65 +1,47 @@
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
+// @ts-check
 import { getLanguageByCode, normalizeLanguageCode } from '../languages/registry.js';
 import { mapAITutorCodeToProvider } from '../languages/providerMappings.js';
+import { getTranslationCache, computeTranslationCacheKey, computeLegacyCacheKey } from './TranslationCache.js';
 
-// Text-level persistent & in-memory translation cache
-const TEXT_CACHE_MAP = new Map();
-let isCacheLoaded = false;
-let cacheFilePath = null;
-
-const getCachePath = () => {
-  if (!cacheFilePath) {
-    const cwd = process.cwd();
-    const cacheDir = path.join(cwd, '.aitutor', 'cache');
-    fs.mkdirSync(cacheDir, { recursive: true });
-    cacheFilePath = path.join(cacheDir, 'translation-text-cache.json');
-  }
-  return cacheFilePath;
-};
-
-const loadTranslationTextCache = () => {
-  if (isCacheLoaded) return;
-  isCacheLoaded = true;
-  try {
-    const file = getCachePath();
-    if (fs.existsSync(file)) {
-      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-      Object.entries(data).forEach(([key, val]) => TEXT_CACHE_MAP.set(key, val));
-    }
-  } catch (_) {}
-};
-
-const saveTranslationTextCache = () => {
-  try {
-    const file = getCachePath();
-    const obj = {};
-    TEXT_CACHE_MAP.forEach((val, key) => { obj[key] = val; });
-    const tmpFile = `${file}.tmp`;
-    fs.writeFileSync(tmpFile, JSON.stringify(obj, null, 2), 'utf8');
-    fs.renameSync(tmpFile, file);
-  } catch (_) {}
-};
-
-const makeCacheKey = (text, srcLang, tgtLang, providerId = 'mymemory', modelId = 'default') => {
-  const payload = `${text.trim()}|${srcLang.toLowerCase()}|${tgtLang.toLowerCase()}|${providerId.toLowerCase()}|${modelId.toLowerCase()}`;
-  return crypto.createHash('md5').update(payload).digest('hex');
-};
-
+/**
+ * Base TranslationProvider contract for all TAVI translation adapters.
+ */
 export class TranslationProvider {
+  constructor() {
+    this.id = 'generic';
+    this.isOfflineCapable = false;
+  }
+
+  /**
+   * @param {string} _sourceLanguage 
+   * @param {string} _targetLanguage 
+   * @returns {boolean}
+   */
   supports(_sourceLanguage, _targetLanguage) {
     throw new Error('TranslationProvider.supports must be implemented.');
   }
 
-  async translateSegments(_segments, _sourceLanguage, _targetLanguage) {
+  /**
+   * @param {Array<Object>} _segments 
+   * @param {string} _sourceLanguage 
+   * @param {string} _targetLanguage 
+   * @param {Object} [_options={}]
+   * @returns {Promise<Array<Object>>}
+   */
+  async translateSegments(_segments, _sourceLanguage, _targetLanguage, _options = {}) {
     throw new Error('TranslationProvider.translateSegments must be implemented.');
   }
 }
 
+/**
+ * Legacy MyMemory translation provider implementation.
+ * Uses shared TranslationCache and maintains backwards-compatible circuit-breaker and batching semantics.
+ */
 export class MyMemoryTranslationProvider extends TranslationProvider {
   constructor(options = {}) {
     super();
+    this.id = 'mymemory';
+    this.isOfflineCapable = false;
     this.options = options;
     this.maxRetries = options.maxRetries || 3;
     this.timeoutMs = options.timeoutMs || 8000;
@@ -69,12 +51,13 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     this.circuitBreakerThreshold = options.circuitBreakerThreshold || 3;
     this.circuitBreakerCooldownMs = options.circuitBreakerCooldownMs || 30000;
     this.circuitBreakerResetTime = 0;
-    loadTranslationTextCache();
+    this.cache = options.cache || getTranslationCache(options);
   }
 
   supports(sourceLanguage, targetLanguage) {
     if (!targetLanguage) return false;
-    const lang = getLanguageByCode(targetLanguage);
+    const clean = normalizeLanguageCode(targetLanguage) || String(targetLanguage).toLowerCase().trim();
+    const lang = getLanguageByCode(clean);
     return Boolean(lang);
   }
 
@@ -206,21 +189,33 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
 
       if (!origText) {
         results[i] = {
+          ...cue,
           id: cueId,
-          start: Number(cue.start),
-          end: Number(cue.end),
+          start: Number(cue.start !== undefined ? cue.start : cue.startTime || 0),
+          end: Number(cue.end !== undefined ? cue.end : cue.endTime || 0),
           text: ''
         };
         continue;
       }
 
-      const cacheKey = makeCacheKey(origText, srcClean, tgtClean);
-      if (TEXT_CACHE_MAP.has(cacheKey)) {
+      const cached = this.cache.get({
+        text: origText,
+        sourceLanguage: srcClean,
+        targetLanguage: tgtClean,
+        provider: 'mymemory',
+        model: 'default'
+      });
+
+      if (cached) {
         results[i] = {
+          ...cue,
           id: cueId,
-          start: Number(cue.start),
-          end: Number(cue.end),
-          text: TEXT_CACHE_MAP.get(cacheKey)
+          start: Number(cue.start !== undefined ? cue.start : cue.startTime || 0),
+          end: Number(cue.end !== undefined ? cue.end : cue.endTime || 0),
+          speakerId: cue.speakerId,
+          originalText: origText,
+          translatedText: cached,
+          text: cached
         };
       } else {
         uncachedIndices.push(i);
@@ -255,8 +250,6 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
     }
 
     // Step 3: Process batches with bounded retries and explicit error propagation
-    let cacheUpdated = false;
-
     for (const batch of batches) {
       const textsToTranslate = batch.map(idx => String(segments[idx].text || segments[idx].originalText || '').trim());
       const batchCombinedText = textsToTranslate.join(DELIMITER);
@@ -301,7 +294,7 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
         const idx = batch[k];
         const cue = segments[idx];
         const cueId = cue.id || `cue_${String(idx + 1).padStart(6, '0')}`;
-        const origText = String(cue.text || '').trim();
+        const origText = String(cue.text || cue.originalText || '').trim();
         const translatedVal = String(translatedTexts[k] || '').trim();
 
         if (!translatedVal) {
@@ -309,28 +302,35 @@ export class MyMemoryTranslationProvider extends TranslationProvider {
         }
 
         results[idx] = {
+          ...cue,
           id: cueId,
-          start: Number(cue.start),
-          end: Number(cue.end),
+          start: Number(cue.start !== undefined ? cue.start : cue.startTime || 0),
+          end: Number(cue.end !== undefined ? cue.end : cue.endTime || 0),
+          speakerId: cue.speakerId,
+          originalText: origText,
+          translatedText: translatedVal,
           text: translatedVal
         };
 
         if (origText) {
-          const cacheKey = makeCacheKey(origText, srcClean, tgtClean);
-          TEXT_CACHE_MAP.set(cacheKey, translatedVal);
-          cacheUpdated = true;
+          this.cache.set({
+            text: origText,
+            sourceLanguage: srcClean,
+            targetLanguage: tgtClean,
+            provider: 'mymemory',
+            model: 'default'
+          }, translatedVal);
         }
       }
-    }
-
-    if (cacheUpdated) {
-      saveTranslationTextCache();
     }
 
     return results;
   }
 }
 
+/**
+ * Backwards-compatible AITutorTranslationProvider wrapper.
+ */
 export class AITutorTranslationProvider extends TranslationProvider {
   constructor(options = {}) {
     super();
@@ -348,10 +348,11 @@ export class AITutorTranslationProvider extends TranslationProvider {
 
     if (srcClean === tgtClean) {
       return segments.map((s, idx) => ({
+        ...s,
         id: s.id || `cue_${String(idx + 1).padStart(6, '0')}`,
-        start: Number(s.start),
-        end: Number(s.end),
-        text: s.text
+        start: Number(s.start !== undefined ? s.start : s.startTime || 0),
+        end: Number(s.end !== undefined ? s.end : s.endTime || 0),
+        text: s.text || s.originalText || ''
       }));
     }
 
@@ -362,10 +363,11 @@ export class AITutorTranslationProvider extends TranslationProvider {
         this.options.__testOnlyExplicitFallback === true;
       if (isExplicitTestMode) {
         return segments.map((s, idx) => ({
+          ...s,
           id: s.id || `cue_${String(idx + 1).padStart(6, '0')}`,
-          start: Number(s.start),
-          end: Number(s.end),
-          text: `[TEST-${tgtClean}] ${s.text}`
+          start: Number(s.start !== undefined ? s.start : s.startTime || 0),
+          end: Number(s.end !== undefined ? s.end : s.endTime || 0),
+          text: `[TEST-${tgtClean}] ${s.text || s.originalText || ''}`
         }));
       }
       throw new Error(`Real translation failed for ${sourceLanguage} -> ${targetLanguage}: ${err.message}`);

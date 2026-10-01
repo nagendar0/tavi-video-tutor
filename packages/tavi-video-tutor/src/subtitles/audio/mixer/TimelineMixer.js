@@ -1,23 +1,35 @@
+// @ts-check
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { getFFmpegBinaryPath } from '../extractAudio.js';
 import { validateGeneratedAudio } from '../validateAudio.js';
+import { TaviAudioError } from '../../errors/index.js';
 
 /**
  * Universal Multi-Track Audio Timeline Mixer.
  * 
- * Mixes arbitrary numbers of speaker segments into a single cohesive browser audio track (.m4a AAC).
+ * Mixes arbitrary numbers of speaker segments into a single cohesive browser audio track (.m4a AAC or .wav).
  * 
- * Features:
- * - Deterministic multi-speaker overlap mixing.
+ * Invariants & Guarantees:
+ * - Deterministic multi-speaker overlap mixing with absolute timestamp delays.
+ * - Explicit sample-rate and stereo channel layout normalization (aresample + aformat)
+ *   so mono speech stems never accidentally collapse stereo background audio to mono.
  * - Dynamic audio normalization (dynaudnorm) to prevent clipping and balance levels.
+ * - Sidechain ducking and volume ducking for background ambient tracks.
  * - Robust process invocation via spawnSync with arguments array (no Windows shell pipe collisions).
- * - Hierarchical batch mixing for very large segment counts (> 60 segments).
- * - Comprehensive output audio validation prior to completion.
- * - Zero dummy/fake 36-byte fallbacks: failure captures exact stderr and aborts cleanly.
+ * - Hierarchical batch mixing for very large segment counts (> 32 segments) to prevent buffer overflows.
+ * - Comprehensive structural output audio validation prior to completion.
+ * - Throws structured TaviAudioError on failures.
  */
 export class TimelineMixer {
+  /**
+   * @param {Object} [options={}]
+   * @param {string} [options.ffmpegBin]
+   * @param {string} [options.audioBitrate='128k']
+   * @param {number} [options.sampleRate=44100]
+   * @param {number} [options.maxBatchInputs=32]
+   */
   constructor(options = {}) {
     this.ffmpegBin = options.ffmpegBin || getFFmpegBinaryPath();
     this.audioBitrate = options.audioBitrate || '128k';
@@ -28,20 +40,36 @@ export class TimelineMixer {
   /**
    * Mix all aligned speaker segments into the final output M4A track.
    * 
-   * @param {Array<Object>} segments - Array of segments with { startTime, endTime, alignedAudioPath }
-   * @param {string} outputPath - Destination .m4a file path
-   * @param {Object} [options]
+   * @param {Array<Record<string, any>>} segments - Array of segments with { startTime, endTime, alignedAudioPath }
+   * @param {string} outputPath - Destination .m4a or .wav file path
+   * @param {Record<string, any>} [options={}]
    * @param {number} [options.totalDuration] - Target duration in seconds
    * @param {string} [options.ambientAudioPath] - Optional background music/ambient track
-   * @param {number} [options.ambientDuckingDb] - Ducking in dB (e.g. -12)
+   * @param {number} [options.ambientDuckingDb=-12] - Ducking volume in dB
+   * @param {boolean} [options.sidechainDucking=false] - Use dynamic sidechain compressor for ambient ducking
    * @returns {Promise<string>} outputPath
    */
   async mix(segments, outputPath, options = {}) {
+    if (!outputPath || typeof outputPath !== 'string') {
+      throw new TaviAudioError('TimelineMixer: Output path must be a non-empty string', {
+        code: 'AUDIO_MIX_FAILED',
+        stage: 'audio_mixing',
+        details: { outputPath }
+      });
+    }
+
     const dir = path.dirname(outputPath);
     fs.mkdirSync(dir, { recursive: true });
 
-    const validSegments = (segments || []).filter(s => s && (s.alignedAudioPath || s.audioPath) && fs.existsSync(s.alignedAudioPath || s.audioPath));
-    const totalDuration = options.totalDuration || (validSegments.length > 0 ? Math.max(...validSegments.map(s => s.endTime || s.end || 0)) : 10);
+    // Filter valid existing segment audio files
+    const validSegments = (segments || []).filter(s => {
+      const p = s?.alignedAudioPath || s?.audioPath;
+      return p && typeof p === 'string' && fs.existsSync(p);
+    });
+
+    const totalDuration = options.totalDuration || (validSegments.length > 0
+      ? Math.max(...validSegments.map(s => s.endTime || s.end || 0))
+      : 10);
 
     // Empty segments input: Generate silent track
     if (!segments || segments.length === 0) {
@@ -49,11 +77,22 @@ export class TimelineMixer {
     }
 
     if (validSegments.length === 0) {
-      throw new Error('Audio mixing failed: None of the provided segment audio files exist on disk.');
+      throw new TaviAudioError('Audio mixing failed: None of the provided segment audio files exist on disk.', {
+        code: 'AUDIO_MIX_FAILED',
+        stage: 'audio_mixing',
+        details: { segmentCount: segments.length }
+      });
     }
 
-    // Sort segments chronologically
-    const sorted = [...validSegments].sort((a, b) => (a.startTime || a.start) - (b.startTime || b.start));
+    // Sort segments chronologically, using cue index as deterministic tie-breaker
+    const sorted = [...validSegments].sort((a, b) => {
+      const startA = a.startTime !== undefined ? a.startTime : a.start;
+      const startB = b.startTime !== undefined ? b.startTime : b.start;
+      if (startA !== startB) return startA - startB;
+      const idxA = a.cueIndex ?? a.index ?? 0;
+      const idxB = b.cueIndex ?? b.index ?? 0;
+      return idxA - idxB;
+    });
 
     // If segment count exceeds maxBatchInputs, perform hierarchical batch mixing
     if (sorted.length > this.maxBatchInputs) {
@@ -66,13 +105,22 @@ export class TimelineMixer {
   /**
    * Single pass mixing for up to maxBatchInputs segments.
    * Direct process invocation using spawnSync with args array to avoid shell pipe and length limitations.
+   * 
+   * @param {Array<Record<string, any>>} segments 
+   * @param {string} outputPath 
+   * @param {number} totalDuration 
+   * @param {Record<string, any>} [options={}] 
+   * @returns {Promise<string>}
    */
   async singlePassMix(segments, outputPath, totalDuration, options = {}) {
     const dir = path.dirname(outputPath);
     fs.mkdirSync(dir, { recursive: true });
 
+    /** @type {string[]} */
     const inputArgs = [];
+    /** @type {string[]} */
     const filterParts = [];
+    /** @type {string[]} */
     const mixLabels = [];
 
     segments.forEach((seg, idx) => {
@@ -81,33 +129,48 @@ export class TimelineMixer {
       const startSec = seg.startTime !== undefined ? seg.startTime : seg.start;
       const delayMs = Math.round(Math.max(0, startSec) * 1000);
 
-      // Resample to uniform sample rate and apply timestamp delay
-      filterParts.push(`[${idx}:a]aresample=${this.sampleRate},adelay=${delayMs}|${delayMs}[delayed${idx}]`);
+      // Normalize sample rate (aresample), format to 16-bit PCM stereo (aformat), and delay (adelay)
+      filterParts.push(`[${idx}:a]aresample=${this.sampleRate},aformat=sample_fmts=s16:channel_layouts=stereo,adelay=${delayMs}|${delayMs}[delayed${idx}]`);
       mixLabels.push(`[delayed${idx}]`);
     });
 
     const numInputs = mixLabels.length;
 
+    const padFilter = (totalDuration && totalDuration > 0) ? ',apad' : '';
+
     // Optional ambient background audio
+    /** @type {string[]} */
     const ambientArgs = [];
     if (options.ambientAudioPath && fs.existsSync(options.ambientAudioPath)) {
       const ambientIdx = segments.length;
       ambientArgs.push('-i', options.ambientAudioPath);
-      const duckDb = options.ambientDuckingDb || -12;
-      filterParts.push(`[${ambientIdx}:a]volume=${duckDb}dB,aresample=${this.sampleRate}[ambient]`);
+      const duckDb = options.ambientDuckingDb ?? -12;
+      const useSidechain = options.sidechainDucking ?? options.useSidechain ?? false;
+
+      // Normalize ambient track to stereo and matching sample rate
+      filterParts.push(`[${ambientIdx}:a]aresample=${this.sampleRate},aformat=sample_fmts=s16:channel_layouts=stereo[ambientNorm]`);
       filterParts.push(`${mixLabels.join('')}amix=inputs=${numInputs}:duration=longest:dropout_transition=0[voiceMix]`);
-      filterParts.push(`[voiceMix][ambient]amix=inputs=2:duration=longest:dropout_transition=0,dynaudnorm=f=150:g=15[outa]`);
+
+      if (useSidechain) {
+        // Dynamic sidechain ducking: threshold=0.05, ratio=4, attack=20ms, release=250ms
+        filterParts.push(`[ambientNorm][voiceMix]sidechaincompress=threshold=0.05:ratio=4:attack=20:release=250[duckedAmbient]`);
+        filterParts.push(`[voiceMix][duckedAmbient]amix=inputs=2:duration=longest:dropout_transition=0,dynaudnorm=f=150:g=15${padFilter}[outa]`);
+      } else {
+        // Fixed dB volume ducking
+        filterParts.push(`[ambientNorm]volume=${duckDb}dB[duckedAmbient]`);
+        filterParts.push(`[voiceMix][duckedAmbient]amix=inputs=2:duration=longest:dropout_transition=0,dynaudnorm=f=150:g=15${padFilter}[outa]`);
+      }
     } else {
-      filterParts.push(`${mixLabels.join('')}amix=inputs=${numInputs}:duration=longest:dropout_transition=0,dynaudnorm=f=150:g=15[outa]`);
+      filterParts.push(`${mixLabels.join('')}amix=inputs=${numInputs}:duration=longest:dropout_transition=0,dynaudnorm=f=150:g=15${padFilter}[outa]`);
     }
 
     const filterComplexStr = filterParts.join(';');
 
-    const durArgs = totalDuration ? ['-t', Math.max(0.5, totalDuration).toFixed(3)] : [];
+    const durArgs = totalDuration ? ['-t', Math.max(0.05, totalDuration).toFixed(3)] : [];
     const isWav = outputPath.toLowerCase().endsWith('.wav');
     const codecArgs = isWav
       ? ['-c:a', 'pcm_s16le', '-ar', String(this.sampleRate), '-ac', '2']
-      : ['-c:a', 'aac', '-b:a', this.audioBitrate, '-ar', String(this.sampleRate), '-ac', '2'];
+      : ['-c:a', 'aac', '-b:a', this.audioBitrate, '-ar', String(this.sampleRate), '-ac', '2', '-movflags', '+faststart'];
 
     const args = [
       '-y',
@@ -125,33 +188,42 @@ export class TimelineMixer {
       if (fs.existsSync(outputPath)) {
         try { fs.unlinkSync(outputPath); } catch (_) {}
       }
-      const stderr = proc.stderr || proc.error?.message || 'Unknown error';
-      throw new Error(`Audio mixing failed with exit code ${proc.status}: ${stderr}`);
+      const stderr = (proc.stderr || proc.error?.message || 'Unknown error').trim();
+      throw new TaviAudioError(`Audio mixing failed with exit code ${proc.status}: ${stderr}`, {
+        code: 'AUDIO_MIX_FAILED',
+        stage: 'audio_mixing',
+        cause: proc.error,
+        details: { exitCode: proc.status, stderr, numInputs }
+      });
     }
 
     if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-      throw new Error(`Audio mixing failed: output file is missing or 0 bytes (${outputPath})`);
+      throw new TaviAudioError(`Audio mixing failed: output file is missing or 0 bytes (${outputPath})`, {
+        code: 'AUDIO_MIX_FAILED',
+        stage: 'audio_mixing',
+        details: { outputPath }
+      });
     }
 
-    // Final audio validation
+    // Final structural audio validation
     const validation = validateGeneratedAudio(outputPath, {
       minDuration: 0.05,
       expectedCodec: isWav ? 'pcm' : 'aac',
-      decodeTest: true
+      decodeTest: true,
+      throwOnError: true
     });
-
-    if (!validation.valid) {
-      if (fs.existsSync(outputPath)) {
-        try { fs.unlinkSync(outputPath); } catch (_) {}
-      }
-      throw new Error(`Audio mixing failed validation (${validation.code}): ${validation.message}`);
-    }
 
     return outputPath;
   }
 
   /**
    * Hierarchical batch mixing for 100+ or 1000+ segments to avoid command-line buffer overflows.
+   * 
+   * @param {Array<Record<string, any>>} segments 
+   * @param {string} outputPath 
+   * @param {number} totalDuration 
+   * @param {Record<string, any>} [options={}] 
+   * @returns {Promise<string>}
    */
   async hierarchicalBatchMix(segments, outputPath, totalDuration, options = {}) {
     const dir = path.dirname(outputPath);
@@ -176,7 +248,7 @@ export class TimelineMixer {
 
       return await this.singlePassMix(intermediateTracks, outputPath, totalDuration, options);
     } finally {
-      // Clean temporary submix files
+      // Clean temporary submix files safely
       for (const track of intermediateTracks) {
         if (track.alignedAudioPath && fs.existsSync(track.alignedAudioPath)) {
           try { fs.unlinkSync(track.alignedAudioPath); } catch (_) {}
@@ -185,15 +257,22 @@ export class TimelineMixer {
     }
   }
 
+  /**
+   * Generates a valid silent audio track.
+   * 
+   * @param {string} outputPath 
+   * @param {number} duration 
+   * @returns {string}
+   */
   generateSilentTrack(outputPath, duration) {
     const dir = path.dirname(outputPath);
     fs.mkdirSync(dir, { recursive: true });
 
-    const durFixed = Math.max(0.5, duration || 5).toFixed(3);
+    const durFixed = Math.max(0.1, duration || 5).toFixed(3);
     const isWav = outputPath.toLowerCase().endsWith('.wav');
     const codecArgs = isWav
       ? ['-c:a', 'pcm_s16le', '-ar', String(this.sampleRate), '-ac', '2']
-      : ['-c:a', 'aac', '-b:a', this.audioBitrate, '-ar', String(this.sampleRate), '-ac', '2'];
+      : ['-c:a', 'aac', '-b:a', this.audioBitrate, '-ar', String(this.sampleRate), '-ac', '2', '-movflags', '+faststart'];
 
     const args = [
       '-y',
@@ -209,17 +288,14 @@ export class TimelineMixer {
       if (fs.existsSync(outputPath)) {
         try { fs.unlinkSync(outputPath); } catch (_) {}
       }
-      throw new Error(`Failed to generate silent audio track (exit code ${proc.status}): ${proc.stderr || proc.error?.message}`);
+      throw new TaviAudioError(`Failed to generate silent audio track (exit code ${proc.status}): ${proc.stderr || proc.error?.message}`, {
+        code: 'AUDIO_MIX_FAILED',
+        stage: 'silent_track_generation',
+        details: { exitCode: proc.status, outputPath, duration }
+      });
     }
 
-    const validation = validateGeneratedAudio(outputPath, { decodeTest: true });
-    if (!validation.valid) {
-      if (fs.existsSync(outputPath)) {
-        try { fs.unlinkSync(outputPath); } catch (_) {}
-      }
-      throw new Error(`Silent track validation failed (${validation.code}): ${validation.message}`);
-    }
-
+    const validation = validateGeneratedAudio(outputPath, { decodeTest: true, throwOnError: true });
     return outputPath;
   }
 }

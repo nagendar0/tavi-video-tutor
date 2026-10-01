@@ -1,4 +1,4 @@
-import { normalizeLanguageCode, resolveLanguageCapability } from '../../languages/registry.js';
+import { normalizeLanguageCode } from '../../languages/registry.js';
 
 /**
  * Voice Pool Management.
@@ -22,7 +22,6 @@ export class VoicePool {
    */
   getVoicesForLanguage(targetLanguage, minRequiredVoices = 16) {
     const lang = normalizeLanguageCode(targetLanguage) || String(targetLanguage || 'en').toLowerCase().trim();
-    const cap = resolveLanguageCapability(lang);
 
     // 1. Check if user configured explicit voices
     if (this.customVoiceMap[lang] && Array.isArray(this.customVoiceMap[lang])) {

@@ -1,4 +1,4 @@
-import React, { forwardRef, useState, useEffect, useRef, useMemo } from 'react';
+import { forwardRef, useState, useEffect, useRef, useMemo } from 'react';
 import TaviVideoPlayer from './TaviVideoPlayer.jsx';
 import { resolveManifestSubtitle } from '../services/manifestStore.js';
 import { resolveSubtitleAvailability } from '../subtitles/resolver/subtitleResolver.js';

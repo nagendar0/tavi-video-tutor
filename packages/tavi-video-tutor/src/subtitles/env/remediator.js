@@ -42,7 +42,7 @@ export const askConfirmation = async (question, defaultYes = true, options = {})
   });
 };
 
-export const installWindowsFFmpeg = async (options = {}) => {
+export const installWindowsFFmpeg = async (_options = {}) => {
   console.log(`\n→ Installing FFmpeg via Windows Package Manager (winget)...`);
   console.log(`  Command: winget install Gyan.FFmpeg\n`);
 

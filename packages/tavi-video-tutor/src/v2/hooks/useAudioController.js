@@ -17,15 +17,21 @@ export function useAudioController({
   onDriftCorrect,
   onStateChange
 } = {}) {
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+
   const controllerRef = useRef(null);
   const [controllerState, setControllerState] = useState(() => ({
     mode: resolvedTrack?.mode || 'original',
     language: resolvedTrack?.language || sourceLanguage || 'en',
+    requestedLanguage: null,
     sourceUrl: resolvedTrack?.url || null,
     normalizedUrl: resolvedTrack?.normalizedUrl || null,
     trackId: resolvedTrack?.trackId || `original:${sourceLanguage || 'en'}`,
     generation: 0,
     status: 'idle',
+    audioStatus: 'idle',
+    audioError: null,
     error: null
   }));
 
@@ -39,7 +45,7 @@ export function useAudioController({
       onDriftCorrect,
       onStateChange: (state) => {
         setControllerState(state);
-        onStateChange?.(state);
+        onStateChangeRef.current?.(state);
       }
     });
   }
