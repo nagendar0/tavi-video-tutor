@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [20, 22]
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -58,8 +58,13 @@ jobs:
         run: npm ci
       - name: Build package
         run: npm run build --workspace=tavi-video-tutor
-      - name: Run unit tests
+      - name: Run unit tests (Linux)
+        if: runner.os != 'Windows'
         run: npm test --workspace=tavi-video-tutor
+      - name: Run unit tests (Windows)
+        if: runner.os == 'Windows'
+        run: node --test "test/*.test.js"
+        working-directory: packages/tavi-video-tutor
 
   real-media-e2e:
     name: Real-Media End-to-End Pipeline
@@ -75,6 +80,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
+      - name: Generate Synthetic Test Media Fixture
+        run: |
+          mkdir -p examples/react-demo/public
+          ffmpeg -y -f lavfi -i testsrc=duration=25:size=1280x720:rate=24 -f lavfi -i "anoisesrc=d=25:c=pink:r=44100:a=0.5" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest examples/react-demo/public/sample.mp4
       - name: Install dependencies
         run: npm ci
       - name: Build package
