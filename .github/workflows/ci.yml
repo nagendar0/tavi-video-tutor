@@ -63,7 +63,7 @@ jobs:
         run: npm test --workspace=tavi-video-tutor
       - name: Run unit tests (Windows)
         if: runner.os == 'Windows'
-        run: node --test "test/*.test.js"
+        run: node --test
         working-directory: packages/tavi-video-tutor
 
   real-media-e2e:
